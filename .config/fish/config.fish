@@ -59,26 +59,9 @@ set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 set LDFLAGS "-L/opt/homebrew/opt/mysql@5.7/lib"
 set CPPFLAGS "-I/opt/homebrew/opt/mysql@5.7/include"
 
-# The next line updates PATH for the Google Cloud SDK.
-# if [ -f '/Users/naramotoyuuji/google-cloud-sdk/path.zsh.inc' ]; then . '/Users/naramotoyuuji/google-cloud-sdk/path.zsh.inc'; end
-
-# The next line enables shell command completion for gcloud.
-# if [ -f '/Users/naramotoyuuji/google-cloud-sdk/completion.zsh.inc' ]; then . '/Users/naramotoyuuji/google-cloud-sdk/completion.zsh.inc'; end
-
-# peco-src
-#function peco-src
-#  local selected_dir=$(ghq list -p | peco --query "$LBUFFER")
-#  if [ -n "$selected_dir" ]; then
-#    BUFFER="cd ${selected_dir}"
-#    zle accept-line
-#  end
-#  zle clear-screen
-#end
-#zle -N peco-src
-#bindkey '^]' peco-src
 
 # flutterのパス通す
-# export PATH="$PATH:/Users/naramotoyuuji/flutter/bin"
+# export PATH="$PATH:~/flutter/bin"
 export ANDROID_HOME="~/Library/Android/sdk/"
 
 set -Ux PYENV_ROOT $HOME/.pyenv
