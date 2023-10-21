@@ -33,6 +33,7 @@ formulas=(
     peco
     procs
     pstree
+    pyenv
     starship
     thefuck
     tldr
