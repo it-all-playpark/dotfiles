@@ -1,7 +1,14 @@
-if status is-interactive
-    # Commands to run in interactive sessions can go here
-end
+# 現在の日付を取得
+set -l current_date (date "+%Y%m%d")
 
+# 最後に更新した日付を取得
+set -l last_update_date (cat ~/.config/fish/fisher_last_update_date.txt)
+
+# 日付が異なる場合のみ更新
+if test "$current_date" != "$last_update_date"
+    fisher update
+    echo $current_date >~/.config/fish/fisher_last_update_date.txt
+end
 
 # exaをlsとして利用
 alias ls='command exa --icons --git'
