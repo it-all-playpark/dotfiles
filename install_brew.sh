@@ -30,6 +30,7 @@ formulas=(
     navi
     neovim
     neofetch
+    npm
     peco
     procs
     pstree

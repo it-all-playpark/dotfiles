@@ -18,6 +18,9 @@ for f in .??*; do
     ln -snfv ${PWD}/"$f" ~/
 done
 
+# npmパッケージのglobalインストール
+npm i -g eslint commitizen
+
 # fishプラグインの更新
 source ~/.config/fish/config.fish
 fisher update
