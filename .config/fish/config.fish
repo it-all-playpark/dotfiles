@@ -36,18 +36,65 @@ alias S='git switch $(git branch -v | peco --prompt "GIT BRANCH>" | head -n 1 | 
 alias ws='set p "$(z -l | awk \'{print $2}\' | peco --query workspaces )"; set f "$(ls $p | awk \'{print $2}\' | peco)"; code -r $p/$f'
 
 # 訪れたことのあるディレクトリリストへの移動をzlと定義
-alias zl='set p "$(z -l | awk \'{print $2}\' | peco)"; cd $p'
-alias zf='set p "$(z -l | awk \'{print $2}\' | fzf)"; cd $p'
+function zl
+    set p (z -l | awk '{print $2}' | peco)
+    if test -n "$p"
+        cd $p
+    else
+        echo "No container selected."
+    end
+end
+function zf
+    set p (z -l | awk '{print $2}' | fzf)
+    if test -n "$p"
+        cd $p
+    else
+        echo "No container selected."
+    end
+end
 
 # カレントディレクトリのパスをクリップボードにコピー 
 alias pwdc='echo -n "$(pwd)" | pbcopy'
 
 # docker
+# finch利用時にdockerコマンドをfinchに変換
+#alias docker='finch'
 # 選択した起動中コンテナに入る
-alias d='docker exec -it $(docker ps | peco | awk "{print \$1}") sh'
+function d
+    set c (docker ps | peco | awk '{print $1}')
+    if test -n "$c"
+        docker exec -it $c sh
+    else
+        echo "No container selected."
+    end
+end
 # 選択したlogを表示する
-alias dl='docker logs $(docker ps -a| peco | awk "{print \$1}")'
-alias dir='docker image rm $(docker image ls | peco | awk "{print \$3}")'
+function dl
+    set c (docker ps -a | peco | awk '{print $1}')
+    if test -n "$c"
+        docker logs $c
+    else
+        echo "No container selected."
+    end
+end
+# 選択したコンテナを削除する
+function dr
+    set c (docker ps -a | peco | awk '{print $1}')
+    if test -n "$c"
+        docker rm $c
+    else
+        echo "No container selected."
+    end
+end
+# 選択したコンテナイメージを削除する
+function dir
+    set i (docker image ls | peco | awk '{print $3}')
+    if test -n "$i"
+        docker image rm $i
+    else
+        echo "No container selected."
+    end
+end
 alias dp='docker ps'
 
 # docker composeの略記
