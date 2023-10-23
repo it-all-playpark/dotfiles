@@ -122,12 +122,13 @@ set -Ux PYENV_ROOT $HOME/.pyenv
 set -Ux PATH $PYENV_ROOT/versions/3.11.2/bin $PATH
 status --is-interactive; and source (pyenv init -|psub)
 
-
-
 # pnpm
 set -gx PNPM_HOME ~/Library/pnpm
 set -gx PATH "$PNPM_HOME" $PATH
-# pnpm end
+
+# volta
+set -gx VOLTA_HOME "$HOME/.volta"
+set -gx PATH "$VOLTA_HOME/bin" $PATH
 
 # thefuck
 thefuck --alias | source
