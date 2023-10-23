@@ -116,7 +116,7 @@ set CPPFLAGS "-I/opt/homebrew/opt/mysql@5.7/include"
 
 # flutterのパス通す
 # export PATH="$PATH:~/flutter/bin"
-export ANDROID_HOME="~/Library/Android/sdk/"
+set -gx ANDROID_HOME ~/Library/Android/sdk/
 
 set -Ux PYENV_ROOT $HOME/.pyenv
 set -Ux PATH $PYENV_ROOT/versions/3.11.2/bin $PATH
