@@ -22,10 +22,10 @@ abbr -a cat bat
 abbr -a vim nvim
 
 # 選択した過去の実行コマンドをクリップボードにコピー
-abbr -a h echo -n \"\$\(history \| peco\)\" \| pbcopy \; fish_clipboard_paste
+abbr -a h echo -n \"\$\(history \| peco\)\" \| pbcopy
 
 # 選択したローカルリポジトリリストへの移動をgと定義
-abbr -a g set p \"\$\(ghq list --full-path \| peco\)\" \;cd \$p
+abbr -a g cd \"\$\(ghq list --full-path \| peco\)\"
 
 # git
 # ローカルブランチを選択してコピー
@@ -33,8 +33,8 @@ abbr -a B echo -n \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \
 abbr -a S git switch \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
 
 # 訪れたことのあるディレクトリリストへの移動をzlと定義
-abbr -a zl set p \"\$\(z -l \| awk \'\{print \$2\}\' \| peco\)\" \; cd \$p
-abbr -a zf set p \"\$\(z -l \| awk \'\{print \$2\}\' \| fzf\)\" \; cd \$p
+abbr -a zl cd \"\$\(z -l \| awk \'\{print \$2\}\' \| peco\)\"
+abbr -a zf cd \"\$\(z -l \| awk \'\{print \$2\}\' \| fzf\)\"
 
 # カレントディレクトリのパスをクリップボードにコピー 
 abbr -a pwdc echo -n \"\$\(pwd\)\" \| pbcopy
@@ -43,13 +43,13 @@ abbr -a pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 # finch利用時にdockerコマンドをfinchに変換
 #abbr -a docker finch
 # 選択した起動中コンテナに入る
-abbr -a d set c \"\$\(docker ps \| peco \| awk \'\{print \$1\}\'\)\" \; docker exec -it \$c sh
+abbr -a d docker exec -it \"\$\(docker ps \| peco \| awk \'\{print \$1\}\'\)\" sh
 # 選択したlogを表示する
-abbr -a dl set c \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\" \; docker logs \$c
+abbr -a dl docker logs \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
 # 選択したコンテナを削除する
-abbr -a dr set c \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\" \; docker rm \$c
+abbr -a dr docker rm \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
 # 選択したコンテナイメージを削除する
-abbr -a dir set i \"\$\(docker image ls \| peco \| awk \'\{print \$3\}\'\)\" \; docker image rm \$i
+abbr -a dir docker image rm \"\$\(docker image ls \| peco \| awk \'\{print \$3\}\'\)\"
 abbr -a dp docker ps
 
 # docker composeの略記
