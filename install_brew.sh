@@ -30,7 +30,6 @@ formulas=(
     navi
     neovim
     neofetch
-    npm
     peco
     procs
     pstree
@@ -42,7 +41,7 @@ formulas=(
     tmux
     tree
     tree-sitter
-    yarn
+    volta
 )
 
 echo "brew tap"
