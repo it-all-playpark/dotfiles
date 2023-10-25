@@ -35,6 +35,7 @@ formulas=(
     procs
     pstree
     pyenv
+    sd
     starship
     thefuck
     tldr
