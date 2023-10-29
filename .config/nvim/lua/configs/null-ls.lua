@@ -9,6 +9,9 @@ function M.setup()
       null_ls.builtins.formatting.stylua,
       null_ls.builtins.formatting.prettierd,
       null_ls.builtins.formatting.dart_format,
+      null_ls.builtins.formatting.rustfmt.with({
+        prefer_local = "~/.cargo/bin/rustfmt",
+      }),
       null_ls.builtins.diagnostics.eslint.with({
         prefer_local = "node_modules/.bin", --プロジェクトローカルがある場合はそれを利用
       }),
