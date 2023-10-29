@@ -2,22 +2,18 @@ local M = {}
 
 function M.setup()
   local neo_tree = require("neo-tree")
-  -- Unless you are still migrating, remove the deprecated commands from v1.x
-  vim.cmd([[ let g:neo_tree_remove_legacy_commands = 1 ]])
-
   -- If you want icons for diagnostic errors, you'll need to define them somewhere:
   vim.fn.sign_define("DiagnosticSignError", { text = " ", texthl = "DiagnosticSignError" })
   vim.fn.sign_define("DiagnosticSignWarn", { text = " ", texthl = "DiagnosticSignWarn" })
   vim.fn.sign_define("DiagnosticSignInfo", { text = " ", texthl = "DiagnosticSignInfo" })
-  vim.fn.sign_define("DiagnosticSignHint", { text = "", texthl = "DiagnosticSignHint" })
-  -- NOTE: this is changed from v1.x, which used the old style of highlight groups
-  -- in the form "LspDiagnosticsSignWarning"
+  vim.fn.sign_define("DiagnosticSignHint", { text = "󰌵", texthl = "DiagnosticSignHint" })
 
-  neo_tree.setup({
+  require("neo-tree").setup({
     close_if_last_window = false, -- Close Neo-tree if it is the last window left in the tab
     popup_border_style = "rounded",
     enable_git_status = true,
     enable_diagnostics = true,
+    enable_normal_mode_for_inputs = false,                           -- Enable normal mode for input dialogs.
     open_files_do_not_replace_types = { "terminal", "trouble", "qf" }, -- when opening files, do not use windows containing these filetypes or buftypes
     sort_case_insensitive = false,                                   -- used when sorting files and directories in the tree
     sort_function = nil,                                             -- use a custom function for sorting files and directories in the tree
@@ -49,7 +45,7 @@ function M.setup()
       icon = {
         folder_closed = "",
         folder_open = "",
-        folder_empty = "ﰊ",
+        folder_empty = "󰜌",
         -- The next two settings are only a fallback, if you use nvim-web-devicons and configure default icons there
         -- then these will never be used.
         default = "*",
@@ -70,19 +66,39 @@ function M.setup()
           added = "", -- or "✚", but this is redundant info if you use git_status_colors on the name
           modified = "", -- or "", but this is redundant info if you use git_status_colors on the name
           deleted = "✖", -- this can only be used in the git_status source
-          renamed = "", -- this can only be used in the git_status source
+          renamed = "󰁕", -- this can only be used in the git_status source
           -- Status type
           untracked = "",
           ignored = "",
-          unstaged = "",
+          unstaged = "󰄱",
           staged = "",
           conflict = "",
         },
       },
+      -- If you don't want to use these columns, you can set `enabled = false` for each of them individually
+      file_size = {
+        enabled = true,
+        required_width = 64, -- min width of window required to show this column
+      },
+      type = {
+        enabled = true,
+        required_width = 122, -- min width of window required to show this column
+      },
+      last_modified = {
+        enabled = true,
+        required_width = 88, -- min width of window required to show this column
+      },
+      created = {
+        enabled = true,
+        required_width = 110, -- min width of window required to show this column
+      },
+      symlink_target = {
+        enabled = false,
+      },
     },
     -- A list of functions, each representing a global custom command
     -- that will be available in all sources (if not overridden in `opts[source_name].commands`)
-    -- see `:h neo-tree-global-custom-commands`
+    -- see `:h neo-tree-custom-commands-global`
     commands = {},
     window = {
       position = "left",
@@ -98,8 +114,9 @@ function M.setup()
         },
         ["<2-LeftMouse>"] = "open",
         ["<cr>"] = "open",
-        ["<esc>"] = "revert_preview",
-        ["P"] = { "toggle_preview", config = { use_float = true } },
+        ["<esc>"] = "cancel", -- close preview or floating neo-tree window
+        ["P"] = { "toggle_preview", config = { use_float = true, use_image_nvim = true } },
+        -- Read `# Preview Mode` for more information
         ["l"] = "focus_preview",
         ["S"] = "open_split",
         ["s"] = "open_vsplit",
@@ -141,6 +158,7 @@ function M.setup()
         ["?"] = "show_help",
         ["<"] = "prev_source",
         [">"] = "next_source",
+        ["i"] = "show_file_details",
       },
     },
     nesting_rules = {},
@@ -168,8 +186,11 @@ function M.setup()
           --".null-ls_*",
         },
       },
-      follow_current_file = false,         -- This will find and focus the file in the active buffer every
-      -- time the current file is changed while the tree is open.
+      follow_current_file = {
+        enabled = false,                   -- This will find and focus the file in the active buffer every time
+        --               -- the current file is changed while the tree is open.
+        leave_dirs_open = false,           -- `false` closes auto expanded dirs, such as with `:Neotree reveal`
+      },
       group_empty_dirs = false,            -- when true, empty folders will be grouped together
       hijack_netrw_behavior = "open_default", -- netrw disabled, opening a directory opens neo-tree
       -- in whatever position is specified in window.position
@@ -191,6 +212,14 @@ function M.setup()
           ["<c-x>"] = "clear_filter",
           ["[g"] = "prev_git_modified",
           ["]g"] = "next_git_modified",
+          ["o"] = { "show_help", nowait = false, config = { title = "Order by", prefix_key = "o" } },
+          ["oc"] = { "order_by_created", nowait = false },
+          ["od"] = { "order_by_diagnostics", nowait = false },
+          ["og"] = { "order_by_git_status", nowait = false },
+          ["om"] = { "order_by_modified", nowait = false },
+          ["on"] = { "order_by_name", nowait = false },
+          ["os"] = { "order_by_size", nowait = false },
+          ["ot"] = { "order_by_type", nowait = false },
         },
         fuzzy_finder_mappings = { -- define keymaps for filter popup window in fuzzy_finder_mode
           ["<down>"] = "move_cursor_down",
@@ -203,8 +232,11 @@ function M.setup()
       commands = {}, -- Add a custom command or override a global one using the same function name
     },
     buffers = {
-      follow_current_file = true, -- This will find and focus the file in the active buffer every
-      -- time the current file is changed while the tree is open.
+      follow_current_file = {
+        enabled = true,      -- This will find and focus the file in the active buffer every time
+        --              -- the current file is changed while the tree is open.
+        leave_dirs_open = false, -- `false` closes auto expanded dirs, such as with `:Neotree reveal`
+      },
       group_empty_dirs = true, -- when true, empty folders will be grouped together
       show_unloaded = true,
       window = {
@@ -212,6 +244,13 @@ function M.setup()
           ["bd"] = "buffer_delete",
           ["<bs>"] = "navigate_up",
           ["."] = "set_root",
+          ["o"] = { "show_help", nowait = false, config = { title = "Order by", prefix_key = "o" } },
+          ["oc"] = { "order_by_created", nowait = false },
+          ["od"] = { "order_by_diagnostics", nowait = false },
+          ["om"] = { "order_by_modified", nowait = false },
+          ["on"] = { "order_by_name", nowait = false },
+          ["os"] = { "order_by_size", nowait = false },
+          ["ot"] = { "order_by_type", nowait = false },
         },
       },
     },
@@ -226,6 +265,13 @@ function M.setup()
           ["gc"] = "git_commit",
           ["gp"] = "git_push",
           ["gg"] = "git_commit_and_push",
+          ["o"] = { "show_help", nowait = false, config = { title = "Order by", prefix_key = "o" } },
+          ["oc"] = { "order_by_created", nowait = false },
+          ["od"] = { "order_by_diagnostics", nowait = false },
+          ["om"] = { "order_by_modified", nowait = false },
+          ["on"] = { "order_by_name", nowait = false },
+          ["os"] = { "order_by_size", nowait = false },
+          ["ot"] = { "order_by_type", nowait = false },
         },
       },
     },
