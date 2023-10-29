@@ -85,6 +85,9 @@ set -gx PATH "$PNPM_HOME" $PATH
 set -gx VOLTA_HOME "$HOME/.volta"
 set -gx PATH "$VOLTA_HOME/bin" $PATH
 
+# rust
+set -gx PATH ~/.cargo/bin $PATH
+
 # thefuck
 thefuck --alias | source
 
