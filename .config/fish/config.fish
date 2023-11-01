@@ -59,6 +59,9 @@ abbr -a dcu docker compose up -d
 abbr -a dcd docker compose down
 abbr -a dcp docker compose ps
 
+# global ip確認
+abbr -a ip echo -n \$\(dig myip.opendns.com @208.67.222.222 +short\) \| pbcopy \; pbpaste
+
 # 接続Wifi情報確認
 alias airport='/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
 
