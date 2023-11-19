@@ -56,22 +56,14 @@ alias airport='/System/Library/PrivateFrameworks/Apple80211.framework/Versions/C
 set LDFLAGS "-L/opt/homebrew/opt/mysql@5.7/lib"
 set CPPFLAGS "-I/opt/homebrew/opt/mysql@5.7/include"
 
-# flutterのパス通す
-set -gx ANDROID_HOME ~/Library/Android/sdk/
-
-set -Ux PYENV_ROOT ~/.pyenv
-set -Ux PATH $PYENV_ROOT/versions/3.11.2/bin $PATH
+# pyenv
+# pyenv init
 status --is-interactive; and source (pyenv init -|psub)
-
-# pnpm
-set -gx PNPM_HOME ~/Library/pnpm
-set -gx PATH "$PNPM_HOME" $PATH
-
-# volta
-set -gx VOLTA_HOME ~/.volta
+# python version
+set -g PY_VERSION $(pyenv version | awk '{print $1}')
 
 # PATH設定
-set -gx fish_user_paths /opt/homebrew/bin /usr/bin/php /opt/homebrew/opt/mysql@5.7/bin ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/flutter/bin $VOLTA_HOME/bin ~/.cargo/bin $fish_user_paths
+set -gx fish_user_paths /opt/homebrew/bin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/flutter/bin ~/Library/Android/sdk ~/.pyenv/versions/$PY_VERSION/bin ~/.volta/bin ~/.cargo/bin $fish_user_paths
 # 重複を削除
 set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 
