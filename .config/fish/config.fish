@@ -53,18 +53,13 @@ abbr -a ip echo -n \$\(dig myip.opendns.com @208.67.222.222 +short\) \| pbcopy \
 # 接続Wifi情報確認
 alias airport='/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
 
-set -x fish_user_paths /opt/homebrew/bin /usr/bin/php /opt/homebrew/opt/mysql@5.7/bin ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/flutter/bin $fish_user_paths
-set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
-
 set LDFLAGS "-L/opt/homebrew/opt/mysql@5.7/lib"
 set CPPFLAGS "-I/opt/homebrew/opt/mysql@5.7/include"
 
-
 # flutterのパス通す
-# export PATH="$PATH:~/flutter/bin"
 set -gx ANDROID_HOME ~/Library/Android/sdk/
 
-set -Ux PYENV_ROOT $HOME/.pyenv
+set -Ux PYENV_ROOT ~/.pyenv
 set -Ux PATH $PYENV_ROOT/versions/3.11.2/bin $PATH
 status --is-interactive; and source (pyenv init -|psub)
 
@@ -73,11 +68,12 @@ set -gx PNPM_HOME ~/Library/pnpm
 set -gx PATH "$PNPM_HOME" $PATH
 
 # volta
-set -gx VOLTA_HOME "$HOME/.volta"
-set -gx PATH "$VOLTA_HOME/bin" $PATH
+set -gx VOLTA_HOME ~/.volta
 
-# rust
-set -gx PATH ~/.cargo/bin $PATH
+# PATH設定
+set -gx fish_user_paths /opt/homebrew/bin /usr/bin/php /opt/homebrew/opt/mysql@5.7/bin ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/flutter/bin $VOLTA_HOME/bin ~/.cargo/bin $fish_user_paths
+# 重複を削除
+set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 
 # thefuck
 thefuck --alias | source
