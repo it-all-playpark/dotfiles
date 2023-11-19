@@ -1,54 +1,54 @@
 # exaをlsとして利用
-abbr -a ls exa --icons --git
-abbr -a lt exa -T -L 3 -a -I \"node_modules\|.git\|.cache\" --icons
-abbr -a ltl exa -T -L 3 -a -I \"node_modules\|.git\|.cache\" -l --icons
+abbr ls exa --icons --git
+abbr lt exa -T -L 3 -a -I \"node_modules\|.git\|.cache\" --icons
+abbr ltl exa -T -L 3 -a -I \"node_modules\|.git\|.cache\" -l --icons
 
 # batをcatとして利用
-abbr -a cat bat
+abbr cat bat
 
 # nvimをvimとして利用
-abbr -a vim nvim
+abbr vim nvim
 
 # 選択した過去の実行コマンドをクリップボードにコピー
-abbr -a h echo -n \"\$\(history \| peco\)\" \| pbcopy
+abbr h echo -n \"\$\(history \| peco\)\" \| pbcopy
 
 # 選択したローカルリポジトリリストへの移動をgと定義
-abbr -a g cd \"\$\(ghq list --full-path \| peco\)\"
+abbr g cd \"\$\(ghq list --full-path \| peco\)\"
 
 # git
 # ローカルブランチを選択してコピー
-abbr -a B echo -n \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\" \| pbcopy
-abbr -a S git switch \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
+abbr B echo -n \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\" \| pbcopy
+abbr S git switch \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
 
 # 訪れたことのあるディレクトリリストへの移動をzlと定義
-abbr -a zl cd \"\$\(z -l \| awk \'\{print \$2\}\' \| peco\)\"
-abbr -a zf cd \"\$\(z -l \| awk \'\{print \$2\}\' \| fzf\)\"
+abbr zl cd \"\$\(z -l \| awk \'\{print \$2\}\' \| peco\)\"
+abbr zf cd \"\$\(z -l \| awk \'\{print \$2\}\' \| fzf\)\"
 
 # カレントディレクトリのパスをクリップボードにコピー 
-abbr -a pwdc echo -n \"\$\(pwd\)\" \| pbcopy
+abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 
 # docker
 # finch利用時にdockerコマンドをfinchに変換
-#abbr -a docker finch
+#abbr docker finch
 # 選択した起動中コンテナに入る
-abbr -a d docker exec -it \"\$\(docker ps \| peco \| awk \'\{print \$1\}\'\)\" sh
+abbr d docker exec -it \"\$\(docker ps \| peco \| awk \'\{print \$1\}\'\)\" sh
 # 選択したlogを表示する
-abbr -a dl docker logs \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
+abbr dl docker logs \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
 # 選択したコンテナを削除する
-abbr -a dr docker rm \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
+abbr dr docker rm \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
 # 選択したコンテナイメージを削除する
-abbr -a dir docker image rm \"\$\(docker image ls \| peco \| awk \'\{print \$3\}\'\)\"
-abbr -a dp docker ps
+abbr dir docker image rm \"\$\(docker image ls \| peco \| awk \'\{print \$3\}\'\)\"
+abbr dp docker ps
 
 # docker composeの略記
-abbr -a dc docker compose
-abbr -a dcb docker compose build --no-cache
-abbr -a dcu docker compose up -d
-abbr -a dcd docker compose down
-abbr -a dcp docker compose ps
+abbr dc docker compose
+abbr dcb docker compose build --no-cache
+abbr dcu docker compose up -d
+abbr dcd docker compose down
+abbr dcp docker compose ps
 
 # global ip確認
-abbr -a ip echo -n \$\(dig myip.opendns.com @208.67.222.222 +short\) \| pbcopy \; pbpaste
+abbr ip echo -n \$\(dig myip.opendns.com @208.67.222.222 +short\) \| pbcopy \; pbpaste
 
 # 接続Wifi情報確認
 alias airport='/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
