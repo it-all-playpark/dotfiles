@@ -58,13 +58,14 @@ casks=(
     alfred
     box-drive
     box-tools
+    brave-browser
     cheatsheet
     coteditor
+    cursor
     deepl
     docker
     dropbox
     font-hack-nerd-font
-    google-chrome
     google-drive
     google-japanese-ime
     hhkb-keymap-tool
@@ -77,7 +78,6 @@ casks=(
     sequel-ace
     setapp
     slack
-    visual-studio-code
     warp
     zoom
 )
