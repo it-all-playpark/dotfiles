@@ -55,7 +55,6 @@ done
 
 # install gui up
 casks=(
-    alfred
     box-drive
     box-tools
     brave-browser
@@ -74,6 +73,7 @@ casks=(
     microsoft-teams
     onedrive
     postman
+    raycast
     safari-technology-preview
     sequel-ace
     setapp
