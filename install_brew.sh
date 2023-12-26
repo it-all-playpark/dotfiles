@@ -18,6 +18,7 @@ formulas=(
     dat
     exa
     fd
+    ffmpeg
     fish
     fisher
     gh
@@ -30,10 +31,14 @@ formulas=(
     navi
     neovim
     neofetch
+    pandoc
     peco
+    poppler
     procs
     pstree
     pyenv
+    ripgrep
+    ripgrep-all
     sd
     starship
     thefuck
