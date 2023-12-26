@@ -20,6 +20,9 @@ abbr g cd \"\$\(ghq list --full-path \| peco\)\"
 abbr B echo -n \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\" \| pbcopy
 abbr S git switch \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
 
+# lazigit
+abbr lg lazygit
+
 # 訪れたことのあるディレクトリリストへの移動をzlと定義
 abbr zl cd \"\$\(z -l \| awk \'\{print \$2\}\' \| peco\)\"
 abbr zf cd \"\$\(z -l \| awk \'\{print \$2\}\' \| fzf\)\"
