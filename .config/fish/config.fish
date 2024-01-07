@@ -66,8 +66,6 @@ set -gx fish_user_paths /opt/homebrew/bin /usr/bin/php ~/ghq/github.com/astj/ghq
 # 重複を削除
 set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 
-# thefuck
-thefuck --alias | source
 # zoxide
 zoxide init fish | source
 

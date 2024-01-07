@@ -41,7 +41,6 @@ formulas=(
     ripgrep-all
     sd
     starship
-    thefuck
     tldr
     tmux
     tree
