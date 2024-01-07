@@ -21,6 +21,7 @@ formulas=(
     ffmpeg
     fish
     fisher
+    fzf
     gh
     git
     git-delta
