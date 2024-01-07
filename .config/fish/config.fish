@@ -23,10 +23,6 @@ abbr S git switch \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \
 # lazigit
 abbr lg lazygit
 
-# 訪れたことのあるディレクトリリストへの移動をzlと定義
-abbr zl cd \"\$\(z -l \| awk \'\{print \$2\}\' \| peco\)\"
-abbr zf cd \"\$\(z -l \| awk \'\{print \$2\}\' \| fzf\)\"
-
 # カレントディレクトリのパスをクリップボードにコピー 
 abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 
@@ -72,6 +68,8 @@ set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 
 # thefuck
 thefuck --alias | source
+# zoxide
+zoxide init fish | source
 
 # starship
 starship init fish | source

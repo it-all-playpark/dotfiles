@@ -47,6 +47,7 @@ formulas=(
     tree
     tree-sitter
     volta
+    zoxide
 )
 
 echo "brew tap"
