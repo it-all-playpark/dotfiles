@@ -33,7 +33,6 @@ formulas=(
     neovim
     neofetch
     pandoc
-    peco
     poppler
     procs
     pstree

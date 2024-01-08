@@ -10,15 +10,15 @@ abbr cat bat
 abbr vim nvim
 
 # 選択した過去の実行コマンドをクリップボードにコピー
-abbr h echo -n \"\$\(history \| peco\)\" \| pbcopy
+abbr h echo -n \$\(history \| fzf +s --layout=reverse\) \| pbcopy
 
 # 選択したローカルリポジトリリストへの移動をgと定義
-abbr g cd \"\$\(ghq list --full-path \| peco\)\"
+abbr g cd \"\$\(ghq list --full-path \| fzf --layout=reverse --preview \'exa --icons --git -la \{1\}\'\)\"
 
 # git
 # ローカルブランチを選択してコピー
-abbr B echo -n \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\" \| pbcopy
-abbr S git switch \"\$\(git branch -av \| peco --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
+abbr B echo -n \"\$\(git branch -av \| fzf --layout=reverse --prompt \"GIT BRANCH\>\"\| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\" \| pbcopy
+abbr S git switch \"\$\(git branch -av \| fzf --layout=reverse --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
 
 # lazigit
 abbr lg lazygit
@@ -30,13 +30,13 @@ abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 # finch利用時にdockerコマンドをfinchに変換
 #abbr docker finch
 # 選択した起動中コンテナに入る
-abbr d docker exec -it \"\$\(docker ps \| peco \| awk \'\{print \$1\}\'\)\" sh
+abbr d docker exec -it \$\(docker ps \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\) sh
 # 選択したlogを表示する
-abbr dl docker logs \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
+abbr dl docker ps -a \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'
 # 選択したコンテナを削除する
-abbr dr docker rm \"\$\(docker ps -a \| peco \| awk \'\{print \$1\}\'\)\"
+abbr dr docker rm \$\(docker ps \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\)
 # 選択したコンテナイメージを削除する
-abbr dir docker image rm \"\$\(docker image ls \| peco \| awk \'\{print \$3\}\'\)\"
+abbr dir docker image ls \| fzf --layout=reverse --prompt \"Docker Image\>\" --preview \'docker image inspect \{3\}\'
 abbr dp docker ps
 
 # docker composeの略記
