@@ -13,14 +13,17 @@ vim.opt.shiftwidth = 2     -- インデントレベルを2スペース
 vim.opt.smartindent = true -- 自動インデントを有効
 
 -- エイリアス
-vim.api.nvim_exec([[
+vim.api.nvim_exec(
+  [[
     command! Filepath echo expand('%:p')
-]], false)
+]],
+  false
+)
 
 -- tabの各言語ごとの設定
 local indentations = {
-  { filetypes = { "python", "rust", "go" },                            ts = 4, sw = 4, et = true },
-  { filetypes = { "javascript", "typescript", "dart", "ruby", "lua" }, ts = 2, sw = 2, et = true },
+  { filetypes = { "python", "rust", "go" },                                        ts = 4, sw = 4, et = true },
+  { filetypes = { "javascript", "typescript", "dart", "ruby", "lua", "markdown" }, ts = 2, sw = 2, et = true },
 }
 
 for _, indent in pairs(indentations) do
