@@ -154,4 +154,10 @@ return require("packer").startup(function()
       require("configs.neo-tree").setup()
     end,
   })
+  use({
+    "numToStr/Comment.nvim",
+    config = function()
+      require("Comment").setup()
+    end,
+  })
 end)
