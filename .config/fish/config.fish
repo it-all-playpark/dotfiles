@@ -54,9 +54,6 @@ abbr ip echo -n \$\(dig myip.opendns.com @208.67.222.222 +short\) \| pbcopy \; p
 # 接続Wifi情報確認
 alias airport='/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
 
-set LDFLAGS "-L/opt/homebrew/opt/mysql@5.7/lib"
-set CPPFLAGS "-I/opt/homebrew/opt/mysql@5.7/include"
-
 # pyenv
 # pyenv init
 status --is-interactive; and source (pyenv init -|psub)
