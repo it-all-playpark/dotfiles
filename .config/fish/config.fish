@@ -1,7 +1,7 @@
-# exaをlsとして利用
-abbr ls exa --icons --git
-abbr lt exa -T -L 3 -a -I \"node_modules\|.git\|.cache\" --icons
-abbr ltl exa -T -L 3 -a -I \"node_modules\|.git\|.cache\" -l --icons
+# lsdをlsとして利用
+abbr ls lsd -g
+abbr lt lsd --tree -aI \"node_modules\|.git\|.cache\"
+abbr ltl lsd --tree -laI \"node_modules\|.git\|.cache\"
 
 # batをcatとして利用
 abbr cat bat
@@ -13,7 +13,7 @@ abbr vim nvim
 abbr h echo -n \$\(history \| fzf +s --layout=reverse\) \| pbcopy
 
 # 選択したローカルリポジトリリストへの移動をgと定義
-abbr g cd \"\$\(ghq list --full-path \| fzf --layout=reverse --preview \'exa --icons --git -la \{1\}\'\)\"
+abbr g cd \"\$\(ghq list --full-path \| fzf --layout=reverse --preview \'lsd -lag \{1\}\'\)\"
 
 # git
 # ローカルブランチを選択してコピー
@@ -68,6 +68,10 @@ set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 
 # zoxide
 zoxide init fish | source
+
+# mcfly
+mcfly init fish | source
+
 
 # starship
 starship init fish | source
