@@ -36,9 +36,9 @@ abbr dl docker ps -a \| fzf --layout=reverse --prompt \"Docker Container\>\" --p
 # 選択したコンテナを削除する
 abbr dr docker rm \$\(docker ps \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\)
 # 選択したコンテナイメージを削除する
-abbr dir docker image rm \$\(docker image ls \| fzf --layout=reverse --prompt \"Docker Image\>\" --preview \'docker image inspect \'\| awk \'\{print \$3\}\'\)
+abbr dir docker image rm \$\(docker image ls \| fzf --layout=reverse --prompt \"Docker Image\>\" --preview \'docker image inspect \{3\}\'\| awk \'\{print \$3\}\'\)
 # 選択したコンテナボリュームを削除する
-abbr dvr docker volume rm \$\(docker volume ls \| fzf --layout=reverse --prompt \"Docker Volume\>\" --preview \'docker volume inspect \'\| awk \'\{print \$2\}\'\)
+abbr dvr docker volume rm \$\(docker volume ls \| fzf --layout=reverse --prompt \"Docker Volume\>\" --preview \'docker volume inspect \{2\}\'\| awk \'\{print \$2\}\'\)
 abbr dp docker ps
 
 # docker composeの略記
