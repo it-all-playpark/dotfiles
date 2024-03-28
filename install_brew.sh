@@ -60,9 +60,9 @@ done
 
 # install gui up
 casks=(
+    arc
     box-drive
     box-tools
-    brave-browser
     cheatsheet
     coteditor
     cursor
