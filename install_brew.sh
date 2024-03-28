@@ -68,8 +68,8 @@ casks=(
     cursor
     deepl
     docker
-    dropbox
     font-hack-nerd-font
+    google-chrome
     google-drive
     google-japanese-ime
     hhkb-keymap-tool
