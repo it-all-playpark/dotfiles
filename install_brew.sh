@@ -74,7 +74,7 @@ casks=(
     google-japanese-ime
     hhkb-keymap-tool
     lastpss
-    lunar
+    monitorcontrol
     microsoft-teams
     onedrive
     postman
