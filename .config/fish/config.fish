@@ -32,7 +32,7 @@ abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 # 選択した起動中コンテナに入る
 abbr d docker exec -it \$\(docker ps \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\) sh
 # 選択したlogを表示する
-abbr dl docker ps -a \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs --details \{1\}\'
+abbr dl docker logs --details \$\(docker ps -a \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs --details \{1\}\' \| awk \'\{print \$1\}\'\)
 # 選択したコンテナを削除する
 abbr dr docker rm \$\(docker ps \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\)
 # 選択したコンテナイメージを削除する
