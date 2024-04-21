@@ -1,7 +1,7 @@
 # lsdをlsとして利用
-abbr ls lsd -g
-abbr lt lsd --tree -aI \"node_modules\|.git\|.cache\"
-abbr ltl lsd --tree -laI \"node_modules\|.git\|.cache\"
+abbr ls eza --icons --git --time-style relative -la
+abbr lt eza --icons --git --time-style relative --tree -aI \"node_modules\|.git\|.cache\"
+abbr ltl eza --icons --git --time-style relative --tree -alI \"node_modules\|.git\|.cache\"
 
 # batをcatとして利用
 abbr cat bat

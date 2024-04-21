@@ -15,6 +15,7 @@ brew upgrade
 
 formulas=(
     bat
+    eza
     dat
     fd
     ffmpeg
@@ -27,7 +28,6 @@ formulas=(
     jq
     lastpass-cli
     lazygit
-    lsd
     mas
     navi
     neovim
