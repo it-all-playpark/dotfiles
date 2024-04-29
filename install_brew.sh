@@ -18,6 +18,7 @@ formulas=(
     eza
     dat
     fd
+    ffmpegthumbnailer
     ffmpeg
     fish
     fisher
@@ -45,7 +46,9 @@ formulas=(
     tmux
     tree
     tree-sitter
+    unar
     volta
+    yazi
     zoxide
 )
 
