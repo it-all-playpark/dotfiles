@@ -1,7 +1,6 @@
 # This is Git's per-user configuration file.
-[user]
-	name = yuji naramoto
-	email = yuji.naramoto@playpark.work
+[includeIf "gitdir:~/"]
+    path = .gitconfig_personal
 [init]
 	defaultBranch = main
 [hub]
