@@ -61,9 +61,6 @@ function yy
     rm -f -- "$tmp"
 end
 
-# 接続Wifi情報確認
-alias airport='/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
-
 # pyenv
 # pyenv init
 status --is-interactive; and source (pyenv init -|psub)
