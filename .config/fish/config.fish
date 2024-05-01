@@ -71,7 +71,7 @@ status --is-interactive; and source (pyenv init -|psub)
 set -g PY_VERSION $(pyenv version | awk '{print $1}')
 
 # PATH設定
-set -gx fish_user_paths /opt/homebrew/bin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/flutter/bin ~/Library/Android/sdk ~/.pyenv/versions/$PY_VERSION/bin ~/.volta/bin ~/.cargo/bin $fish_user_paths
+set -gx fish_user_paths /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/flutter/bin ~/Library/Android/sdk ~/.pyenv/versions/$PY_VERSION/bin ~/.volta/bin ~/.cargo/bin $fish_user_paths
 # 重複を削除
 set -U fish_user_paths (echo $fish_user_paths | tr ' ' '\n' | sort -u)
 
