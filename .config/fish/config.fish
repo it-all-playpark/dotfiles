@@ -23,6 +23,9 @@ abbr S git switch \"\$\(git branch -av \| fzf --layout=reverse --prompt \"GIT BR
 # lazigit
 abbr lg lazygit
 
+# lazydocker
+abbr ld lazydocker
+
 # カレントディレクトリのパスをクリップボードにコピー 
 abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 

@@ -28,6 +28,7 @@ formulas=(
     git-delta
     jq
     lastpass-cli
+    lazydocker
     lazygit
     mas
     navi
