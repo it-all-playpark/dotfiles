@@ -1,4 +1,4 @@
-# lsdをlsとして利用
+# ezaをlsとして利用
 abbr ls eza --icons --git --time-style relative -la
 abbr lt eza --icons --git --time-style relative --tree -aI \"node_modules\|.git\|.cache\"
 abbr ltl eza --icons --git --time-style relative --tree -alI \"node_modules\|.git\|.cache\"
@@ -13,7 +13,7 @@ abbr vim nvim
 abbr h echo -n \$\(history \| fzf +s --layout=reverse\) \| pbcopy
 
 # 選択したローカルリポジトリリストへの移動をgと定義
-abbr g cd \"\$\(ghq list --full-path \| fzf --layout=reverse --preview \'lsd -lag \{1\}\'\)\"
+abbr g cd \"\$\(ghq list --full-path \| fzf --layout=reverse --preview \'eza --icons --git --time-style relative -la \{1\}\'\)\"
 
 # git
 # ローカルブランチを選択してコピー
