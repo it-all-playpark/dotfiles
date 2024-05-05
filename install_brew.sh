@@ -44,8 +44,6 @@ formulas=(
     sd
     starship
     tldr
-    tmux
-    tree
     tree-sitter
     unar
     yazi
@@ -82,7 +80,6 @@ casks=(
     onedrive
     postman
     raycast
-    safari-technology-preview
     sequel-ace
     setapp
     slack
