@@ -31,6 +31,7 @@ formulas=(
     lazydocker
     lazygit
     mas
+    mise
     navi
     neovim
     neofetch
@@ -38,7 +39,6 @@ formulas=(
     poppler
     procs
     pstree
-    pyenv
     ripgrep
     ripgrep-all
     sd
@@ -48,7 +48,6 @@ formulas=(
     tree
     tree-sitter
     unar
-    volta
     yazi
     zoxide
 )

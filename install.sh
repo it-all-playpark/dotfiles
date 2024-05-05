@@ -18,8 +18,8 @@ for f in .??*; do
     ln -snfv ${PWD}/"$f" ~/
 done
 
-# npmパッケージのglobalインストール
-npm i -g eslint commitizen
+# miseの設定のglobalインストール
+mise i
 
 # packer.nvimのインストール
 git clone --depth 1 https://github.com/wbthomason/packer.nvim ~/.local/share/nvim/site/pack/packer/start/packer.nvim
