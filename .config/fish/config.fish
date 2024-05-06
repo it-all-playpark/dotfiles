@@ -76,4 +76,4 @@ zoxide init fish | source
 starship init fish | source
 
 # mise
-~/.local/bin/mise activate fish | source
+activate fish | source
