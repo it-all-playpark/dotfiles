@@ -1,9 +1,10 @@
 [env]
-NODE_ENV = 'production'
+_.file = '.env'
 
 [tools]
 node = "latest"
 python=['3.12','3.11']
+"npm:dotenv" = "latest"
 "npm:prettier" = "latest"
 "npm:pnpm" = "latest"
 "npm:git-cz" = "latest"
