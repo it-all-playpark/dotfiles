@@ -54,6 +54,8 @@ abbr dcp docker compose ps
 # global ip確認
 abbr ip echo -n \$\(dig myip.opendns.com @208.67.222.222 +short\) \| pbcopy \; pbpaste
 
+# yazi
+abbr y yazi
 # yaziでカレントディレクトリを変更
 function yy
     set tmp (mktemp -t "yazi-cwd.XXXXXX")
