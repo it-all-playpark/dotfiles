@@ -9,6 +9,9 @@ abbr cat bat
 # nvimをvimとして利用
 abbr vim nvim
 
+# ripをrmとして利用
+abbr rm rip
+
 # 選択した過去の実行コマンドをクリップボードにコピー
 abbr h echo -n \$\(history \| fzf +s --layout=reverse\) \| pbcopy
 

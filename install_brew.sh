@@ -39,6 +39,7 @@ formulas=(
     poppler
     procs
     pstree
+    rip
     ripgrep
     ripgrep-all
     sd
