@@ -17,7 +17,6 @@ formulas=(
     bat
     bpytop
     eza
-    dat
     fastfetch
     fd
     ffmpegthumbnailer
@@ -34,13 +33,10 @@ formulas=(
     lazygit
     mas
     mise
-    navi
     neovim
-    neofetch
     pandoc
     poppler
     procs
-    pstree
     rip
     ripgrep
     ripgrep-all
