@@ -15,8 +15,10 @@ brew upgrade
 
 formulas=(
     bat
+    bpytop
     eza
     dat
+    fastfetch
     fd
     ffmpegthumbnailer
     ffmpeg
