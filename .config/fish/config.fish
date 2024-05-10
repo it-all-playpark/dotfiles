@@ -40,7 +40,7 @@ abbr d docker exec -it \$\(docker ps \| fzf --layout=reverse --prompt \"Docker C
 # 選択したlogを表示する
 abbr dl docker logs --details \$\(docker ps -a \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs --details \{1\}\' \| awk \'\{print \$1\}\'\)
 # 選択したコンテナを削除する
-abbr dr docker rm \$\(docker ps \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\)
+abbr dr docker rm \$\(docker ps -a \| fzf --layout=reverse --prompt \"Docker Container\>\" --preview-window \'bottom:70%\' --preview \'docker logs \{1\}\'\| awk \'\{print \$1\}\'\)
 # 選択したコンテナイメージを削除する
 abbr dir docker image rm \$\(docker image ls \| fzf --layout=reverse --prompt \"Docker Image\>\" --preview \'docker image inspect \{3\}\'\| awk \'\{print \$3\}\'\)
 # 選択したコンテナボリュームを削除する
