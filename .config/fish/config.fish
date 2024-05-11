@@ -32,6 +32,9 @@ abbr ld lazydocker
 # カレントディレクトリのパスをクリップボードにコピー 
 abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 
+# lastpassでuser/passなどをクリップボードにコピー
+abbr lp lpass show \$\(lpass ls -l \| fzf \| awk \'{print \$5}\' \| sd \']\$\' \'\'\) \| fzf \| awk \'{print \$2}\'\| sd \'\n\' \'\' \| pbcopy \; pbpaste
+
 # docker
 # finch利用時にdockerコマンドをfinchに変換
 #abbr docker finch
