@@ -160,4 +160,11 @@ return require("packer").startup(function()
       require("Comment").setup()
     end,
   })
+  use({
+    "phaazon/hop.nvim",
+    branch = "v2", -- optional but strongly recommended
+    config = function()
+      require("configs.hop").setup()
+    end,
+  })
 end)
