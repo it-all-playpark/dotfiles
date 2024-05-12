@@ -167,4 +167,13 @@ return require("packer").startup(function()
       require("configs.hop").setup()
     end,
   })
+  use({
+    "Weissle/easy-action",
+    requires = {
+      {
+        "kevinhwang91/promise-async",
+        module = { "async" },
+      },
+    },
+  })
 end)

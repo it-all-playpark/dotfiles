@@ -1,4 +1,3 @@
--- fzf-lua
 local map = vim.api.nvim_set_keymap
 -- global
 map("n", "<leader>l", "<cmd>bn<CR>", { noremap = true, silent = true })
