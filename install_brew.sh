@@ -14,6 +14,7 @@ brew upgrade
 
 
 formulas=(
+    act
     bat
     bpytop
     eza
