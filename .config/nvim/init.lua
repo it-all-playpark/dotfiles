@@ -9,5 +9,8 @@ require("settings")
 -- Load plugins
 require("plugins")
 
+-- Load configs
+require("configs")
+
 -- Load key mappings
 require("mappings")

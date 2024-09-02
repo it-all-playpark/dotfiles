@@ -13,16 +13,11 @@ return require("packer").startup(function()
   -- Add more plugins here
   use({
     "kylechui/nvim-surround",
-    tag = "*", -- Use for stability; omit to use `main` branch for the latest features
-    config = function()
-      require("nvim-surround").setup({
-        -- Configuration here, or leave empty to use defaults
-      })
-    end,
+    tag = "*",
   })
   use("nvim-tree/nvim-web-devicons")
   use("nvim-treesitter/nvim-treesitter")
-  use("HiPhish/nvim-ts-rainbow2")
+  use("HiPhish/rainbow-delimiters.nvim")
   use({
     "ibhagwan/fzf-lua",
     requires = {
@@ -81,9 +76,6 @@ return require("packer").startup(function()
   use("williamboman/mason-lspconfig.nvim")
   use({
     "neovim/nvim-lspconfig",
-    config = function()
-      require("configs.mason").setup()
-    end,
     run = ":MasonUpdate",
   })
 
@@ -106,20 +98,15 @@ return require("packer").startup(function()
       "plenary.nvim",
       "stevearc/dressing.nvim", -- optional for vim.ui.select
     },
-    config = function()
-      require("configs.flutter-tools").setup()
-    end,
   })
 
   use({
     "jose-elias-alvarez/null-ls.nvim",
-    config = function()
-      require("configs.null-ls").setup()
-      require("trouble").setup({
-        icons = false,
-        use_diagnostic_signs = true,
-      })
-    end,
+    require("configs.null-ls").setup(),
+    require("trouble").setup({
+      icons = false,
+      use_diagnostic_signs = true,
+    }),
     requires = { "plenary.nvim" },
   })
   use({ "akinsho/bufferline.nvim", tag = "*", requires = "nvim-web-devicons" })
@@ -150,9 +137,6 @@ return require("packer").startup(function()
         end,
       },
     },
-    config = function()
-      require("configs.neo-tree").setup()
-    end,
   })
   use({
     "numToStr/Comment.nvim",
@@ -163,9 +147,6 @@ return require("packer").startup(function()
   use({
     "phaazon/hop.nvim",
     branch = "v2", -- optional but strongly recommended
-    config = function()
-      require("configs.hop").setup()
-    end,
   })
   use({
     "Weissle/easy-action",
