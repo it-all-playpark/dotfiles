@@ -26,6 +26,7 @@ formulas=(
     fisher
     fzf
     gh
+    ghq
     git
     git-delta
     jq
