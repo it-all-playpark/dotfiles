@@ -23,6 +23,10 @@ abbr g cd \"\$\(ghq list --full-path \| fzf --layout=reverse --preview \'eza --i
 abbr B echo -n \"\$\(git branch -av \| fzf --layout=reverse --prompt \"GIT BRANCH\>\"\| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\" \| pbcopy
 abbr S git switch \"\$\(git branch -av \| fzf --layout=reverse --prompt \"GIT BRANCH\>\" \| sd \"\\\*\" \"\" \|awk \'\{print \$1\}\'\)\"
 
+# gh
+# githubブラウザページを開く
+abbr ghb gh browse
+
 # lazigit
 abbr lg lazygit
 
