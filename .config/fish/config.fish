@@ -36,6 +36,9 @@ abbr ld lazydocker
 # カレントディレクトリのパスをクリップボードにコピー 
 abbr pwdc echo -n \"\$\(pwd\)\" \| pbcopy
 
+# MySqlのDBを選択して接続
+abbr mdb cat ~/.myclirc ~/.myclirc.local \> ~/.myclirc_combined \; mycli --myclirc=~/.myclirc_combined \"\$\(mycli --list-dsn --myclirc=~/.myclirc_combined \| fzf --layout=reverse --prompt \'DSN\>\'\)\" \; rm ~/.myclirc_combined
+
 # lastpassでuser/passなどをクリップボードにコピー
 abbr lp lpass show \$\(lpass ls -l \| fzf \| awk \'{print \$5}\' \| sd \']\$\' \'\'\) \| fzf \| awk \'{print \$2}\'\| sd \'\n\' \'\' \| pbcopy \; pbpaste
 

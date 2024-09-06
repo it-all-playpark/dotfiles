@@ -35,6 +35,7 @@ formulas=(
     lazygit
     mas
     mise
+    mycli
     neovim
     pandoc
     poppler
