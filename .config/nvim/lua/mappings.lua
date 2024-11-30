@@ -7,6 +7,7 @@ map("n", "k", "h", { noremap = true, silent = true })           -- left
 map("n", "t", "j", { noremap = true, silent = true })           -- down
 map("n", "n", "k", { noremap = true, silent = true })           -- up
 map("n", "s", "l", { noremap = true, silent = true })           -- right
+map("n", "U", "<C-r>", { noremap = true, silent = true })       -- redo
 -- ビジュアルモードのキーマッピング
 map("v", "k", "h", { noremap = true, silent = true })           -- left
 map("v", "t", "j", { noremap = true, silent = true })           -- down
