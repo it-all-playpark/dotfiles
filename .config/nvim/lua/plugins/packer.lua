@@ -157,4 +157,5 @@ return require("packer").startup(function()
       },
     },
   })
+  use({ "is0n/fm-nvim" })
 end)
