@@ -39,12 +39,13 @@ map("n", "<leader>bb", "<cmd>lua require('fzf-lua').buffers()<CR>", { noremap = 
 map("n", "<leader>b/", "<cmd>lua require('fzf-lua').lines()<CR>", { noremap = true, silent = true })
 
 -- lsp
-map("n", "gd", "<cmd>lua vim.lsp.buf.definition()<cr>", { silent = true, noremap = true })
+-- map("n", "gd", "<cmd>lua vim.lsp.buf.definition()<cr>", { silent = true, noremap = true, buffer = buffer })
 map("n", "ca", "<cmd>lua vim.lsp.buf.code_acction()<cr>", { silent = true, noremap = true })
 map("n", "ca", "<cmd>lua vim.lsp.buf.range_code_action()<cr>", { silent = true, noremap = true })
 
 -- lspsaga
-map("n", "K", "<cmd>Lspsaga hover_doc<cr>", { silent = true, noremap = true })
+map("n", "gd", "<cmd>Lspsaga finder goto_definition<cr>", { silent = true, noremap = true })
+map("n", "K", "<cmd>Lspsaga finder hover_doc<cr>", { silent = true, noremap = true })
 map("n", "mk", "<cmd>Lspsaga diagnostic_jump_next<cr>", { silent = true, noremap = true })
 map("n", "mn", "<cmd>Lspsaga diagnostic_jump_prev<cr>", { silent = true, noremap = true })
 map("n", "mm", "<cmd>Lspsaga show_buf_diagnostics<cr>", { silent = true, noremap = true })
