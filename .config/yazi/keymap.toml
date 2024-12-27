@@ -12,8 +12,8 @@ keymap = [
 	{ on = "<c-z>", run = "suspend",            desc = "suspend the process" },
 
 	# Hopping
-	{ on = "n", run = "arrow -1", desc = "Move cursor up" },
-	{ on = "t", run = "arrow 1",  desc = "Move cursor down" },
+	{ on = "r", run = "arrow -1", desc = "Move cursor up" },
+	{ on = "n", run = "arrow 1",  desc = "Move cursor down" },
 
 	{ on = "<Up>",    run = "arrow -1", desc = "Move cursor up" },
 	{ on = "<Down>",  run = "arrow 1",  desc = "Move cursor down" },
@@ -32,14 +32,14 @@ keymap = [
 	{ on = "G",          run = "arrow 99999999",  desc = "Move cursor to the bottom" },
 
 	# Navigation
-	{ on = "k", run = "leave", desc = "Go back to the parent directory" },
+	{ on = "t", run = "leave", desc = "Go back to the parent directory" },
 	{ on = "s", run = "enter", desc = "Enter the child directory" },
 
 	{ on = "<Left>",  run = "leave", desc = "Go back to the parent directory" },
 	{ on = "<Right>", run = "enter", desc = "Enter the child directory" },
 
-	{ on = "H", run = "back",    desc = "Go back to the previous directory" },
-	{ on = "L", run = "forward", desc = "Go forward to the next directory" },
+	{ on = "T", run = "back",    desc = "Go back to the previous directory" },
+	{ on = "S", run = "forward", desc = "Go forward to the next directory" },
 
 	# Toggle
 	{ on = "<Space>", run = [ "toggle", "arrow 1" ], desc = "Toggle the current selection state" },
@@ -74,7 +74,7 @@ keymap = [
 	{ on = "d",         run = "remove",                      desc = "Trash selected files" },
 	{ on = "D",         run = "remove --permanently",        desc = "Permanently delete selected files" },
 	{ on = "a",         run = "create",                      desc = "Create a file (ends with / for directories)" },
-	{ on = "r",         run = "rename --cursor=before_ext",  desc = "Rename selected file(s)" },
+	{ on = "R",         run = "rename --cursor=before_ext",  desc = "Rename selected file(s)" },
 	{ on = ";",         run = "shell --interactive",         desc = "Run a shell command" },
 	{ on = ":",         run = "shell --block --interactive", desc = "Run a shell command (block until finishes)" },
 	{ on = ".",         run = "hidden toggle",               desc = "Toggle the visibility of hidden files" },
