@@ -46,8 +46,8 @@ map("n", "ca", "<cmd>lua vim.lsp.buf.range_code_action()<cr>", { silent = true, 
 -- lspsaga
 map("n", "gd", "<cmd>Lspsaga finder goto_definition<cr>", { silent = true, noremap = true })
 map("n", "K", "<cmd>Lspsaga finder hover_doc<cr>", { silent = true, noremap = true })
-map("n", "mk", "<cmd>Lspsaga diagnostic_jump_next<cr>", { silent = true, noremap = true })
-map("n", "mn", "<cmd>Lspsaga diagnostic_jump_prev<cr>", { silent = true, noremap = true })
+map("n", "ms", "<cmd>Lspsaga diagnostic_jump_next<cr>", { silent = true, noremap = true })
+map("n", "mt", "<cmd>Lspsaga diagnostic_jump_prev<cr>", { silent = true, noremap = true })
 map("n", "mm", "<cmd>Lspsaga show_buf_diagnostics<cr>", { silent = true, noremap = true })
 
 -- trouble
