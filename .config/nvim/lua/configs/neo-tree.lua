@@ -131,7 +131,8 @@ function M.setup()
         ["s"] = "open_vsplit",
         -- ["S"] = "split_with_window_picker",
         -- ["s"] = "vsplit_with_window_picker",
-        ["t"] = "open_tabnew",
+        ["n"] = "down",
+        ["r"] = "up",
         -- ["<cr>"] = "open_drop",
         -- ["t"] = "open_tab_drop",
         ["w"] = "open_with_window_picker",
@@ -150,7 +151,7 @@ function M.setup()
         },
         ["A"] = "add_directory", -- also accepts the optional config.show_path option like "add". this also supports BASH style brace expansion.
         ["d"] = "delete",
-        ["r"] = "rename",
+        ["<cr>-r"] = "rename",
         ["y"] = "copy_to_clipboard",
         ["x"] = "cut_to_clipboard",
         ["p"] = "paste_from_clipboard",
