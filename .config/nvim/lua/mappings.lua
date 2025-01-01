@@ -62,6 +62,10 @@ map("n", "<leader>zr", "<cmd>TroubleToggle lsp_references<cr>", { silent = true,
 map("n", "<leader>hl", ":HopLineMW<cr>", { silent = true, noremap = false })
 map("n", "<leader>hc", ":HopChar2MW<cr>", { silent = true, noremap = false })
 
+-- neo-tree
+map("n", "<Leader>e", ":Neotree focus toggle<CR>", { noremap = true, silent = true })
+map("n", "<Leader>w", "<C-w>w", { noremap = true, silent = true })
+
 -- -- easy-action
 -- map.set("n","<leader>e", "<cmd>BasicEasyAction<cr>", { silent=true, remap=false })
 -- -- To insert something and jump back after you leave the insert mode
