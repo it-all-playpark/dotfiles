@@ -86,6 +86,11 @@ end
 # PATH設定
 fish_add_path /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk ~/.local/share/mise/shims
 
+# ローカル設定を読み込む
+if test -f ~/.config/fish/config.local.fish
+    source ~/.config/fish/config.local.fish
+end
+
 # zoxide
 zoxide init fish | source
 
