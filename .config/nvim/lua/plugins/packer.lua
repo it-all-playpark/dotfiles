@@ -92,11 +92,12 @@ return require("packer").startup(function()
 
   use("nvim-lua/plenary.nvim")
   use("onsails/lspkind.nvim")
+  use("stevearc/dressing.nvim")
   use({
     "akinsho/flutter-tools.nvim",
     requires = {
       "plenary.nvim",
-      "stevearc/dressing.nvim", -- optional for vim.ui.select
+      "dressing.nvim", -- optional for vim.ui.select
     },
   })
 
@@ -110,13 +111,14 @@ return require("packer").startup(function()
     requires = { "plenary.nvim" },
   })
   use({ "akinsho/bufferline.nvim", tag = "*", requires = "nvim-web-devicons" })
+  use({ "MunifTanjim/nui.nvim" })
   use({
     "nvim-neo-tree/neo-tree.nvim",
     branch = "v3.x",
     requires = {
       "plenary.nvim",
       "nvim-web-devicons", -- not strictly required, but recommended
-      "MunifTanjim/nui.nvim",
+      "nui.nvim",
       {
         "s1n7ax/nvim-window-picker",
         version = "2.*",
@@ -158,4 +160,22 @@ return require("packer").startup(function()
     },
   })
   use({ "is0n/fm-nvim" })
+  use({
+    "yetone/avante.nvim",
+    lazy = true,
+    version = false, -- 常に最新の変更を取得
+    build = "make", -- ビルドコマンド
+    BUILD_FROM_SOURCE = true,
+    requires = {
+      "dressing.nvim",
+      "plenary.nvim",
+      "nui.nvim",
+      "nvim-cmp", -- オプション依存関係
+      "nvim-web-devicons",
+      "copilot.lua",
+      "HakonHarnes/img-clip.nvim",
+      "MeanderingProgrammer/render-markdown.nvim",
+    },
+    -- run = "make", -- Optional, only if yru want to use tiktoken_core to calculate tokens count
+  })
 end)
