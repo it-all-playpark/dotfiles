@@ -163,7 +163,7 @@ return require("packer").startup(function()
   use({
     "yetone/avante.nvim",
     lazy = true,
-    version = false, -- 常に最新の変更を取得
+    version = true, -- 常に最新の変更を取得
     build = "make", -- ビルドコマンド
     BUILD_FROM_SOURCE = true,
     requires = {
@@ -174,8 +174,11 @@ return require("packer").startup(function()
       "nvim-web-devicons",
       "copilot.lua",
       "HakonHarnes/img-clip.nvim",
+      -- {
       "MeanderingProgrammer/render-markdown.nvim",
+      -- ft = { "markdown", "Avante" },
+      -- },
     },
-    -- run = "make", -- Optional, only if yru want to use tiktoken_core to calculate tokens count
+    run = "make", -- Optional, only if yru want to use tiktoken_core to calculate tokens count
   })
 end)
