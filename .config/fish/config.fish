@@ -99,3 +99,6 @@ starship init fish | source
 
 # mise
 mise activate fish | source
+
+# Added by Windsurf
+fish_add_path /Users/naramotoyuuji/.codeium/windsurf/bin
