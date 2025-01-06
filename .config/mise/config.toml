@@ -12,6 +12,7 @@ python=['3.12','3.11']
 rust = "latest"
 pnpm = "latest"
 go = "latest"
+yarn = "latest"
 
 [settings]
 experimental = true
