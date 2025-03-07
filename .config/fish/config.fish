@@ -91,8 +91,8 @@ end
 fish_add_path /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk ~/.local/share/mise/shims
 
 # ローカル設定を読み込む
-if test -f ~/.config/fish/config.local.fish
-    source ~/.config/fish/config.local.fish
+if test -f ~/.config/fish/config.fish.local
+    source ~/.config/fish/config.fish.local
 end
 
 # zoxide
@@ -105,4 +105,4 @@ starship init fish | source
 mise activate fish | source
 
 # Added by Windsurf
-fish_add_path /Users/naramotoyuuji/.codeium/windsurf/bin
+fish_add_path ~/.codeium/windsurf/bin
