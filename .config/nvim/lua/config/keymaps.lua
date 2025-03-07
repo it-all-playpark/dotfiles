@@ -18,12 +18,8 @@ map("v", "t", "h", opt) -- left
 map("v", "n", "j", opt) -- down
 map("v", "r", "k", opt) -- up
 map("v", "s", "l", opt) -- right
--- インサートモードのカーソル移動
-map("i", "<C-t>", "<Left>", opt) -- left
-map("i", "<C-n>", "<Down>", opt) -- down
-map("i", "<C-r>", "<Up>", opt) -- up
-map("i", "<C-s>", "<Right>", opt) -- right
 
+-- buffer移動
 map("n", "<leader>t", "<cmd>bp<CR>", opt)
 map("n", "<leader>n", "<cmd>bd<CR>", opt)
 map("n", "<leader>s", "<cmd>bn<CR>", opt)
@@ -86,4 +82,11 @@ map("n", "<Leader>w", "<C-w>w", opt)
 -- map.set("n","<leader>ei", function()
 --   require("easy-action").base_easy_action("i", nil, "InsertLeave")
 -- end, { silent=true, remap=false })
---
+
+-- 開いているファイルのパスをクリップボードにコピー
+vim.api.nvim_set_keymap(
+  "n",
+  "<leader>yp",
+  ':lua vim.fn.setreg("+", vim.fn.expand("%:."))<CR>',
+  { noremap = true, silent = true }
+)
