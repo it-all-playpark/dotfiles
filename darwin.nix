@@ -63,8 +63,8 @@
   programs.fish.enable = true; # fishシェルを有効化 [oai_citation_attribution:33‡davi.sh](https://davi.sh/til/nix/nix-macos-setup/#:~:text=,programs.fish.enable%20%3D%20true)
   programs.zsh.enable = false; # zshはオフにする（お好みで）
 
-  # ユーザー（yourname）のHome Manager設定をここで有効化
-  home-manager.useGlobalPkgs = true;
-  home-manager.useUserPackages = true;
-  home-manager.users.naramotoyuuji = { pkgs, ... }: import ./home.nix;
+  # # ユーザー（yourname）のHome Manager設定をここで有効化
+  # home-manager.useGlobalPkgs = true;
+  # home-manager.useUserPackages = true;
+  # home-manager.users.naramotoyuuji = { pkgs, ... }: import ./home.nix;
 }
