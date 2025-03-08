@@ -1,10 +1,10 @@
-{ config, pkgs, username, ... }:
+{ config, pkgs, ... }:
 
 {
   # Home Manager needs a bit of information about you and the paths it should
   # manage.
   home.username = "naramotoyuuji";
-  home.homeDirectory = "/Users/" + username;
+  home.homeDirectory = "/Users/naramotoyuuji";
 
   home.stateVersion = "24.05"; # Please read the comment before changing.
 
