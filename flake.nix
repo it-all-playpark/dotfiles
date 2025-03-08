@@ -10,29 +10,27 @@
   outputs = { self, nixpkgs, nix-darwin, home-manager, ... }:
     let
       system = "aarch64-darwin";
-    in
-    {
-      darwinConfigurations = {
-        MyMBP = nix-darwin.lib.darwinSystem {
-          inherit system;
-          modules = [
-            home-manager.darwinModules.home-manager
-            ./darwin.nix
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.users.naramotoyuuji = import ./home.nix;
-            }
-          ];
-        };
+      myConfig = nix-darwin.lib.darwinSystem {
+        inherit system;
+        modules = [
+          home-manager.darwinModules.home-manager
+          ./darwin.nix
+          {
+            home-manager.useGlobalPkgs = true;
+            home-manager.useUserPackages = true;
+            home-manager.users.naramotoyuuji = import ./home.nix;
+          }
+        ];
       };
-
-      # ← 追加：packages 出力として darwinConfigurations をラップ
+    in {
+      darwinConfigurations = {
+        MyMBP = myConfig;
+      };
+      # ラップして packages 出力として出す
       packages = {
         "${system}" = {
-          darwinConfigurations = self.darwinConfigurations;
+          activationPackage = myConfig.activationPackage;
         };
       };
     };
 }
-
