@@ -21,9 +21,9 @@
               home-manager.useUserPackages = true;
               home-manager.users.naramotoyuuji = import ./home.nix;
             }
-            # 最後に強制的に home.homeDirectory を上書き
+            # 最後に、home.homeDirectory を強制的に上書きするモジュール
             { config, lib, ... }: {
-              config.home.homeDirectory = "/Users/naramotoyuuji";
+                home.homeDirectory = lib.mkForce "/Users/naramotoyuuji";
             }
           ];
         };
