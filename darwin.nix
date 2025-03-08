@@ -45,5 +45,9 @@
   # Home Manager の設定
   home-manager.useGlobalPkgs = true;
   home-manager.useUserPackages = true;
-  home-manager.users.naramotoyuuji = import ./home.nix;
+  home-manager.users.naramotoyuuji = let
+    hm = import ./home.nix { inherit config pkgs; };
+  in hm // {
+    home.homeDirectory = "/Users/naramotoyuuji";
+  };
 }
