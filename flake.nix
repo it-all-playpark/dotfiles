@@ -21,9 +21,6 @@
               home-manager.useUserPackages = true;
               home-manager.users.naramotoyuuji = import ./home.nix;
             }
-            {
-              home-manager.users.naramotoyuuji.home.homeDirectory = "/Users/naramotoyuuji";
-            }
           ];
         };
       };
