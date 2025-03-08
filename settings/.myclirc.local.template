@@ -1,0 +1,4 @@
+# Use the -d option to reference a DSN.
+# Special characters in passwords and other strings can be escaped with URL encoding.
+[alias_dsn]
+# example_dsn = mysql://[user[:password]@][host][:port][/dbname]
