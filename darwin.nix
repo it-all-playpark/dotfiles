@@ -31,7 +31,6 @@
       "font-hack-nerd-font"
       "google-chrome"
       "google-drive"
-      "google-cloud-sdk"
       "google-japanese-ime"
       "hhkb-keymap-tool"
       "lastpass"
