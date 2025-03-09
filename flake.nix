@@ -40,6 +40,20 @@
       };
     in
     {
+      # 一括アップデート用のスクリプトを定義
+      apps.${system}.update = {
+        type = "app";
+        program = toString (pkgs.writeShellScript "update-script" ''
+          set -e
+          echo "Updating flake..."
+          nix flake update
+          echo "Updating home-manager..."
+          nix run home-manager -- switch --flake .#naramotoyuuji
+          echo "Updating nix-darwin..."
+          nix run nix-darwin -- switch --flake .#MyMBP
+          echo "Update complete!"
+        '');
+      };
       # ユーザー naramotoyuuji の Home Manager 設定を適用
       homeConfigurations.naramotoyuuji = homeConfig;
       # MyMBP の Nix-Darwin 設定を適用
