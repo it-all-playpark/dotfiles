@@ -9,10 +9,6 @@
 
     stateVersion = "24.05"; # Please read the comment before changing.
 
-    imports = [
-      ./programs/fish.nix
-    ];
-
     packages = with pkgs; [
       act
       bat
@@ -72,43 +68,17 @@
     };
   };
 
+  imports = [
+    ./programs/fish.nix
+    ./programs/git.nix
+  ];
+
   programs = {
     # シェル有効化など
     zsh.enable = false;
-
     neovim = {
       enable = true;
       vimAlias = true;
-    };
-    git = {
-      enable = true;
-      includes = [
-        { path = "config.local"; }
-      ];
-      delta = {
-        enable = true;
-        options = {
-          features = "decorations";
-          side-by-side = true;
-          interactive = {
-            keep-plus-minus-markers = false;
-            diff-filter = "delta --color-only --features=interactive";
-          };
-          decorations = {
-            commit-decoration-style = "blue ol";
-            commit-style = "raw";
-            file-style = "omit";
-            hunk-header-decoration-style = "blue box";
-            hunk-header-file-style = "red";
-            hunk-header-line-number-style = "#067a00";
-            hunk-header-style = "file line-number syntax";
-          };
-        };
-      };
-      extraConfig = {
-        init.default-branch = "main";
-        hub.protocol = "ssh";
-      };
     };
   };
 
