@@ -21,7 +21,6 @@
       gh
       ghq
       google-cloud-sdk
-      delta
       jq
       lastpass-cli
       lazydocker
@@ -70,12 +69,11 @@
 
   imports = [
     ./programs/fish.nix
+    ./programs/zsh.nix
     ./programs/git.nix
   ];
 
   programs = {
-    # シェル有効化など
-    zsh.enable = false;
     neovim = {
       enable = true;
       vimAlias = true;
