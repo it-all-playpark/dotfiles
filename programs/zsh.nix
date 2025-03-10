@@ -1,8 +1,13 @@
 { ... }:
 {
   programs.zsh = {
-    enable = false;
-    shellInit = ''
+    enable = true;
+    loginExtra = ''
+      # PATH設定
+      export PATH="~/.nix-profile/bin /nix/var/nix/profiles/default/bin /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk ~/.local/share/mise/shims"
+
+    '';
+    envExtra = ''
       # yaziでカレントディレクトリを変更
       function yy() {
       	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
@@ -13,12 +18,9 @@
       	rm -f -- "$tmp"
       }
 
-      # PATH設定
-      export PATH="~/.nix-profile/bin /nix/var/nix/profiles/default/bin /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk ~/.local/share/mise/shims"
-
       eval "$(zoxide init zsh)"
       eval "$(starship init zsh)"
-      mise activate zsh
+      eval "$(mise activate zsh)"
     '';
     shellAliases = {
       # ezaをlsとして利用
