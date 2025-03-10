@@ -38,8 +38,6 @@
       starship
       tbls
       tldr
-      tree-sitter
-      unar
       yazi
       zoxide
     ];
