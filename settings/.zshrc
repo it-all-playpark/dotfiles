@@ -64,7 +64,8 @@ function yy() {
 alias ip="echo -n \$(dig myip.opendns.com @208.67.222.222 +short) | pbcopy; pbpaste"
 
 # PATH設定
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin/php:~/ghq/github.com/astj/ghq-migrator:~/google-cloud-sdk/bin:~/flutter/bin:~/Library/Android/sdk:~/.cargo/bin:$PATH"
+typeset -U path
+path=(~/.local/share/mise/installs/node/23.9.0/bin ~/.local/share/mise/installs/python/3.13.2/bin ~/.local/share/mise/installs/npm-git-cz/4.9.0/bin ~/.local/share/mise/installs/rust/1.85.0/bin ~/.local/share/mise/installs/pnpm/9.15.9/bin ~/.local/share/mise/installs/go/1.24.1/bin ~/.local/share/mise/installs/yarn/4.7.0/bin /nix/var/nix/profiles/default/bin ~/.nix-profile/bin /opt/homebrew/bin /opt/homebrew/sbin ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk /run/current-system/sw/bin /usr/local/bin /usr/bin /bin /usr/sbin /sbin)
 
 # zoxide
 eval "$(zoxide init zsh)"
@@ -73,4 +74,4 @@ eval "$(zoxide init zsh)"
 eval "$(starship init zsh)"
 
 # mise
-mise activate zsh
+eval "$(mise activate zsh)"

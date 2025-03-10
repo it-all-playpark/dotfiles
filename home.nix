@@ -42,7 +42,7 @@
     ];
 
     file = {
-      ".zshrc".source = ./settings/.zshrc;
+      # ".zshrc".source = ./settings/.zshrc;
       ".tmux.conf".source = ./settings/.tmux.conf;
       ".myclirc".source = ./settings/.myclirc;
       ".myclirc.local.template".source = ./settings/.myclirc.local.template;
@@ -74,6 +74,7 @@
   ];
 
   programs = {
+    zsh.enable = false;
     neovim = {
       enable = true;
       vimAlias = true;
