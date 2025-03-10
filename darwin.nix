@@ -16,7 +16,7 @@
       # Homebrew有効化時の挙動設定
       autoUpdate = true; # brewの自動更新を有効化
       upgrade = true; # 古いバージョンがあれば自動でアップグレード
-      # cleanup = "zap"; # アンインストール時に設定も含めて削除（コメントアウト中）
+      cleanup = "uninstall"; # casksにないものをアンインストール
     };
     casks = [
       # インストールするCaskアプリケーションのリスト
