@@ -49,7 +49,7 @@
       ".tmux.conf".source = ./settings/.tmux.conf;
       ".myclirc".source = ./settings/.myclirc;
       ".myclirc.local.template".source = ./settings/.myclirc.local.template;
-      ".config/config.local.template".source = ./settings/git/config.local.template;
+      ".config/git/config.local.template".source = ./settings/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./settings/fish/config.fish.local.template;
       ".config/nvim" = {
         source = ./settings/nvim;
