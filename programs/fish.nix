@@ -53,10 +53,9 @@
       # yazi
       y = ''yazi'';
       # カレントディレクトリのパスをクリップボードにコピー 
-      pwdc = ''echo -n "$(pwd)" | pbcopy'';
+      pwdc = ''echo -n "$(pwd)" | pbcopy; pbpaste'';
       # カレントディレクトリ配下の指定したディレクトリ配下のファイルパスと中身を一括取得
-      fl = ''fd --type f . "$(eza -DR | sd ':$' \'\' | rg '^./' | fzf)" -x sh -c 'echo "==== $1 ===="; cat "$1"' _ {};'';
-      flc = ''fd --type f . "$(eza -DR | sd ':$' \'\' | rg '^./' | fzf)" -x sh -c 'echo "==== $1 ===="; cat "$1"' _ {} | pbcopy;'';
+      fl = ''fd --type f . "$(eza -DR | sd ':$' \'\' | rg '^./' | fzf)" -x sh -c 'echo "==== $1 ===="; cat "$1"' _ {} | pbcopy; pbpaste'';
       # MySqlのDBを選択して接続
       mdb = ''cat ~/.myclirc ~/.myclirc.local > ~/.myclirc_combined ; mycli --myclirc=~/.myclirc_combined "$(mycli --list-dsn --myclirc=~/.myclirc_combined | fzf --layout=reverse --prompt 'DSN>')" ; rm ~/.myclirc_combined'';
       # lastpassでuser/passなどをクリップボードにコピー
@@ -75,6 +74,7 @@
       # 選択したコンテナボリュームを削除する
       dvr = ''docker volume rm $(docker volume ls | fzf --layout=reverse --prompt "Docker Volume>" --preview 'docker volume inspect {2}'| awk '{print $2}')'';
       dp = ''docker ps'';
+      dpr = ''docker system prune -f'';
       # docker composeの略記
       dc = ''docker compose'';
       dcb = ''docker compose build --no-cache'';
