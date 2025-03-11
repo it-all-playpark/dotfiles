@@ -37,7 +37,6 @@
       starship
       tbls
       tldr
-      yazi
       zoxide
     ];
 
@@ -55,10 +54,6 @@
         source = ./settings/mise;
         recursive = true;
       };
-      ".config/yazi" = {
-        source = ./settings/yazi;
-        recursive = true;
-      };
       ".warp" = {
         source = ./settings/.warp;
         recursive = true;
@@ -70,6 +65,7 @@
     ./programs/fish.nix
     ./programs/zsh.nix
     ./programs/git.nix
+    ./programs/yazi.nix
   ];
 
   programs = {
