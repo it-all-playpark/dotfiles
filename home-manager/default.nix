@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ pkgs, ... }:
 let
   home-default = import ./home/default.nix { inherit pkgs; };
   programs-default = import ./programs/default.nix;

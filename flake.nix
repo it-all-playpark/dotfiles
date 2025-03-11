@@ -31,12 +31,12 @@
       # home.nix をモジュールとして読み込み、Home Manager の設定を定義
       homeConfig = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;
-        modules = [ ./home.nix ];
+        modules = [ ./home-manager/default.nix ];
       };
       # darwin.nix をモジュールとして読み込み、Nix-Darwin の設定を定義
       darwinConfig = nix-darwin.lib.darwinSystem {
         system = system;
-        modules = [ ./darwin.nix ];
+        modules = [ ./darwin/default.nix ];
       };
     in
     {

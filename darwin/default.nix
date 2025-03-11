@@ -1,5 +1,4 @@
 { pkgs, ... }:
-
 {
   # システムで使用するパッケージ群（Nix経由）
   environment.systemPackages = with pkgs; [
