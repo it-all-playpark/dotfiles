@@ -54,7 +54,7 @@
       y = ''yazi'';
       # カレントディレクトリのパスをクリップボードにコピー 
       pwdc = ''echo -n "$(pwd)" | pbcopy; pbpaste'';
-      # カレントディレクトリ配下の指定したディレクトリ配下のファイルパスと中身を一括取得
+      # 選択したディレクトリ配下の指定したディレクトリ配下のファイルパスと中身を一括取得
       fl = ''fd --type f . "$(eza -DR | sd ':$' \'\' | rg '^./' | fzf)" -x sh -c 'echo "==== $1 ===="; cat "$1"' _ {} | pbcopy; pbpaste'';
       # MySqlのDBを選択して接続
       mdb = ''cat ~/.myclirc ~/.myclirc.local > ~/.myclirc_combined ; mycli --myclirc=~/.myclirc_combined "$(mycli --list-dsn --myclirc=~/.myclirc_combined | fzf --layout=reverse --prompt 'DSN>')" ; rm ~/.myclirc_combined'';
