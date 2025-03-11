@@ -38,21 +38,21 @@
     ];
 
     file = {
-      ".tmux.conf".source = ./settings/.tmux.conf;
-      ".myclirc".source = ./settings/.myclirc;
-      ".myclirc.local.template".source = ./settings/.myclirc.local.template;
-      ".config/git/config.local.template".source = ./settings/git/config.local.template;
-      ".config/fish/config.fish.local.template".source = ./settings/fish/config.fish.local.template;
+      ".tmux.conf".source = ./file/.tmux.conf;
+      ".myclirc".source = ./file/.myclirc;
+      ".myclirc.local.template".source = ./file/.myclirc.local.template;
+      ".config/git/config.local.template".source = ./file/git/config.local.template;
+      ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
       ".config/nvim" = {
-        source = ./settings/nvim;
+        source = ./file/nvim;
         recursive = true;
       };
       ".config/mise" = {
-        source = ./settings/mise;
+        source = ./file/mise;
         recursive = true;
       };
       ".warp" = {
-        source = ./settings/.warp;
+        source = ./file/.warp;
         recursive = true;
       };
     };
