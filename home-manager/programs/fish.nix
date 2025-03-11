@@ -1,6 +1,6 @@
 { ... }:
 let
-  common = import ../common.nix;
+  common = import ./common.nix;
 in
 {
   programs.fish = {
@@ -29,6 +29,6 @@ in
         rm -f -- "$tmp"
       '';
     };
-    shellAbbrs = common.shellShortcut;
+    shellAbbrs = common.shellSortcuts;
   };
 }

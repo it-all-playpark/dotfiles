@@ -1,6 +1,6 @@
 { ... }:
 let
-  common = import ../common.nix;
+  common = import ./common.nix;
 in
 {
   programs.zsh = {
@@ -25,6 +25,6 @@ in
       eval "$(starship init zsh)"
       eval "$(mise activate zsh)"
     '';
-    shellAliases = common.shellShortcut;
+    shellAliases = common.shellSortcuts;
   };
 }
