@@ -66,14 +66,7 @@
     ./programs/zsh.nix
     ./programs/git.nix
     ./programs/yazi.nix
+    ./programs/neovim.nix
   ];
-
-  programs = {
-    neovim = {
-      enable = true;
-      vimAlias = true;
-    };
-  };
-
 
 }
