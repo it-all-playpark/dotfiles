@@ -42,6 +42,7 @@
       "setapp"
       "slack"
       "warp"
+      "zed"
     ];
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
