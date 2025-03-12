@@ -43,6 +43,7 @@
       "slack"
       "warp"
       "zed"
+      "zoom"
     ];
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
