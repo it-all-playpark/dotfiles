@@ -59,5 +59,8 @@
     gca = ''gcloud config configurations activate $(gcloud config configurations list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')'';
     # global ip確認
     ip = ''echo -n $(dig myip.opendns.com @208.67.222.222 +short) | pbcopy ; pbpaste'';
+    # deepl
+    tre = ''deepl text --to en-us '';
+    trj = ''deepl text --to ja '';
   };
 }

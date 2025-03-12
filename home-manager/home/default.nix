@@ -9,6 +9,7 @@
     packages = with pkgs; [
       act
       bat
+      python313Packages.deepl
       eza
       fastfetch
       fd
