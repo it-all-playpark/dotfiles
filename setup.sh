@@ -6,7 +6,14 @@ if ! command -v nix &>/dev/null; then
   # Nixのインストールコマンド
   sh <(curl -L https://nixos.org/nix/install) --daemon
   # シェルの再読み込み
-  . /etc/profile.d/nix.sh
+  . /etc/zshrc
+fi
+
+# flakeを有効化
+if ! grep -q "experimental-features" ~/.config/nix/nix.conf 2>/dev/null; then
+  echo "flakeを有効化しています..."
+  mkdir -p ~/.config/nix
+  echo "experimental-features = nix-command flakes" >>~/.config/nix/nix.conf
 fi
 
 # 環境のセットアップ
