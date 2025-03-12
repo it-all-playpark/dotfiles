@@ -51,6 +51,10 @@
         source = ./file/mise;
         recursive = true;
       };
+      ".config/zed" = {
+        source = ./file/zed;
+        recursive = true;
+      };
       ".warp" = {
         source = ./file/.warp;
         recursive = true;
