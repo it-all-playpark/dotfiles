@@ -1,15 +1,16 @@
 { pkgs, ... }:
 let
   common = import ./common.nix;
+  shellCommon = import ./shell-common.nix { inherit pkgs; };
 in
 {
   programs.zsh = {
     enable = true;
     loginExtra = ''
       # PATH設定
-      export PATH= "$HOME/.nix-profile/bin"
-      ${if pkgs.stdenv.isDarwin then "PATH=\"/opt/homebrew/bin\"" else ""}
-      ${if pkgs.stdenv.isLinux then "PATH=\"/usr/local/bin\"" else ""}
+      export $HOME/.nix-profile/bin
+      ${shellCommon.getPathConfig.zshDarwin}
+      ${shellCommon.getPathConfig.zshLinux}
     '';
     envExtra = ''
       # yaziでカレントディレクトリを変更

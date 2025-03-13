@@ -1,6 +1,7 @@
 { pkgs, ... }:
 let
   common = import ./common.nix;
+  shellCommon = import ./shell-common.nix { inherit pkgs; };
 in
 {
   programs.fish = {
@@ -8,8 +9,8 @@ in
     shellInit = ''
       # PATH設定
       fish_add_path $HOME/.nix-profile/bin
-      ${if pkgs.stdenv.isDarwin then "fish_add_path /opt/homebrew/bin" else ""}
-      ${if pkgs.stdenv.isLinux then "fish_add_path /usr/local/bin" else ""}
+      ${shellCommon.getPathConfig.darwin}
+      ${shellCommon.getPathConfig.linux}
 
       starship init fish | source
       zoxide init fish | source

@@ -34,17 +34,18 @@
         modules = [ ./home-manager/default.nix ];
       };
       # Macのときのみdarwin.nix をモジュールとして読み込み、Nix-Darwin の設定を定義
-      darwinConfig =
-        if pkgs.stdenv.isDarwin
-        then
-          nix-darwin.lib.darwinSystem
-            {
-              system = system;
-              modules = [ ./darwin/default.nix ];
-            }
-        else { };
+      darwinConfig = nix-darwin.lib.darwinSystem {
+        system = system;
+        modules = [ ./darwin/default.nix ];
+      };
     in
     {
+      # ホームマネージャー構成を出力に追加
+      homeConfigurations."naramotoyuuji" = homeConfig;
+
+      # darwinの構成を出力に追加
+      darwinConfigurations."MyMBP" = darwinConfig;
+
       # 一括アップデート用のスクリプトを定義
       apps.${system}.update = {
         type = "app";
@@ -54,17 +55,12 @@
           nix flake update
           echo "Updating home-manager..."
           nix run home-manager -- switch --flake .#naramotoyuuji
-          echo "Updating nix-darwin..."
-          nix run nix-darwin -- switch --flake .#MyMBP
+          ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+            echo "Updating nix-darwin..."
+            nix run nix-darwin -- switch --flake .#MyMBP
+          ''}
           echo "Update complete!"
         '');
       };
-      # ユーザー naramotoyuuji の Home Manager 設定を適用
-      homeConfigurations.naramotoyuuji = homeConfig;
-      # MacのみMyMBP の Nix-Darwin 設定を適用
-      darwinConfigurations =
-        if pkgs.stdenv.isDarwin
-        then { MyMBP = darwinConfig; }
-        else { };
     };
 }

@@ -2,8 +2,11 @@
 {
   home = {
     username = "naramotoyuuji";
-    homeDirectory = if pkgs.stdenv.isDarwin then "/Users/naramotoyuuji" else "/home/naramotoyuuji";
-
+    homeDirectory = pkgs.lib.strings.concatStringsSep "" [
+      (pkgs.lib.optionalString pkgs.stdenv.isDarwin "/Users/")
+      (pkgs.lib.optionalString (!pkgs.stdenv.isDarwin) "/home/")
+      "naramotoyuuji"
+    ];
     stateVersion = "24.05"; # Please read the comment before changing.
 
     packages = with pkgs; [
