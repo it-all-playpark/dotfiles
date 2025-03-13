@@ -1,11 +1,11 @@
 { pkgs, ... }:
+let
+  packages = import ../common/packages.nix { inherit pkgs; };
+in
 {
   # システムで使用するパッケージ群（Nix経由）
-  environment.systemPackages = with pkgs; [
-    curl
-    git
-    coreutils
-    # 必要に応じて追加可能（例: batやfdなどもNix経由でインストール可能）
+  environment.systemPackages = packages.commonPackages ++ [
+    # macOS専用のパッケージをここに追加
   ];
 
   # Homebrewの統合設定

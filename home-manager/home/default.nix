@@ -1,4 +1,7 @@
 { pkgs, ... }:
+let
+  packages = import ../common/packages.nix { inherit pkgs; };
+in
 {
   home = {
     username = "naramotoyuuji";
@@ -9,7 +12,8 @@
     ];
     stateVersion = "24.05"; # Please read the comment before changing.
 
-    packages = with pkgs; [
+    # 共通パッケージを全プラットフォームでインストール
+    packages = packages.commonPackages ++ (with pkgs; [
       act
       bat
       python313Packages.deepl
@@ -39,7 +43,7 @@
       tbls
       tldr
       zoxide
-    ];
+    ]);
 
     file = {
       ".tmux.conf".source = ./file/.tmux.conf;
