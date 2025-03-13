@@ -33,11 +33,16 @@
         inherit pkgs;
         modules = [ ./home-manager/default.nix ];
       };
-      # darwin.nix をモジュールとして読み込み、Nix-Darwin の設定を定義
-      darwinConfig = nix-darwin.lib.darwinSystem {
-        system = system;
-        modules = [ ./darwin/default.nix ];
-      };
+      # Macのときのみdarwin.nix をモジュールとして読み込み、Nix-Darwin の設定を定義
+      darwinConfig =
+        if pkgs.stdenv.isDarwin
+        then
+          nix-darwin.lib.darwinSystem
+            {
+              system = system;
+              modules = [ ./darwin/default.nix ];
+            }
+        else { };
     in
     {
       # 一括アップデート用のスクリプトを定義
@@ -56,7 +61,10 @@
       };
       # ユーザー naramotoyuuji の Home Manager 設定を適用
       homeConfigurations.naramotoyuuji = homeConfig;
-      # MyMBP の Nix-Darwin 設定を適用
-      darwinConfigurations.MyMBP = darwinConfig;
+      # MacのみMyMBP の Nix-Darwin 設定を適用
+      darwinConfigurations =
+        if pkgs.stdenv.isDarwin
+        then { MyMBP = darwinConfig; }
+        else { };
     };
 }

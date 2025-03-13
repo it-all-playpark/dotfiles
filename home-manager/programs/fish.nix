@@ -1,4 +1,4 @@
-{ ... }:
+{ pkgs, ... }:
 let
   common = import ./common.nix;
 in
@@ -7,7 +7,9 @@ in
     enable = true;
     shellInit = ''
       # PATH設定
-      fish_add_path ~/.nix-profile/bin /nix/var/nix/profiles/default/bin /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk ~/.local/share/mise/shims
+      fish_add_path $HOME/.nix-profile/bin
+      ${if pkgs.stdenv.isDarwin then "fish_add_path /opt/homebrew/bin" else ""}
+      ${if pkgs.stdenv.isLinux then "fish_add_path /usr/local/bin" else ""}
 
       starship init fish | source
       zoxide init fish | source

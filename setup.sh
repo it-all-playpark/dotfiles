@@ -3,10 +3,10 @@
 # Nixがインストールされているか確認
 if ! command -v nix &>/dev/null; then
   echo "Nixがインストールされていません。インストールを開始します。"
-  # Nixのインストールコマンド
   sh <(curl -L https://nixos.org/nix/install) --daemon
-  # シェルの再読み込み
-  . /etc/zshrc
+  if [ "$(uname)" = "Darwin" ]; then
+    . /etc/zshrc
+  fi
 fi
 
 # 環境のセットアップ

@@ -1,4 +1,4 @@
-{ ... }:
+{ pkgs, ... }:
 let
   common = import ./common.nix;
 in
@@ -7,8 +7,9 @@ in
     enable = true;
     loginExtra = ''
       # PATH設定
-      export PATH="~/.nix-profile/bin /nix/var/nix/profiles/default/bin /opt/homebrew/bin /opt/homebrew/sbin /usr/bin/php ~/ghq/github.com/astj/ghq-migrator ~/google-cloud-sdk/bin ~/Library/Android/sdk ~/.local/share/mise/shims"
-
+      export PATH= "$HOME/.nix-profile/bin"
+      ${if pkgs.stdenv.isDarwin then "PATH=\"/opt/homebrew/bin\"" else ""}
+      ${if pkgs.stdenv.isLinux then "PATH=\"/usr/local/bin\"" else ""}
     '';
     envExtra = ''
       # yaziでカレントディレクトリを変更

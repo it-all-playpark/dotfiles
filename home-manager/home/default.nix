@@ -2,7 +2,7 @@
 {
   home = {
     username = "naramotoyuuji";
-    homeDirectory = "/Users/naramotoyuuji";
+    homeDirectory = if pkgs.stdenv.isDarwin then "/Users/naramotoyuuji" else "/home/naramotoyuuji";
 
     stateVersion = "24.05"; # Please read the comment before changing.
 
