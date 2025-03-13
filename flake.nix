@@ -24,43 +24,87 @@
     , ...
     }:
     let
-      # 使用するシステムのアーキテクチャを指定
-      system = "aarch64-darwin";
-      # 指定したシステムで nixpkgs をインポート
-      pkgs = import nixpkgs { inherit system; };
-      # home.nix をモジュールとして読み込み、Home Manager の設定を定義
-      homeConfig = home-manager.lib.homeManagerConfiguration {
-        inherit pkgs;
-        modules = [ ./home-manager/default.nix ];
-      };
-      # Macのときのみdarwin.nix をモジュールとして読み込み、Nix-Darwin の設定を定義
-      darwinConfig = nix-darwin.lib.darwinSystem {
-        system = system;
-        modules = [ ./darwin/default.nix ];
-      };
+      # サポートするシステムのリスト
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+
+      # 各システム向けの関数を生成するヘルパー関数
+      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+
+      # 各システム用のnixpkgsインスタンスを生成
+      nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
+
+      # システムがDarwinかどうかを判定する関数
+      isDarwin = system: builtins.match ".*-darwin" system != null;
+
+      # 現在のシステム（実行環境）を取得
+      currentSystem = builtins.currentSystem;
     in
     {
-      # ホームマネージャー構成を出力に追加
-      homeConfigurations."naramotoyuuji" = homeConfig;
+      # 各システム向けのホームマネージャー構成を出力
+      homeConfigurations = {
+        # macOS用の構成
+        "naramotoyuuji-darwin" = home-manager.lib.homeManagerConfiguration {
+          pkgs = nixpkgsFor."aarch64-darwin";
+          modules = [ ./home-manager/default.nix ];
+        };
 
-      # darwinの構成を出力に追加
-      darwinConfigurations."MyMBP" = darwinConfig;
+        # x86_64 Linux用の構成（WSLも含む）
+        "naramotoyuuji-linux-x86" = home-manager.lib.homeManagerConfiguration {
+          pkgs = nixpkgsFor."x86_64-linux";
+          modules = [ ./home-manager/default.nix ];
+        };
 
-      # 一括アップデート用のスクリプトを定義
-      apps.${system}.update = {
-        type = "app";
-        program = toString (pkgs.writeShellScript "update-script" ''
-          set -e
-          echo "Updating flake..."
-          nix flake update
-          echo "Updating home-manager..."
-          nix run home-manager -- switch --flake .#naramotoyuuji
-          ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
-            echo "Updating nix-darwin..."
-            nix run nix-darwin -- switch --flake .#MyMBP
-          ''}
-          echo "Update complete!"
-        '');
+        # ARM Linux用の構成
+        "naramotoyuuji-linux-arm" = home-manager.lib.homeManagerConfiguration {
+          pkgs = nixpkgsFor."aarch64-linux";
+          modules = [ ./home-manager/default.nix ];
+        };
       };
+
+      # Darwinの構成を出力に追加（macOSのみ）
+      darwinConfigurations."MyMBP" = nix-darwin.lib.darwinSystem {
+        system = "aarch64-darwin"; # Apple Silicon MacBook用
+        modules = [ ./darwin/default.nix ];
+      };
+
+      # 一括アップデート用のスクリプトを定義（各システム向け）
+      apps = forAllSystems (system: {
+        update = {
+          type = "app";
+          program = toString (nixpkgsFor.${system}.writeShellScript "update-script" ''
+            set -e
+            echo "Updating flake..."
+            nix flake update
+            
+            # システムタイプに基づいて適切な設定を使用
+            if [[ "$(uname)" == "Darwin" ]]; then
+              # macOS系の場合
+              echo "Detected macOS environment"
+              echo "Updating home-manager..."
+              nix run home-manager -- switch --flake .#naramotoyuuji-darwin
+              
+              echo "Updating nix-darwin..."
+              nix run nix-darwin -- switch --flake .#MyMBP
+            else
+              # Linux系の場合（WSLを含む）
+              echo "Detected Linux environment"
+              echo "Updating home-manager..."
+              
+              # アーキテクチャを検出
+              ARCH=$(uname -m)
+              if [[ "$ARCH" == "x86_64" ]]; then
+                nix run home-manager -- switch --flake .#naramotoyuuji-linux-x86
+              elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+                nix run home-manager -- switch --flake .#naramotoyuuji-linux-arm
+              else
+                echo "Unsupported architecture: $ARCH"
+                exit 1
+              fi
+            fi
+            
+            echo "Update complete!"
+          '');
+        };
+      });
     };
 }
