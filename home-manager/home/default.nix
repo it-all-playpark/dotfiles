@@ -17,7 +17,9 @@ in
       act
       bat
       python313Packages.deepl
+      colima
       eza
+      docker
       fastfetch
       fd
       ffmpegthumbnailer

@@ -26,7 +26,6 @@ in
       "coteditor"
       "cursor"
       "deepl"
-      "docker"
       "font-hack-nerd-font"
       "google-chrome"
       "google-drive"
