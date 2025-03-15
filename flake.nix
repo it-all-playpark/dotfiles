@@ -41,25 +41,40 @@
     in
     {
       # 各システム向けのホームマネージャー構成を出力
-      homeConfigurations = {
-        # macOS用の構成
-        "naramotoyuuji-darwin" = home-manager.lib.homeManagerConfiguration {
-          pkgs = nixpkgsFor."aarch64-darwin";
-          modules = [ ./home-manager/default.nix ];
-        };
+      homeConfigurations =
+        let
+          # ユーザー名を引数として受け取る関数を定義
+          mkHomeConfig = username: {
+            # macOS用の構成
+            "${username}-darwin" = home-manager.lib.homeManagerConfiguration {
+              pkgs = nixpkgsFor."aarch64-darwin";
+              modules = [
+                ./home-manager/default.nix
+                { _module.args.username = username; }
+              ];
+            };
 
-        # x86_64 Linux用の構成（WSLも含む）
-        "naramotoyuuji-linux-x86" = home-manager.lib.homeManagerConfiguration {
-          pkgs = nixpkgsFor."x86_64-linux";
-          modules = [ ./home-manager/default.nix ];
-        };
+            # x86_64 Linux用の構成（WSLも含む）
+            "${username}-linux-x86" = home-manager.lib.homeManagerConfiguration {
+              pkgs = nixpkgsFor."x86_64-linux";
+              modules = [
+                ./home-manager/default.nix
+                { _module.args.username = username; }
+              ];
+            };
 
-        # ARM Linux用の構成
-        "naramotoyuuji-linux-arm" = home-manager.lib.homeManagerConfiguration {
-          pkgs = nixpkgsFor."aarch64-linux";
-          modules = [ ./home-manager/default.nix ];
-        };
-      };
+            # ARM Linux用の構成
+            "${username}-linux-arm" = home-manager.lib.homeManagerConfiguration {
+              pkgs = nixpkgsFor."aarch64-linux";
+              modules = [
+                ./home-manager/default.nix
+                { _module.args.username = username; }
+              ];
+            };
+          };
+        in
+        # デフォルトのユーザー設定を含める
+        mkHomeConfig "naramotoyuuji";
 
       # Darwinの構成を出力に追加（macOSのみ）
       darwinConfigurations."MyMBP" = nix-darwin.lib.darwinSystem {
@@ -73,7 +88,10 @@
           type = "app";
           program = toString (nixpkgsFor.${system}.writeShellScript "update-script" ''
             set -e
-            echo "Updating flake..."
+            # デフォルトユーザー名を設定
+            USERNAME=''${1:-naramotoyuuji}
+            
+            echo "Updating flake for user: $USERNAME..."
             nix flake update
             
             # システムタイプに基づいて適切な設定を使用
@@ -81,7 +99,7 @@
               # macOS系の場合
               echo "Detected macOS environment"
               echo "Updating home-manager..."
-              nix run home-manager -- switch --flake .#naramotoyuuji-darwin
+              nix run home-manager -- switch --flake .#''${USERNAME}-darwin
               
               echo "Updating nix-darwin..."
               nix run nix-darwin -- switch --flake .#MyMBP
@@ -93,9 +111,9 @@
               # アーキテクチャを検出
               ARCH=$(uname -m)
               if [[ "$ARCH" == "x86_64" ]]; then
-                nix run home-manager -- switch --flake .#naramotoyuuji-linux-x86
+                nix run home-manager -- switch --flake .#''${USERNAME}-linux-x86
               elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-                nix run home-manager -- switch --flake .#naramotoyuuji-linux-arm
+                nix run home-manager -- switch --flake .#''${USERNAME}-linux-arm
               else
                 echo "Unsupported architecture: $ARCH"
                 exit 1

@@ -1,14 +1,14 @@
-{ pkgs, ... }:
+{ pkgs, username ? "naramotoyuuji", ... }:
 let
   packages = import ../../common/packages.nix { inherit pkgs; };
 in
 {
   home = {
-    username = "naramotoyuuji";
+    username = username;
     homeDirectory = pkgs.lib.strings.concatStringsSep "" [
       (pkgs.lib.optionalString pkgs.stdenv.isDarwin "/Users/")
       (pkgs.lib.optionalString (!pkgs.stdenv.isDarwin) "/home/")
-      "naramotoyuuji"
+      username
     ];
     stateVersion = "24.05"; # Please read the comment before changing.
 

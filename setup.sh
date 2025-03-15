@@ -9,6 +9,13 @@ if ! command -v nix &>/dev/null; then
   fi
 fi
 
+# flakeを有効化
+if ! grep -q "experimental-features" ~/.config/nix/nix.conf 2>/dev/null; then
+  echo "flakeを有効化しています..."
+  mkdir -p ~/.config/nix
+  echo "experimental-features = nix-command flakes" >>~/.config/nix/nix.conf
+fi
+
 # 環境のセットアップ
 echo "環境をセットアップしています..."
 nix run .#update

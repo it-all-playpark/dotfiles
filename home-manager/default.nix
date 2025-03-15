@@ -1,6 +1,6 @@
-{ pkgs, ... }:
+{ pkgs, username ? "naramotoyuuji", ... }:
 let
-  home-default = import ./home/default.nix { inherit pkgs; };
+  home-default = import ./home/default.nix { inherit pkgs username; };
   programs-default = import ./programs/default.nix;
 in
 {
