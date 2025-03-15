@@ -32,12 +32,6 @@
 
       # 各システム用のnixpkgsインスタンスを生成
       nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-
-      # システムがDarwinかどうかを判定する関数
-      isDarwin = system: builtins.match ".*-darwin" system != null;
-
-      # 現在のシステム（実行環境）を取得
-      currentSystem = builtins.currentSystem;
     in
     {
       # 各システム向けのホームマネージャー構成を出力

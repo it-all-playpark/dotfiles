@@ -18,4 +18,13 @@ fi
 
 # 環境のセットアップ
 echo "環境をセットアップしています..."
-nix run .#update
+
+# コマンドライン引数を確認
+if [ -z "$1" ]; then
+  echo "使用法: ./setup.sh <ユーザー名>"
+  echo "例: ./setup.sh naramotoyuuji"
+  exit 1
+fi
+
+# 引数をnix runコマンドに渡す
+nix run .#update "$1"
