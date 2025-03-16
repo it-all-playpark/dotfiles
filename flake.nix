@@ -66,9 +66,20 @@
               ];
             };
           };
+
+          # サポートするユーザーのリスト
+          usernames = [
+            "naramotoyuuji"
+            "yuji_naramoto"
+            # 他のユーザー名を追加できます
+          ];
+
+          # 複数ユーザーの設定をマージ
+          mergeConfigs = configs: username:
+            configs // (mkHomeConfig username);
         in
-        # デフォルトのユーザー設定を含める
-        mkHomeConfig "naramotoyuuji";
+        # すべてのユーザー設定をマージして含める
+        nixpkgs.lib.foldl mergeConfigs { } usernames;
 
       # Darwinの構成を出力に追加（macOSのみ）
       darwinConfigurations."MyMBP" = nix-darwin.lib.darwinSystem {
@@ -115,6 +126,57 @@
             fi
             
             echo "Update complete!"
+          '');
+        };
+
+        # すべてのユーザーを更新するスクリプト
+        "update-all" = {
+          type = "app";
+          program = toString (nixpkgsFor.${system}.writeShellScript "update-all-script" ''
+            set -e
+            # すべてのユーザー名を配列で定義
+            USERNAMES=("naramotoyuuji" "yuji_naramoto")
+            
+            echo "Updating flake for all users..."
+            nix flake update
+            
+            # システムタイプに基づいて処理
+            if [[ "$(uname)" == "Darwin" ]]; then
+              # macOS系の場合、nix-darwinを一度だけ更新
+              echo "Detected macOS environment"
+              echo "Updating nix-darwin..."
+              nix run nix-darwin -- switch --flake .#MyMBP
+              
+              # 各ユーザーのhome-manager設定を更新
+              for USERNAME in "''${USERNAMES[@]}"; do
+                echo "Updating home-manager for user: $USERNAME..."
+                nix run home-manager -- switch --flake .#''${USERNAME}-darwin
+              done
+            else
+              # Linux系の場合
+              echo "Detected Linux environment"
+              
+              # アーキテクチャを検出
+              ARCH=$(uname -m)
+              SUFFIX=""
+              
+              if [[ "$ARCH" == "x86_64" ]]; then
+                SUFFIX="linux-x86"
+              elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+                SUFFIX="linux-arm"
+              else
+                echo "Unsupported architecture: $ARCH"
+                exit 1
+              fi
+              
+              # 各ユーザーのhome-manager設定を更新
+              for USERNAME in "''${USERNAMES[@]}"; do
+                echo "Updating home-manager for user: $USERNAME..."
+                nix run home-manager -- switch --flake .#''${USERNAME}-$SUFFIX
+              done
+            fi
+            
+            echo "All updates complete!"
           '');
         };
       });
