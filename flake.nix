@@ -38,32 +38,30 @@
       homeConfigurations =
         let
           # ユーザー名を引数として受け取る関数を定義
+          # 共通モジュールを定義
+          commonModules = username: [
+            ./home-manager/default.nix
+            { _module.args.username = username; }
+          ];
+
+          # システムごとの設定を生成する関数
           mkHomeConfig = username: {
             # macOS用の構成
             "${username}-darwin" = home-manager.lib.homeManagerConfiguration {
               pkgs = nixpkgsFor."aarch64-darwin";
-              modules = [
-                ./home-manager/default.nix
-                { _module.args.username = username; }
-              ];
+              modules = commonModules username;
             };
 
             # x86_64 Linux用の構成（WSLも含む）
             "${username}-linux-x86" = home-manager.lib.homeManagerConfiguration {
               pkgs = nixpkgsFor."x86_64-linux";
-              modules = [
-                ./home-manager/default.nix
-                { _module.args.username = username; }
-              ];
+              modules = commonModules username;
             };
 
             # ARM Linux用の構成
             "${username}-linux-arm" = home-manager.lib.homeManagerConfiguration {
               pkgs = nixpkgsFor."aarch64-linux";
-              modules = [
-                ./home-manager/default.nix
-                { _module.args.username = username; }
-              ];
+              modules = commonModules username;
             };
           };
 
