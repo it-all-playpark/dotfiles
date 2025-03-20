@@ -21,7 +21,6 @@ in
       # インストールするCaskアプリケーションのリスト
       "arc"
       "box-drive"
-      "box-tools"
       "chatgpt"
       "coteditor"
       "cursor"
