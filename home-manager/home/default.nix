@@ -17,13 +17,9 @@ in
       act
       bat
       python313Packages.deepl
-      colima
       eza
-      docker
       fastfetch
       fd
-      ffmpegthumbnailer
-      ffmpeg
       fzf
       gh
       ghq
@@ -34,8 +30,6 @@ in
       lazygit
       mise
       mycli
-      pandoc
-      poppler
       procs
       rip2
       ripgrep

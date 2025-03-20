@@ -35,6 +35,7 @@ in
       "monitorcontrol"
       "microsoft-teams"
       "onedrive"
+      "orbstack"
       "postman"
       "raycast"
       "sequel-ace"
