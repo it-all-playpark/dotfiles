@@ -21,6 +21,7 @@ in
       # インストールするCaskアプリケーションのリスト
       "arc"
       "box-drive"
+      "box-tools"
       "chatgpt"
       "coteditor"
       "cursor"
@@ -32,7 +33,10 @@ in
       "hhkb-keymap-tool"
       "lastpass"
       "monitorcontrol"
+      "microsoft-excel"
       "microsoft-teams"
+      "microsoft-powerpoint"
+      "microsoft-word"
       "onedrive"
       "orbstack"
       "postman"
@@ -47,12 +51,6 @@ in
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
       Xcode = 497799835;
-      "Microsoft Word" = 462054704;
-      "Microsoft Excel" = 462058435;
-      "Microsoft PowerPoint" = 462062816;
-      "Microsoft OneNote" = 784801555;
-      "Microsoft Outlook" = 985367838;
-      # "Windows App" = 1295203466; # コメントアウト中のアプリ
     };
   };
   # NixデーモンやNixコマンドの設定
