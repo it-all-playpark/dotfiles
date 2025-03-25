@@ -44,6 +44,7 @@ in
     file = {
       ".tmux.conf".source = ./file/.tmux.conf;
       ".myclirc".source = ./file/.myclirc;
+      ".mcpservers.json".source = ./file/.mcpservers.json;
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
