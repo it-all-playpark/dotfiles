@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/fetch"
+      ]
+    },
+    "todoist": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@abhiz123/todoist-mcp-server"
+      ],
+      "disabled": true,
+      "env": {
+        "TODOIST_API_TOKEN": "your-api-token-here"
+      }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@executeautomation/playwright-mcp-server"
+      ]
+    }
+  }
+}
