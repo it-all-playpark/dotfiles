@@ -50,4 +50,6 @@ require("lazy").setup({
       },
     },
   },
+  -- lockfile を data フォルダ配下に変更
+  lockfile = vim.fn.stdpath("data") .. "/lazy-lock.json",
 })
