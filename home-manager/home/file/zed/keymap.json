@@ -1,0 +1,57 @@
+[
+  {
+    // ──────────────────────────────────────────
+    // 方向キー／基本操作（Normal・Visual・Operator など共通）
+    // ──────────────────────────────────────────
+    "context": "VimControl && !menu",
+    "bindings": {
+      // 1) 元の hjkl を殺す
+      "h": null,
+      "j": null,
+      "k": null,
+      "l": null,
+      "shift-h": null,
+      "shift-j": null,
+      "shift-k": null,
+      "shift-l": null,
+
+      // 2) hjkl ➜ tnrs
+      "t": "vim::Left",
+      "n": "vim::Down",
+      "r": "vim::Up",
+      "s": "vim::Right",
+
+      // 3) 大文字も同様
+      "shift-t": "vim::WindowTop",      // H → T
+      "shift-n": "vim::JoinLines",      // J → N
+      "shift-r": "editor::Hover",       // K → R
+      "shift-s": "vim::WindowBottom",   // L → S
+
+      // 4) “n” 系の検索ジャンプを h/H に振り替え
+      "h": "vim::MoveToNextMatch",        //  ← 新しい “n”
+      "shift-h": "vim::MoveToPreviousMatch"
+    }
+  },
+
+  {
+    // ──────────────────────────────────────────
+    // ファイルツリー・アウトラインなどリスト系 UI
+    // ──────────────────────────────────────────
+    "context": "ProjectPanel && not_editing",
+    "bindings": {
+      "t": "project_panel::CollapseSelectedEntry",  // = h
+      "s": "project_panel::ExpandSelectedEntry",    // = l
+      "n": "menu::SelectNext",                      // = j
+      "r": "menu::SelectPrevious",                  // = k
+      "h": null, "j": null, "k": null, "l": null
+    }
+  },
+  {
+    "context": "OutlinePanel && not_editing",
+    "bindings": {
+      "n": "menu::SelectNext",
+      "r": "menu::SelectPrevious",
+      "h": null, "j": null, "k": null, "l": null
+    }
+  }
+]
