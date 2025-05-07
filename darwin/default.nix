@@ -23,6 +23,7 @@ in
       "box-drive"
       "box-tools"
       "chatgpt"
+      "claude"
       "coteditor"
       "cursor"
       "deepl"
