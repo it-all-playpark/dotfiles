@@ -14,6 +14,8 @@
       "shift-j": null,
       "shift-k": null,
       "shift-l": null,
+      // redo
+      "ctrl-r": null,
 
       // 2) hjkl ➜ tnrs
       "t": "vim::Left",
@@ -30,6 +32,9 @@
       // 4) “n” 系の検索ジャンプを h/H に振り替え
       "h": "vim::MoveToNextMatch",        //  ← 新しい “n”
       "shift-h": "vim::MoveToPreviousMatch"
+
+      // 5) redo
+      "shift-u": "vim::Redo"  
     }
   },
 
