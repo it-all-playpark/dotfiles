@@ -31,7 +31,7 @@
 
       // 4) “n” 系の検索ジャンプを h/H に振り替え
       "h": "vim::MoveToNextMatch",        //  ← 新しい “n”
-      "shift-h": "vim::MoveToPreviousMatch"
+      "shift-h": "vim::MoveToPreviousMatch",
 
       // 5) redo
       "shift-u": "vim::Redo"
