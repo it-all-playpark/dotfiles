@@ -34,7 +34,7 @@
       "shift-h": "vim::MoveToPreviousMatch"
 
       // 5) redo
-      "shift-u": "vim::Redo"  
+      "shift-u": "vim::Redo"
     }
   },
 
