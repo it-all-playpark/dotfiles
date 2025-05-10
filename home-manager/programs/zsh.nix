@@ -22,7 +22,7 @@ in
       	fi
       	rm -f -- "$tmp"
       }
-
+      # terraformをopenTofuで代用
       function terraform() tofu
 
       eval "$(zoxide init zsh)"
