@@ -30,6 +30,7 @@ in
       lazygit
       mise
       mycli
+      opentofu
       procs
       rip2
       ripgrep

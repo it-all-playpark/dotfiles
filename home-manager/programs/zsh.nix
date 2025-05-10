@@ -23,6 +23,8 @@ in
       	rm -f -- "$tmp"
       }
 
+      function terraform() tofu
+
       eval "$(zoxide init zsh)"
       eval "$(starship init zsh)"
       eval "$(mise activate zsh)"

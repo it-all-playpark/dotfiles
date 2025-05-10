@@ -31,6 +31,8 @@ in
         end
         rm -f -- "$tmp"
       '';
+      # terraformをopenTofuで代用
+      terraform = ''tofu'';
     };
     shellAbbrs = common.shellSortcuts;
   };
