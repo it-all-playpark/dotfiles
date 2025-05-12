@@ -7,12 +7,18 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  // --- AI Assistant（チャット） --------------------------
   "assistant": {
     "default_model": {
-      "provider": "zed.dev",
-      "model": "claude-3-7-sonnet-latest"
+      "provider": "copilot_chat", // ←必須
+      "model": "claude-3.7-sonnet"        // 任意。省略可
     },
     "version": "2"
+  },
+
+  // --- インライン補完（Edit Prediction）を Copilot にしたい場合だけ ---
+  "features": {
+    "edit_prediction_provider": "copilot"
   },
   "vim_mode": true,
   "ui_font_size": 16,
