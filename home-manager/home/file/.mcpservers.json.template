@@ -94,6 +94,13 @@
       "env": {
         "PERPLEXITY_API_KEY": "YOUR_PERPLEXITY_API_KEY"
       }
+    },
+    "github.com/upstash/context7-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
     }
   }
 }
