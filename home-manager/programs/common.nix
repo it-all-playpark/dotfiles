@@ -64,7 +64,5 @@
     trj = ''deepl text --to ja '';
   };
   shellAleases = {
-    # opentofu
-    terrafrom = ''tofu'';
   };
 }
