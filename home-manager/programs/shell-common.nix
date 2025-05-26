@@ -10,11 +10,11 @@
     '';
 
     zshDarwin = pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
-      PATH="/opt/homebrew/bin:$PATH"
+      export PATH="/opt/homebrew/bin:$PATH"
     '';
 
     zshLinux = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-      PATH="/usr/local/bin:$PATH"
+      export PATH="/usr/local/bin:$PATH"
     '';
   };
 }
