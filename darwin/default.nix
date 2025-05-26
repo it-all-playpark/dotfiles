@@ -31,8 +31,11 @@ in
     };
   };
 
-  # サービス設定
-  services.nix-daemon.enable = true;
+  # プライマリユーザーの設定（システムデフォルト設定の適用対象）
+  system.primaryUser = "naramotoyuuji";
+
+  # Nixビルドユーザーグループの設定（GID不一致エラー対応）
+  ids.gids.nixbld = 350;
 
   # Homebrewの統合設定
   homebrew = {
@@ -83,7 +86,7 @@ in
     };
   };
   # NixデーモンやNixコマンドの設定
-  system.stateVersion = 6; # システムの状態バージョン
+  system.stateVersion = 4; # システムの状態バージョン（推奨値に更新）
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ]; # 実験的機能を有効化
     trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
@@ -94,5 +97,5 @@ in
   programs.zsh.enable = false; # zshは無効化
 
   # セキュリティ設定
-  security.pam.enableSudoTouchIdAuth = true; # Touch IDでsudoを有効化
+  security.pam.services.sudo_local.touchIdAuth = true; # Touch IDでsudoを有効化
 }

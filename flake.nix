@@ -105,7 +105,7 @@
               nix run home-manager -- switch --flake .#''${USERNAME}-darwin
               
               echo "Updating nix-darwin..."
-              nix run nix-darwin -- switch --flake .#MyMBP
+              sudo nix run nix-darwin -- switch --flake .#MyMBP
             else
               # Linux系の場合（WSLを含む）
               echo "Detected Linux environment"
@@ -143,7 +143,7 @@
               # macOS系の場合、nix-darwinを一度だけ更新
               echo "Detected macOS environment"
               echo "Updating nix-darwin..."
-              nix run nix-darwin -- switch --flake .#MyMBP
+              sudo nix run nix-darwin -- switch --flake .#MyMBP
               
               # 各ユーザーのhome-manager設定を更新
               for USERNAME in "''${USERNAMES[@]}"; do
