@@ -25,7 +25,6 @@ in
       ghq
       google-cloud-sdk
       jq
-      lastpass-cli
       lazydocker
       lazygit
       mise
