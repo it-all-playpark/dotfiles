@@ -8,6 +8,32 @@ in
     # macOS専用のパッケージをここに追加
   ];
 
+  # macOSシステム設定
+  system.defaults = {
+    dock = {
+      autohide = true; # Dockの自動非表示
+      orientation = "bottom"; # Dockの位置
+      tilesize = 64; # アイコンサイズ
+    };
+    finder = {
+      FXPreferredViewStyle = "clmv"; # カラム表示をデフォルトに
+      ShowPathbar = true; # パスバーを表示
+      ShowStatusBar = true; # ステータスバーを表示
+    };
+    NSGlobalDomain = {
+      AppleShowAllExtensions = true; # 全ての拡張子を表示
+      InitialKeyRepeat = 14; # キーリピート開始までの時間
+      KeyRepeat = 1; # キーリピート速度
+    };
+    trackpad = {
+      Clicking = true; # タップでクリック
+      TrackpadThreeFingerDrag = true; # 3本指ドラッグ
+    };
+  };
+
+  # サービス設定
+  services.nix-daemon.enable = true;
+
   # Homebrewの統合設定
   homebrew = {
     enable = true; # Homebrewを有効化
@@ -58,9 +84,15 @@ in
   };
   # NixデーモンやNixコマンドの設定
   system.stateVersion = 6; # システムの状態バージョン
-  nix.settings.experimental-features = [ "nix-command" "flakes" ]; # 実験的機能を有効化
+  nix.settings = {
+    experimental-features = [ "nix-command" "flakes" ]; # 実験的機能を有効化
+    trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
+  };
 
   # シェルの有効化設定
   programs.fish.enable = true; # デフォルトシェルとしてfishを有効化
   programs.zsh.enable = false; # zshは無効化
+
+  # セキュリティ設定
+  security.pam.enableSudoTouchIdAuth = true; # Touch IDでsudoを有効化
 }
