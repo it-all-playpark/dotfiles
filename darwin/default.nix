@@ -22,7 +22,7 @@ in
     };
     NSGlobalDomain = {
       AppleShowAllExtensions = true; # 全ての拡張子を表示
-      InitialKeyRepeat = 14; # キーリピート開始までの時間
+      InitialKeyRepeat = 10; # キーリピート開始までの時間（最速）
       KeyRepeat = 1; # キーリピート速度
     };
     trackpad = {
