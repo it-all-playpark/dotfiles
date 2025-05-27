@@ -13,7 +13,7 @@ in
     dock = {
       autohide = true; # Dockの自動非表示
       orientation = "bottom"; # Dockの位置
-      tilesize = 64; # アイコンサイズ
+      tilesize = 50; # アイコンサイズ
     };
     finder = {
       FXPreferredViewStyle = "clmv"; # カラム表示をデフォルトに
