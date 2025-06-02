@@ -23,7 +23,6 @@ in
       fzf
       gh
       ghq
-      google-cloud-sdk
       jq
       lazydocker
       lazygit
