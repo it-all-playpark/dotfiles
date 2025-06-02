@@ -1,8 +1,10 @@
 { pkgs, ... }:
 {
-  programs.google-cloud-sdk = {
-    enable = true;
-    withExtraComponents = [ pkgs.google-cloud-sdk.components.config-connector ];
-  };
+  home.packages = [
+    (pkgs.google-cloud-sdk.withExtraComponents (
+      with pkgs.google-cloud-sdk.components; [
+        config-connector
+      ]
+    ))
+  ];
 }
-
