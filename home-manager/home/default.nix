@@ -37,6 +37,7 @@ in
       starship
       tbls
       tldr
+      tmux
       zoxide
     ]);
 
