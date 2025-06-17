@@ -72,7 +72,6 @@ in
       "orbstack"
       "postman"
       "raycast"
-      "repo-prompt"
       "sequel-ace"
       "setapp"
       "slack"
