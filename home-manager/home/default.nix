@@ -20,6 +20,7 @@ in
       eza
       fastfetch
       fd
+      firebase-tools
       fzf
       gh
       ghq
