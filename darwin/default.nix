@@ -61,6 +61,7 @@ in
       "google-drive"
       "google-japanese-ime"
       "hhkb-keymap-tool"
+      "jump-desktop-connect"
       "1password"
       "1password-cli"
       "monitorcontrol"
