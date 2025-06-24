@@ -17,6 +17,7 @@ in
       act
       bat
       python313Packages.deepl
+      devcontainer
       eza
       fastfetch
       fd

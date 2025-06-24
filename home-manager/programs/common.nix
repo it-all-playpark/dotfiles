@@ -40,6 +40,8 @@
     d = ''docker exec -it $(docker ps | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs {1}'| awk '{print $1}') sh'';
     # 選択したlogを表示する
     dl = ''docker logs --follow --tail=100 $(docker ps -a | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs --details {1}' | awk '{print $1}')'';
+    # 選択したコンテナを停止する
+    ds = ''docker stop $(docker ps -a | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs {1}'| awk '{print $1}')'';
     # 選択したコンテナを削除する
     dr = ''docker rm $(docker ps -a | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs {1}'| awk '{print $1}')'';
     # 選択したコンテナイメージを削除する
@@ -54,6 +56,12 @@
     dcu = ''docker compose up -d'';
     dcd = ''docker compose down'';
     dcp = ''docker compose ps'';
+    # devcontainer
+    dvcb = ''devcontainer build --workspace-folder . --no-cache'';
+    dvcu = ''devcontainer up --workspace-folder .'';
+    dvcur = ''devcontainer up --workspace-folder . --remove-existing-container'';
+    dvce = ''devcontainer exec --workspace-folder . bash'';
+    dvcc = ''devcontainer exec --workspace-folder . claude --dangerously-skip-permissions -r'';
     # gcloud
     # config切り替え
     gca = ''gcloud config configurations activate $(gcloud config configurations list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')'';
