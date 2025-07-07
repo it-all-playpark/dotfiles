@@ -60,8 +60,8 @@
     dvcb = ''devcontainer build --workspace-folder . --no-cache'';
     dvcu = ''devcontainer up --workspace-folder .'';
     dvcur = ''devcontainer up --workspace-folder . --remove-existing-container'';
-    dvce = ''devcontainer exec --workspace-folder . bash'';
-    dvcc = ''devcontainer exec --workspace-folder . claude --dangerously-skip-permissions -r'';
+    dvce = ''vt devcontainer exec --workspace-folder . bash'';
+    dvcc = ''vt devcontainer exec --workspace-folder . claude --dangerously-skip-permissions -r'';
     # gcloud
     # config切り替え
     gca = ''gcloud config configurations activate $(gcloud config configurations list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')'';

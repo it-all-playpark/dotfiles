@@ -48,12 +48,9 @@ in
     };
     casks = [
       # インストールするCaskアプリケーションのリスト
-      "arc"
       "box-drive"
       "box-tools"
       "chatgpt"
-      "claude"
-      "coteditor"
       "cursor"
       "deepl"
       "font-hack-nerd-font"
@@ -62,8 +59,6 @@ in
       "google-japanese-ime"
       "hhkb-keymap-tool"
       "jump-desktop-connect"
-      "1password"
-      "1password-cli"
       "monitorcontrol"
       "microsoft-excel"
       "microsoft-teams"
@@ -76,9 +71,13 @@ in
       "sequel-ace"
       "setapp"
       "slack"
+      "tailscale-app"
       "warp"
+      "vibetunnel"
       "zed"
       "zoom"
+      "1password"
+      "1password-cli"
     ];
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
