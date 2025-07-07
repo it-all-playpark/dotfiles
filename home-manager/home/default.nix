@@ -50,6 +50,10 @@ in
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
+      ".config/claude" = {
+        source = ./file/claude;
+        recursive = true;
+      };
       ".config/nvim" = {
         source = ./file/nvim;
         recursive = true;
