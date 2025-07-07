@@ -41,7 +41,7 @@
     # 選択したlogを表示する
     dl = ''docker logs --follow --tail=100 $(docker ps -a | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs --details {1}' | awk '{print $1}')'';
     # 選択したコンテナを停止する
-    ds = ''docker stop $(docker ps -a | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs {1}'| awk '{print $1}')'';
+    ds = ''docker stop $(docker ps | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs {1}'| awk '{print $1}')'';
     # 選択したコンテナを削除する
     dr = ''docker rm $(docker ps -a | fzf --layout=reverse --prompt "Docker Container>" --preview-window 'bottom:70%' --preview 'docker logs {1}'| awk '{print $1}')'';
     # 選択したコンテナイメージを削除する
