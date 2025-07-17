@@ -7,23 +7,25 @@ return {
   opts = {
     provider = "copilot",
     auto_suggestions_provider = "copilot",
-    copilot = {
-      -- @see https://platform.openai.com/docs/models
-      -- model = "claude-3.5-sonnet",
-      model = "claude-sonnet-4",
-      -- model = "gpt-o1",
-      -- model = "gpt-o3",
-      disable_tools = false, -- disable tools!
-    },
-    gemini = {
-      -- @see https://ai.google.dev/gemini-api/docs/models/gemini
-      model = "gemini-1.5-pro",
-      -- model = "gemini-1.5-flash",
-      -- model = "gemini-2.5-pro-exp-03-25",
-      -- model = "gemini-2.0-flash-lite",
-      temperature = 0,
-      max_tokens = 4096,
-      -- disable_tools = false, -- disable tools!
+    providers = {
+      copilot = {
+        -- @see https://platform.openai.com/docs/models
+        -- model = "claude-3.5-sonnet",
+        model = "claude-sonnet-4",
+        -- model = "gpt-o1",
+        -- model = "gpt-o3",
+        disable_tools = false, -- disable tools!
+      },
+      gemini = {
+        -- @see https://ai.google.dev/gemini-api/docs/models/gemini
+        model = "gemini-1.5-pro",
+        -- model = "gemini-1.5-flash",
+        -- model = "gemini-2.5-pro-exp-03-25",
+        -- model = "gemini-2.0-flash-lite",
+        temperature = 0,
+        max_tokens = 4096,
+        -- disable_tools = false, -- disable tools!
+      },
     },
   },
   -- if you want to build from source then do `make BUILD_FROM_SOURCE=true`
