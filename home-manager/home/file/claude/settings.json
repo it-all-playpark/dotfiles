@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|implement",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm format && pnpm lint --fix"
+          }
+        ]
+      },
+      {
+        "matcher": "implement|run|test",
+        "onErrorRegex": "Missing[^\\n]*|Cannot\\sfind|is\\snot\\sdefined",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude $CLAUDE_PREV_TOOL $CLAUDE_PREV_ARGS --c7"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "c7",
+    "gh",
+    "seq",
+    "pup",
+    "magic"
+  ],
+  "enableAllProjectMcpServers": false
+}
