@@ -29,5 +29,23 @@
     "pup",
     "magic"
   ],
-  "enableAllProjectMcpServers": false
+  "enableAllProjectMcpServers": false,
+  "components": {
+    "core": {
+      "version": "3.0.0",
+      "installed_at": "2025-07-20T08:52:56.096556",
+      "category": "core"
+    },
+    "commands": {
+      "version": "3.0.0",
+      "installed_at": "2025-07-20T08:52:56.103251",
+      "category": "commands"
+    }
+  },
+  "framework": {
+    "components": [
+      "core",
+      "commands"
+    ]
+  }
 }

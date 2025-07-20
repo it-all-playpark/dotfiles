@@ -60,7 +60,8 @@
     dvcb = ''devcontainer build --workspace-folder . --no-cache'';
     dvcu = ''devcontainer up --workspace-folder .'';
     dvcur = ''devcontainer up --workspace-folder . --remove-existing-container'';
-    dvce = ''vt devcontainer exec --workspace-folder . bash'';
+    dvcd = ''docker compose -p (basename (pwd))_devcontainer down'';
+    dvce = ''vt devcontainer exec --workspace-folder . zsh'';
     dvcc = ''vt devcontainer exec --workspace-folder . claude --dangerously-skip-permissions -r'';
     # gcloud
     # config切り替え
