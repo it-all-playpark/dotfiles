@@ -8,9 +8,9 @@
         "run",
         "@upstash/context7-mcp",
         "--key",
-        "<SMITHERY_API_KEY>",
+        "${SMITHERY_API_KEY}",
         "--profile",
-        "<SMITHERY_PROFILE>"
+        "${SMITHERY_PROFILE}"
       ]
     },
     "gh": {
@@ -21,9 +21,9 @@
         "run",
         "@smithery-ai/github",
         "--key",
-        "<SMITHERY_API_KEY>",
+        "${SMITHERY_API_KEY}",
         "--profile",
-        "<SMITHERY_PROFILE>"
+        "${SMITHERY_PROFILE}"
       ]
     },
     "seq": {
@@ -34,9 +34,9 @@
         "run",
         "@xinzhongyouhai/mcp-sequentialthinking-tools",
         "--key",
-        "<SMITHERY_API_KEY>",
+        "${SMITHERY_API_KEY}",
         "--profile",
-        "<SMITHERY_PROFILE>"
+        "${SMITHERY_PROFILE}"
       ]
     },
     "pup": {
@@ -47,9 +47,9 @@
         "run",
         "@smithery-ai/puppeteer",
         "--key",
-        "<SMITHERY_API_KEY>",
+        "${SMITHERY_API_KEY}",
         "--profile",
-        "<SMITHERY_PROFILE>"
+        "${SMITHERY_PROFILE}"
       ]
     },
     "magic": {
@@ -60,9 +60,9 @@
         "run",
         "@magicuidesign/mcp",
         "--key",
-        "<SMITHERY_API_KEY>",
+        "${SMITHERY_API_KEY}",
         "--profile",
-        "<SMITHERY_PROFILE>"
+        "${SMITHERY_PROFILE}"
       ]
     }
   }
