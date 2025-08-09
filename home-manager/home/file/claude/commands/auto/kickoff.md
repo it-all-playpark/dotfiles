@@ -6,6 +6,8 @@ allowed-tools:
   - sc:load
   - sc:git
   - sc:implement
+  - Bash(gh issue comment:*)
+  - Bash(gh issue edit:*)
 ---
 
 sc:spawn --seq --ultrathink --verbose --cite "
@@ -73,6 +75,9 @@ $ISSUE_MD
 # もし仕様が曖昧ならここで中断（PRは作らない）
 
   if grep -q '^NEEDS_CLARIFICATION:' SPEC.md 2>/dev/null; then
+    # 連携通知（失敗しても続行しない）
+    Bash(gh issue comment $ARGUMENTS --body "❓ 自動化停止: SPEC.md に 'NEEDS_CLARIFICATION:' が出力されました。回答をお願いします。") || true
+    Bash(gh issue edit $ARGUMENTS --add-label "needs-clarification") || true
     echo '⛔ 仕様が曖昧: SPEC.md に NEEDS_CLARIFICATION が含まれます。PR作成を中断します。'
     exit 3
   fi
@@ -102,9 +107,20 @@ $ISSUE_MD
 ")
   sc:implement \"\$IMPL_PROMPT\" --iterative --with-tests --quality
 
+# （任意）パス変更ガード：ALLOW_PATH_GUARD=1 で有効化
+# 許可パターンは ALLOWED_PATHS_REGEX で上書き可（デフォ: src/, test(s)/, commands/, SPEC.md）
+  if [ \"\${ALLOW_PATH_GUARD:-0}\" = \"1\" ]; then
+    ALLOWED_REGEX=\"\${ALLOWED_PATHS_REGEX:-^(src/|tests?/|commands/|SPEC\\.md$)}\"
+    if git status --porcelain | awk '{print \$2}' | grep -Ev \"\$ALLOWED_REGEX\" | grep -q .; then
+      echo \"⛔ 許可外のパス変更が検出されました (ALLOW_PATH_GUARD=1)\"
+      exit 2
+    fi
+  fi
+
 # 実質的な変更が無い場合はPRを作らない（空コミット回避）
 
-  if git diff --quiet; then
+  # 未追跡ファイルも含めて検出
+  if [ -z \"\$(git status --porcelain)\" ]; then
     echo '⛔ 変更が検出されません。実装不要/仕様不明確の可能性につきPR作成を中断します。'
     exit 4
   fi
@@ -135,5 +151,7 @@ sc:git --smart-commit \"Fixes #\$ARGUMENTS\" --push \
 
 - SPEC.md の Acceptance Criteria と差分・テストの対応関係
 - Non-Goals を逸脱していないか
+
+*Note:* `Fixes #$ARGUMENTS` は **デフォルトブランチにマージされた時** に自動クローズされます。
 \"
 "

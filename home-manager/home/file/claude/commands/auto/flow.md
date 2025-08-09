@@ -6,6 +6,7 @@ allowed-tools:
   - Bash(gh pr view:*)
   - Bash(gh pr list:*)
   - Bash(gh repo view:*)
+  - Bash(gh search prs:*)
 ---
 
 : "${FLOW_FLAGS:=}"        # /auto:kickoff へ渡す任意フラグ
@@ -66,6 +67,17 @@ sc:spawn --seq --ultrathink --verbose --cite "
       [ -n \"\$PR_URL\" ] && break
       sleep ${FLOW_POLL_SLEEP}; i=\$((i+1))
     done
+  fi
+
+  if [ -z \"\$PR_URL\" ]; then
+    echo '🔎 fallback C: gh search prs …'
+    if [ -n \"\$REPO\" ]; then
+      PR_URL=\$(gh search prs \"repo:\$REPO state:open in:title \\\"(#$ARGUMENTS)\\\"\" \\
+                 --json url --jq '.[0].url' 2>/dev/null || true)
+    else
+      PR_URL=\$(gh search prs \"state:open in:title \\\"(#$ARGUMENTS)\\\"\" \\
+                 --json url --jq '.[0].url' 2>/dev/null || true)
+    fi
   fi
 
   [ -z \"\$PR_URL\" ] && { echo '❌ PR URL 取得失敗'; exit 1; }

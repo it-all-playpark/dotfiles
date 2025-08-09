@@ -44,9 +44,10 @@ sc:spawn --seq --ultrathink --verbose --cite "
   #######################################################################
   Bash(jq -c '.[]' /tmp/tasks.json | while read -r TASK; do
     TITLE=$(jq -r '.title' <<< \"$TASK\")
-    BODY=$( jq  -r '.body'  <<< \"$TASK\")
-    ORDER=$(jq  -r '.order' <<< \"$TASK\")
-    LABELS=\"sub-task,order-$ORDER\"
+    BODY=$( jq -r '.body' <<< \"$TASK\"; echo; echo \"Parent: #$ARGUMENTS\" )
+    ORDER=$(jq -r '.order' <<< \"$TASK\")
+    PADDED=$(printf \"%02d\" \"$ORDER\")
+    LABELS=\"sub-task,order-$PADDED\"
 
     NUM=$(Bash(gh issue create \
                 --title \"$TITLE\" \

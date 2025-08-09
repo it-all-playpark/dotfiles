@@ -42,7 +42,13 @@ sc:spawn --seq --ultrathink --verbose --cite "
 # PR ブランチなら tracking が付いている前提で fast-forward rebase
 
   sc:git fetch origin &&
-  sc:git rebase origin/$(sc:git rev-parse --abbrev-ref --symbolic-full-name @{u}) &&
+  UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)
+  if [ -z \"$UPSTREAM\" ]; then
+    # upstream 未設定ならデフォルトブランチへ
+    DEF=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo main)
+    UPSTREAM=\"origin/$DEF\"
+  fi
+  sc:git rebase \"$UPSTREAM\" &&
 
   ##################################################################
 

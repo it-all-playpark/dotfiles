@@ -11,7 +11,7 @@ sc:review --pr $ARGUMENTS \
           --seq --ultrathink --verbose --cite \
           > /tmp/review.md && \
 
-if grep -q "LGTM" /tmp/review.md; then
+if grep -qi "LGTM" /tmp/review.md; then
   EVENT=approve
 else
   EVENT=request-changes
