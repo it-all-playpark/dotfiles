@@ -47,5 +47,41 @@
       "core",
       "commands"
     ]
+  },
+  "permissions": {
+    "defaultMode": "ask",
+    "allow": [
+      "Edit",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh pr checkout:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh search prs:*)",
+      "Bash(jq:*)",
+      "Bash(git status)",
+      "Bash(git rev-parse:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -r /*)",
+      "Bash(chmod -R:*)",
+      "Bash(chown -R:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(ssh:*)",
+      "Bash(brew:*)",
+      "Bash(apt-get:*)",
+      "Bash(yum:*)",
+      "Bash(pip install:*)",
+      "Bash(git push --force origin main)",
+      "Bash(git push --force)"
+    ],
+    "additionalDirectories": []
   }
 }
