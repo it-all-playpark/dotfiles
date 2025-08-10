@@ -11,8 +11,8 @@ return {
       copilot = {
         -- @see https://platform.openai.com/docs/models
         -- model = "claude-3.5-sonnet",
-        model = "claude-sonnet-4",
-        -- model = "gpt-o1",
+        -- model = "claude-sonnet-4",
+        model = "gpt-5",
         -- model = "gpt-o3",
         disable_tools = false, -- disable tools!
       },
