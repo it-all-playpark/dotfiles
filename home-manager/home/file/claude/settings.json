@@ -1,12 +1,50 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__gh__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 - <<'PY'\nimport json,sys,re\nraw=sys.stdin.read()\nif not raw.strip():\n  sys.exit(0)\ntry:\n  inp=json.loads(raw)\nexcept Exception:\n  sys.exit(0)\nname=inp.get('tool_name','')\n# 安全系の gh MCP ツールは自動許可（破壊系ワードを含まない）\nif name.startswith('mcp__gh__') and not re.search(r'(merge|delete|transfer|archive|secret|token|ref|workflow)', name):\n  print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'allow','permissionDecisionReason':'auto-approve safe gh MCP tool'}}))\nPY"
+          }
+        ]
+      },
+      {
+        "matcher": "^Bash(\\(|$)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 - <<'PY'\nimport json,sys,re\nraw=sys.stdin.read()\nif not raw.strip():\n  sys.exit(0)\ntry:\n  inp=json.loads(raw)\nexcept Exception:\n  sys.exit(0)\ncmd=(inp.get('tool_input',{}) or {}).get('command','') or ''\nnorm=' '.join(cmd.split())\nparts=re.split(r'\\s*(?:&&|\\|\\||;)\\s*', norm)\nSAFE_SUB=re.compile(r'^git\\s+(?:add\\b.*|commit\\b.*|status\\b.*|restore\\s+--staged\\b.*)$')\n# 連結: add/commit/status/restore --staged だけなら自動許可\nif parts and all(SAFE_SUB.match(p) for p in parts if p):\n  print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'allow','permissionDecisionReason':'auto-approve safe git sequence'}}))\n# 単発 commit（-m / -F / -c / env 前置き対応）\nelif re.search(r'(^|\\s)(env\\s+\\S+=\\S+\\s+)*git(\\s+-c\\s+\\S+=\\S+)*\\s+commit(\\s+(-m|-F)\\b|\\b)', norm):\n  print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'allow','permissionDecisionReason':'auto-approve git commit'}}))\nPY"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(gh pr merge:*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BASE=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo ''); case \"$BASE\" in dev|develop|development|main|master) echo '⛔ Blocked: merging into protected branch' 1>&2; exit 2;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(git push:*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "BR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo \"\"); case \"$BR\" in dev|develop|development|main|master) echo '⛔ Blocked: pushing from protected branch' 1>&2; exit 2;; esac; exit 0"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|implement",
         "hooks": [
           {
             "type": "command",
-            "command": "pnpm format && pnpm lint --fix"
+            "command": "npm run format && npm run lint --fix"
           }
         ]
       },
@@ -49,45 +87,51 @@
     ]
   },
   "permissions": {
-    "defaultMode": "default",
+    "defaultMode": "acceptEdits",
     "allow": [
+      "Write",
       "Edit",
-      "Bash(gh issue view:*)",
-      "Bash(gh issue create:*)",
-      "Bash(gh issue comment:*)",
-      "Bash(gh issue edit:*)",
-      "Bash(gh pr checkout:*)",
-      "Bash(gh pr view:*)",
-      "Bash(gh pr list:*)",
-      "Bash(gh pr review:*)",
-      "Bash(gh pr create:*)",
-      "Bash(gh repo view:*)",
-      "Bash(gh search prs:*)",
-      "Bash(jq:*)",
-      "Bash(git status)",
-      "Bash(git rev-parse:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push --set-upstream origin HEAD:refs/heads/*)",
-      "Bash(git push --force-with-lease origin HEAD:refs/heads/*)",
-      "Bash(git push origin HEAD:refs/heads/*)"
+      "Bash(*)",
+      "mcp__gh__*",
+      "mcp__c7__*",
+      "mcp__magic__*",
+      "mcp__pup__*",
+      "mcp__seq__*"
     ],
     "deny": [
+      "mcp__gh__merge_pull_request",
+      "mcp__gh__delete_repo",
+      "mcp__gh__transfer_repo",
+      "mcp__gh__archive_repo",
+      "mcp__gh__delete_ref",
+      "mcp__gh__update_ref",
+      "mcp__gh__secret_set",
+      "mcp__gh__secret_remove",
+      "mcp__gh__auth_token",
+      "Bash(gh repo delete:*)",
+      "Bash(gh repo rename:*)",
+      "Bash(gh repo transfer:*)",
+      "Bash(gh release delete:*)",
+      "Bash(gh secret set:*)",
+      "Bash(gh secret remove:*)",
+      "Bash(gh auth token:*)",
+      "Bash(gh api --method DELETE:*)",
+      "Bash(gh api --method POST:*)",
+      "Bash(gh api --method PUT:*)",
+      "Bash(gh api --method PATCH:*)",
+      "Bash(gh api -X DELETE:*)",
+      "Bash(gh api -X POST:*)",
+      "Bash(gh api -X PUT:*)",
+      "Bash(gh api -X PATCH:*)",
+      "Bash(gh api graphql:*)",
       "Bash(git push)",
       "Bash(git push origin)",
-      "Bash(sudo:*)",
-      "Bash(rm -rf:*)",
-      "Bash(rm -r /*)",
-      "Bash(chmod -R:*)",
-      "Bash(chown -R:*)",
-      "Bash(curl:*)",
-      "Bash(wget:*)",
-      "Bash(ssh:*)",
-      "Bash(brew:*)",
-      "Bash(apt-get:*)",
-      "Bash(yum:*)",
-      "Bash(pip install:*)",
+      "Bash(git push --mirror:*)",
+      "Bash(git push --all:*)",
+      "Bash(git push --tags:*)",
       "Bash(git push --force)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
       "Bash(git push origin HEAD:refs/heads/dev)",
       "Bash(git push origin HEAD:refs/heads/develop)",
       "Bash(git push origin HEAD:refs/heads/development)",
@@ -113,12 +157,95 @@
       "Bash(git push origin :development)",
       "Bash(git push origin :main)",
       "Bash(git push origin :master)",
+      "Bash(git push origin --delete:* )",
+      "Bash(git push origin :*)",
       "Bash(git push origin --delete dev)",
       "Bash(git push origin --delete develop)",
       "Bash(git push origin --delete development)",
       "Bash(git push origin --delete main)",
-      "Bash(git push origin --delete master)"
+      "Bash(git push origin --delete master)",
+      "Bash(sudo:*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
+      "Bash(rm -r -f:*)",
+      "Bash(rm -f -r:*)",
+      "Bash(rm -r /*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -r /:*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf $HOME:*)",
+      "Bash(find / -delete:*)",
+      "Bash(find / -exec rm -rf {} \\;:*)",
+      "Bash(chmod -R:*)",
+      "Bash(chown -R:*)",
+      "Bash(chgrp -R:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(ssh:*)",
+      "Bash(brew:*)",
+      "Bash(nix-env -i:*)",
+      "Bash(nix profile install:*)",
+      "Bash(apt-get:*)",
+      "Bash(yum:*)",
+      "Bash(pip install:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pipx install:*)",
+      "Bash(dd:*)",
+      "Bash(mkfs:*)",
+      "Bash(mkfs.*:*)",
+      "Bash(fdisk:*)",
+      "Bash(parted:*)",
+      "Bash(cfdisk:*)",
+      "Bash(sfdisk:*)",
+      "Bash(gdisk:*)",
+      "Bash(sgdisk:*)",
+      "Bash(diskutil:*)",
+      "Bash(format:*)",
+      "Bash(kill -9 -1:*)",
+      "Bash(kill -9 1:*)",
+      "Bash(kill -KILL -1:*)",
+      "Bash(kill -KILL 1:*)",
+      "Bash(kill -TERM -1:*)",
+      "Bash(killall -KILL:*)",
+      "Bash(killall -TERM:*)",
+      "Bash(pkill -KILL:*)",
+      "Bash(pkill -TERM:*)",
+      "Bash(killall -9:*)",
+      "Bash(pkill -9:*)",
+      "Bash(reboot:*)",
+      "Bash(shutdown:*)",
+      "Bash(halt:*)",
+      "Bash(poweroff:*)",
+      "Bash(init 0:*)",
+      "Bash(init 6:*)",
+      "Bash(systemctl reboot:*)",
+      "Bash(systemctl shutdown:*)",
+      "Bash(systemctl poweroff:*)",
+      "Bash(systemctl halt:*)",
+      "Bash(mv /*:*)",
+      "Bash(mv * /:*)",
+      "Bash(cp /*:*)",
+      "Bash(cp * /:*)",
+      "Bash(cp -R * /:*)",
+      "Bash(rsync /*:*)",
+      "Bash(rsync * /:*)",
+      "Bash(tar -xf * -C /:*)",
+      "Bash(tar -xzf * -C /:*)",
+      "Bash(tar -xJf * -C /:*)",
+      "Bash(unzip * -d /:*)",
+      "Bash(ditto /*:*)",
+      "Bash(launchctl unload:*)",
+      "Bash(launchctl load:*)",
+      "Bash(defaults write:*)",
+      "Bash(scutil:*)",
+      "Bash(nvram:*)",
+      "Bash(csrutil:*)",
+      "Bash(spctl:*)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)"
     ],
     "additionalDirectories": []
-  }
+  },
+  "includeCoAuthoredBy": false
 }
