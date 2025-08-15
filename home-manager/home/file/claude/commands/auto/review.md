@@ -3,7 +3,8 @@ name: auto:review
 description: PR をレビューし approve / request-changes を投稿。LGTM→exit0、要修正→exit1。
 allowed-tools:
   - sc:review              # LLM-based review
-  - Bash:*                 # gh / grep など Bash 内の全コマンド
+  - Bash:(grep:*)          # grep
+  - Bash:(gh pr review:*)  # gh
 ---
 
 sc:review --pr $ARGUMENTS \

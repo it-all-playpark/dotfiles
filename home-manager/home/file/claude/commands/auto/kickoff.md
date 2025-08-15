@@ -8,6 +8,7 @@ allowed-tools:
   - sc:implement
   - Bash(gh issue comment:*)
   - Bash(gh issue edit:*)
+  - Bash(git:*)
 ---
 
 sc:spawn --seq --ultrathink --verbose --cite "
@@ -108,7 +109,9 @@ $ISSUE_MD
   sc:implement \"\$IMPL_PROMPT\" --iterative --with-tests --quality
 
 # （任意）パス変更ガード：ALLOW_PATH_GUARD=1 で有効化
+
 # 許可パターンは ALLOWED_PATHS_REGEX で上書き可（デフォ: src/, test(s)/, commands/, SPEC.md）
+
   if [ \"\${ALLOW_PATH_GUARD:-0}\" = \"1\" ]; then
     ALLOWED_REGEX=\"\${ALLOWED_PATHS_REGEX:-^(src/|tests?/|commands/|SPEC\\.md$)}\"
     if git status --porcelain | awk '{print \$2}' | grep -Ev \"\$ALLOWED_REGEX\" | grep -q .; then
@@ -119,7 +122,8 @@ $ISSUE_MD
 
 # 実質的な変更が無い場合はPRを作らない（空コミット回避）
 
-  # 未追跡ファイルも含めて検出
+# 未追跡ファイルも含めて検出
+
   if [ -z \"\$(git status --porcelain)\" ]; then
     echo '⛔ 変更が検出されません。実装不要/仕様不明確の可能性につきPR作成を中断します。'
     exit 4

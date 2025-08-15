@@ -7,7 +7,8 @@ allowed-tools:
   - sc:implement
   - sc:load
   - Bash(gh pr checkout:*)
-  - Bash(gh pr view:*)
+  - Bash(gh repo view:*)
+  - Bash(git:*)
 ---
 
 Bash(gh pr checkout $ARGUMENTS) && \
