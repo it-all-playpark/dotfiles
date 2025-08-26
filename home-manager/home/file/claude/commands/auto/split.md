@@ -11,7 +11,7 @@ allowed-tools:
   - Bash(jq:*)
 ---
 
-sc:spawn --seq --ultrathink --verbose --cite "
+sc:spawn --c7 --seq --think --verbose --cite "
   set -euo pipefail
 
   #######################################################################

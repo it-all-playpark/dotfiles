@@ -9,7 +9,7 @@ allowed-tools:
 
 sc:review --pr $ARGUMENTS \
           --with-ci --decision --uc --language ja \
-          --seq --ultrathink --verbose --cite \
+          --c7 --seq --think --verbose --cite \
           > /tmp/review.md && \
 
 if grep -qi "LGTM" /tmp/review.md; then
