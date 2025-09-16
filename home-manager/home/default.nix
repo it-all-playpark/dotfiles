@@ -21,6 +21,7 @@ in
       eza
       fastfetch
       fd
+      flyctl
       firebase-tools
       fzf
       gh
@@ -32,6 +33,7 @@ in
       mise
       mycli
       opentofu
+      postgresql_17
       procs
       rip2
       ripgrep
@@ -41,6 +43,7 @@ in
       tbls
       tldr
       tmux
+      wrangler
       zoxide
     ]);
 
