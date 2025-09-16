@@ -36,6 +36,15 @@
             "command": "BR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo \"\"); case \"$BR\" in dev|develop|development|main|master) echo '⛔ Blocked: pushing from protected branch' 1>&2; exit 2;; esac; exit 0"
           }
         ]
+      },
+      {
+        "matcher": "^Bash(\\(|$)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 - <<'PY'\nimport json,sys,re\nraw=sys.stdin.read().strip()\nif not raw:\n  sys.exit(0)\ntry:\n  inp=json.loads(raw)\n  cmd=((inp.get('tool_input') or {}).get('command') or '').strip()\nexcept Exception:\n  sys.exit(0)\nif not cmd:\n  sys.exit(0)\n# Only inspect git push\nif not re.match(r'^(?:env\\s+\\S+=\\S+\\s+)*git\\s+push\\b', cmd):\n  sys.exit(0)\nprotected={'main','master','dev','develop','development'}\nparts=cmd.split()\n# find 'push' token index (skip env/-c)\ntry:\n  i=max(j for j,p in enumerate(parts) if p=='push')\nexcept ValueError:\n  sys.exit(0)\n# skip push options until remote\nj=i+1\nwhile j < len(parts) and parts[j].startswith('-'):\n  j+=1\nif j>=len(parts):\n  sys.exit(0)\nremote=parts[j]\nj+=1\n# collect refspec tokens\nrefspecs=[]\nwhile j < len(parts):\n  if parts[j].startswith('-'):\n    j+=1; continue\n  refspecs.append(parts[j]); j+=1\n# No explicit refspec => current-branch push; 既存のBRチェックに任せる\nfor rs in refspecs:\n  rs=rs.lstrip('+')\n  if ':' in rs:\n    src,dst=rs.split(':',1)\n  else:\n    src=dst=rs\n  if dst.startswith('refs/heads/'):\n    dst=dst.rsplit('/',1)[-1]\n  if dst in protected:\n    print(f'⛔ Blocked: pushing to protected branch {dst}', file=sys.stderr)\n    sys.exit(2)\nsys.exit(0)\nPY"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -44,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npm run format && npm run lint --fix"
+            "command": "npm run format:fix && npm run lint:fix"
           }
         ]
       },
@@ -60,13 +69,7 @@
       }
     ]
   },
-  "enabledMcpjsonServers": [
-    "c7",
-    "gh",
-    "seq",
-    "pup",
-    "magic"
-  ],
+  "enabledMcpjsonServers": [],
   "enableAllProjectMcpServers": false,
   "components": {
     "core": {
@@ -91,12 +94,42 @@
     "allow": [
       "Write",
       "Edit",
-      "Bash(*)",
-      "mcp__gh__*",
-      "mcp__c7__*",
-      "mcp__magic__*",
-      "mcp__pup__*",
-      "mcp__seq__*"
+      "Bash",
+      "mcp__*",
+      "mcp__gh__add_issue_comment",
+      "mcp__gh__create_issue",
+      "mcp__gh__create_pull_request",
+      "mcp__gh__get_commit",
+      "mcp__gh__get_file_contents",
+      "mcp__gh__get_pull_request",
+      "mcp__gh__get_pull_request_files",
+      "mcp__gh__get_pull_request_review_comments",
+      "mcp__gh__get_pull_request_status",
+      "mcp__gh__get_issue",
+      "mcp__gh__get_issue_comments",
+      "mcp__gh__list_commits",
+      "mcp__gh__list_pull_requests",
+      "mcp__serena__activate_project",
+      "mcp__serena__create_text_file",
+      "mcp__serena__execute_shell_command",
+      "mcp__serena__find_file",
+      "mcp__serena__find_referencing_symbols",
+      "mcp__serena__find_symbol",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__list_dir",
+      "mcp__serena__read_file",
+      "mcp__serena__replace_symbol_body",
+      "mcp__serena__replace_regex",
+      "mcp__serena__search_for_pattern",
+      "mcp__serena__think_about_collected_information",
+      "mcp__sequential-thinking__sequentialthinking_tools",
+      "mcp__morphllm-fast-apply__edit_file",
+      "mcp__morphllm-fast-apply__write_file",
+      "mcp__morphllm-fast-apply__create_directory",
+      "mcp__serena__check_onboarding_performed",
+      "mcp__serena__read_memory",
+      "mcp__serena__write_memory",
+      "mcp__serena__think_about_whether_you_are_done"
     ],
     "deny": [
       "mcp__gh__merge_pull_request",
@@ -131,7 +164,6 @@
       "Bash(git push --tags:*)",
       "Bash(git push --force)",
       "Bash(git push -f:*)",
-      "Bash(git push --force-with-lease:*)",
       "Bash(git push origin HEAD:refs/heads/dev)",
       "Bash(git push origin HEAD:refs/heads/develop)",
       "Bash(git push origin HEAD:refs/heads/development)",

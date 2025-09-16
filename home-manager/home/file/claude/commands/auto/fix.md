@@ -1,66 +1,57 @@
 ---
 name: auto:fix
-description: 最新レビュー指摘を取り込み再実装→push
+description: 自動修正フロー - 問題の体系的な発見と修正、安全な改善の適用、自動検証による品質保証
 allowed-tools:
-  - sc:spawn
-  - sc:git
-  - sc:implement
-  - sc:load
   - Bash(gh pr checkout:*)
   - Bash(gh repo view:*)
   - Bash(git:*)
+  - Bash(grep:*)
 ---
 
-Bash(gh pr checkout $ARGUMENTS) && \
+# /auto:fix - 自動修正フロー
+# 問題の体系的な発見→修正→検証→コミットの完全自動化
 
-# ──────────────────────────────────────────────────────────
+set -euo pipefail
 
-# ここから SuperClaude のシーケンス
+# PRブランチへチェックアウト
+Bash(gh pr checkout $ARGUMENTS)
 
-# ──────────────────────────────────────────────────────────
+# 1. 現状分析 - 問題の体系的な発見
+/sc:analyze --focus quality --depth deep
 
-sc:spawn --seq --ultrathink --verbose --cite "
-  set -euo pipefail
+# 2. 問題診断 - 詳細なトレース情報取得
+/sc:troubleshoot --type bug --trace
 
-  ##################################################################
+# 3. 修正コスト見積もり
+/sc:estimate --type effort --unit hours
 
-# 1. 最新レビューコメントをコンテキストにロード
+# 4. レビュー本文を取得して修正指示を抽出
+/sc:review \
+  --pr $ARGUMENTS \
+  --with-ci \
+  --decision \
+  --language ja \
+  > /tmp/review.md
 
-  ##################################################################
+# 5. 改善適用 - 安全な修正の実行
+FIX_PROMPT=$(printf '%s' "
+[ROLE] Apply requested changes to the current PR based on the following review (Japanese).
 
-# --pr:   PR 番号
+=== REVIEW ===
+$(cat /tmp/review.md)
+")
 
-# --include: reviews,reviewComments など環境に合わせて
+/sc:improve --type quality --safe
+/sc:implement --language ja "$FIX_PROMPT"
 
-  sc:load --pr $ARGUMENTS --include reviewComments --format markdown --ctx review &&
+# 6. テスト実行 - 修正の検証
+/sc:test --coverage
 
-  ##################################################################
+# 7. タスクの振り返りと検証
+/sc:reflect --type task --validate
 
-# 2. upstream の最新を取り込み（コンフリクト早期検知）
+# 8. スマートコミット - 変更内容を分析して適切なコミットメッセージ生成
+/sc:git commit --smart-commit
 
-  ##################################################################
-
-# PR ブランチなら tracking が付いている前提で fast-forward rebase
-
-  sc:git fetch origin &&
-  UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)
-  if [ -z \"$UPSTREAM\" ]; then
-    # upstream 未設定ならデフォルトブランチへ
-    DEF=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo main)
-    UPSTREAM=\"origin/$DEF\"
-  fi
-  sc:git rebase \"$UPSTREAM\" &&
-
-  ##################################################################
-
-# 3. レビュー指摘を自動修正
-
-  sc:implement --fix-issues --quality &&
-
-  ##################################################################
-
-# 4. 変更を push（force-with-lease で安全）
-
-  ##################################################################
-  sc:git --smart-commit \"Apply review fixes\" --push --force-with-lease
-"
+# 9. 安全なプッシュ
+Bash(git push --force-with-lease)

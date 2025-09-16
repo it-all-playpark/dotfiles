@@ -93,24 +93,24 @@
             set -e
             # デフォルトユーザー名を設定
             USERNAME=''${1:-naramotoyuuji}
-            
+
             echo "Updating flake for user: $USERNAME..."
             nix flake update
-            
+
             # システムタイプに基づいて適切な設定を使用
             if [[ "$(uname)" == "Darwin" ]]; then
               # macOS系の場合
               echo "Detected macOS environment"
               echo "Updating home-manager..."
               nix run home-manager -- switch --flake .#''${USERNAME}-darwin
-              
+
               echo "Updating nix-darwin..."
               sudo nix run nix-darwin -- switch --flake .#MyMBP
             else
               # Linux系の場合（WSLを含む）
               echo "Detected Linux environment"
               echo "Updating home-manager..."
-              
+
               # アーキテクチャを検出
               ARCH=$(uname -m)
               if [[ "$ARCH" == "x86_64" ]]; then
@@ -122,7 +122,7 @@
                 exit 1
               fi
             fi
-            
+
             echo "Update complete!"
           '');
         };
@@ -134,17 +134,17 @@
             set -e
             # すべてのユーザー名を配列で定義
             USERNAMES=("naramotoyuuji" "yuji_naramoto")
-            
+
             echo "Updating flake for all users..."
             nix flake update
-            
+
             # システムタイプに基づいて処理
             if [[ "$(uname)" == "Darwin" ]]; then
               # macOS系の場合、nix-darwinを一度だけ更新
               echo "Detected macOS environment"
               echo "Updating nix-darwin..."
               sudo nix run nix-darwin -- switch --flake .#MyMBP
-              
+
               # 各ユーザーのhome-manager設定を更新
               for USERNAME in "''${USERNAMES[@]}"; do
                 echo "Updating home-manager for user: $USERNAME..."
@@ -153,11 +153,11 @@
             else
               # Linux系の場合
               echo "Detected Linux environment"
-              
+
               # アーキテクチャを検出
               ARCH=$(uname -m)
               SUFFIX=""
-              
+
               if [[ "$ARCH" == "x86_64" ]]; then
                 SUFFIX="linux-x86"
               elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
@@ -166,14 +166,14 @@
                 echo "Unsupported architecture: $ARCH"
                 exit 1
               fi
-              
+
               # 各ユーザーのhome-manager設定を更新
               for USERNAME in "''${USERNAMES[@]}"; do
                 echo "Updating home-manager for user: $USERNAME..."
                 nix run home-manager -- switch --flake .#''${USERNAME}-$SUFFIX
               done
             fi
-            
+
             echo "All updates complete!"
           '');
         };

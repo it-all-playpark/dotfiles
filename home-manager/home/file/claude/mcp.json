@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "c7": {
+    "context7": {
       "command": "npx",
       "args": [
         "-y",
@@ -8,9 +8,7 @@
         "run",
         "@upstash/context7-mcp",
         "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
+        "${SMITHERY_API_KEY}"
       ]
     },
     "gh": {
@@ -26,26 +24,13 @@
         "${SMITHERY_PROFILE}"
       ]
     },
-    "seq": {
+    "sequential-thinking": {
       "command": "npx",
       "args": [
         "-y",
         "@smithery/cli@latest",
         "run",
         "@xinzhongyouhai/mcp-sequentialthinking-tools",
-        "--key",
-        "${SMITHERY_API_KEY}",
-        "--profile",
-        "${SMITHERY_PROFILE}"
-      ]
-    },
-    "pup": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "@smithery-ai/puppeteer",
         "--key",
         "${SMITHERY_API_KEY}",
         "--profile",
@@ -64,6 +49,37 @@
         "--profile",
         "${SMITHERY_PROFILE}"
       ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@smithery/cli@latest",
+        "run",
+        "@executeautomation/playwright-mcp-server",
+        "--key",
+        "${SMITHERY_API_KEY}"
+      ]
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server"
+      ]
+    },
+    "morphllm-fast-apply": {
+      "command": "npx",
+      "args": [
+        "@morph-llm/morph-fast-apply",
+        "/home/"
+      ],
+      "env": {
+        "MORPH_API_KEY": "${MORPH_API_KEY}",
+        "ALL_TOOLS": "true"
+      }
     }
   }
 }
