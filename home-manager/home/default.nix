@@ -43,7 +43,6 @@ in
       tbls
       tldr
       tmux
-      wrangler
       zoxide
     ]);
 
