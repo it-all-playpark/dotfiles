@@ -2,11 +2,13 @@ return {
   "ravitemer/mcphub.nvim",
   dependencies = {
     "nvim-lua/plenary.nvim", -- Required for Job and HTTP requests
+    "Joakker/lua-json5",     -- Required for JSON5 parsing
   },
   -- cmd = "MCPHub", -- lazily start the hub when `MCPHub` is called
   build = "npm install -g mcp-hub@latest", -- Installs required mcp-hub npm module
   config = function()
     require("mcphub").setup({
+      json_decode = require("json5").parse,
       -- Required options
       port = 3000, -- Port for MCP Hub server
       config = vim.fn.expand("~/.mcpservers.json"), -- Absolute path to config file
