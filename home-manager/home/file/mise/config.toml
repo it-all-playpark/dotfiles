@@ -2,7 +2,7 @@
 _.file = '.env'
 
 [tools]
-node = "latest"
+node = "lts"
 python = "latest"
 uv = "latest"
 "npm:git-cz" = "latest"
