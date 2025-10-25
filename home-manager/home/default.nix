@@ -22,7 +22,6 @@ in
       fastfetch
       fd
       flyctl
-      firebase-tools
       fzf
       gh
       ghq
