@@ -192,20 +192,20 @@ Bash(git push -u origin "$BRANCH_NAME")
 
 # PR作成
 
-PR_BODY="## 🎯 Issue
+PR_BODY="## 🎯 対応Issue
 Fixes #$ISSUE_NUMBER
 
-## 📋 Implementation Details
+## 📋 実装詳細
 
-- **Title**: $ISSUE_TITLE
-- **Strategy**: $STRATEGY
+- **タイトル**: $ISSUE_TITLE
+- **戦略**: $STRATEGY
 
-## ✅ Checklist
+## ✅ チェックリスト
 
-- [ ] Tests pass
-- [ ] Code quality validated
-- [ ] Documentation updated (if needed)
-- [ ] Ready for review"
+- [ ] テストが通過している
+- [ ] コード品質が検証されている
+- [ ] ドキュメントが更新されている（必要な場合）
+- [ ] レビュー準備完了"
 
 PR_URL=$(Bash(gh pr create \
   --title "✨ [$STRATEGY] $ISSUE_TITLE (#$ISSUE_NUMBER)" \
