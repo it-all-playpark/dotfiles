@@ -21,7 +21,7 @@ in
       eza
       fastfetch
       fd
-      flyctl
+      # flyctl  # 一時的にコメントアウト: hash mismatch error
       fzf
       gh
       ghq
@@ -30,7 +30,7 @@ in
       lazygit
       marp-cli
       mise
-      mycli
+      # mycli  # 一時的にコメントアウト: pyarrow build error
       opentofu
       postgresql_17
       procs
@@ -67,6 +67,10 @@ in
       };
       ".config/zed" = {
         source = ./file/zed;
+        recursive = true;
+      };
+      "Library/Application Support/lazygit" = {
+        source = ./file/lazygit;
         recursive = true;
       };
       ".warp" = {
