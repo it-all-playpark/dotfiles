@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+# macOSの場合、Xcode Command Line Toolsをインストール
+if [ "$(uname)" = "Darwin" ]; then
+  if ! xcode-select -p &>/dev/null; then
+    echo "Xcode Command Line Toolsをインストールしています..."
+    xcode-select --install
+    echo "インストールが完了したら、このスクリプトを再実行してください。"
+    exit 0
+  fi
+fi
+
 # Nixがインストールされているか確認
 if ! command -v nix &>/dev/null; then
   echo "Nixがインストールされていません。インストールを開始します。"
