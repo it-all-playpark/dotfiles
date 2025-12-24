@@ -39,6 +39,7 @@ in
       ripgrep-all
       sd
       starship
+      stripe-cli
       tbls
       tldr
       tmux
