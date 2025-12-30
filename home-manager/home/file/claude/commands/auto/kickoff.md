@@ -210,7 +210,7 @@ Fixes #$ISSUE_NUMBER
 PR_URL=$(Bash(gh pr create \
   --title "✨ [$STRATEGY] $ISSUE_TITLE (#$ISSUE_NUMBER)" \
   --body "$PR_BODY" \
-  --base main \
+  --base dev \
   --head "$BRANCH_NAME" \
   --assignee @me \
   2>/dev/null | grep -o 'https://.*' || echo ""))
