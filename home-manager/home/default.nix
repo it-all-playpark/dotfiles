@@ -43,6 +43,7 @@ in
       tbls
       tldr
       tmux
+      vips
       zoxide
     ]);
 
