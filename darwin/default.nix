@@ -51,6 +51,7 @@ in
       "box-drive"
       "box-tools"
       "chatgpt"
+      "claude"
       "cursor"
       "deepl"
       "font-hack-nerd-font"
