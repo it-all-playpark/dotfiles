@@ -28,6 +28,7 @@ in
       jq
       lazydocker
       lazygit
+      mariadb
       marp-cli
       mise
       # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
