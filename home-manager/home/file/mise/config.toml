@@ -5,6 +5,7 @@ _.file = '.env'
 node = "lts"
 python = "latest"
 uv = "latest"
+"npm:clawdbot" = "latest"
 "npm:git-cz" = "latest"
 "npm:mcp-hub" = "latest"
 "npm:vercel" = "latest"
