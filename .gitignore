@@ -1,0 +1,21 @@
+# Claude Code - sensitive and runtime data
+claude-code/.credentials.json
+claude-code/history.jsonl
+claude-code/cache/
+claude-code/logs/
+claude-code/file-history/
+claude-code/debug/
+claude-code/backups/
+claude-code/agents/
+claude-code/.superclaude-metadata.json
+
+# Skills - sensitive and generated files
+claude-code/skills/**/.env
+claude-code/skills/**/__pycache__/
+
+# Nix
+result
+result-*
+
+# macOS
+.DS_Store
