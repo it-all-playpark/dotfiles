@@ -15,12 +15,18 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # Claude Code overlay - 公式バイナリを Nix で管理
+    claude-code-overlay = {
+      url = "github:ryoppippi/claude-code-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
     { nixpkgs
     , home-manager
     , nix-darwin
+    , claude-code-overlay
     , ...
     }:
     let
@@ -30,8 +36,11 @@
       # 各システム向けの関数を生成するヘルパー関数
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
-      # 各システム用のnixpkgsインスタンスを生成
-      nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
+      # 各システム用のnixpkgsインスタンスを生成（claude-code-overlay を適用）
+      nixpkgsFor = forAllSystems (system: import nixpkgs {
+        inherit system;
+        overlays = [ claude-code-overlay.overlays.default ];
+      });
     in
     {
       # 各システム向けのホームマネージャー構成を出力

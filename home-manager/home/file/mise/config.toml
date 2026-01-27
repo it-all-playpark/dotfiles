@@ -5,10 +5,10 @@ _.file = '.env'
 node = "lts"
 python = "latest"
 uv = "latest"
+"npm:clawdbot" = "latest"
 "npm:git-cz" = "latest"
 "npm:mcp-hub" = "latest"
 "npm:vercel" = "latest"
-"npm:@anthropic-ai/claude-code" = "latest"
 "npm:@openai/codex" = "latest"
 "npm:@google/gemini-cli" = "latest"
 "npm:@github/copilot" = "latest"
@@ -23,4 +23,3 @@ yarn = "latest"
 
 [settings]
 experimental = true
-

@@ -3,6 +3,10 @@ let
   packages = import ../../common/packages.nix { inherit pkgs; };
 in
 {
+  # claude-code のみ unfree を許可
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (pkgs.lib.getName pkg) [ "claude-code" ];
+
   home = {
     username = username;
     homeDirectory = pkgs.lib.strings.concatStringsSep "" [
@@ -16,6 +20,7 @@ in
     packages = packages.commonPackages ++ (with pkgs; [
       act
       bat
+      claude-code
       python313Packages.deepl
       devcontainer
       eza
@@ -28,6 +33,7 @@ in
       jq
       lazydocker
       lazygit
+      mariadb
       marp-cli
       mise
       # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
