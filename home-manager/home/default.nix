@@ -3,6 +3,10 @@ let
   packages = import ../../common/packages.nix { inherit pkgs; };
 in
 {
+  # claude-code のみ unfree を許可
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (pkgs.lib.getName pkg) [ "claude-code" ];
+
   home = {
     username = username;
     homeDirectory = pkgs.lib.strings.concatStringsSep "" [
@@ -16,6 +20,7 @@ in
     packages = packages.commonPackages ++ (with pkgs; [
       act
       bat
+      claude-code
       python313Packages.deepl
       devcontainer
       eza
