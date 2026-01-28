@@ -150,5 +150,43 @@ in
         fi
       done
     '';
+
+    # Clawdbot 設定を dotfiles/clawdbot/ からシンボリックリンクで参照
+    # ~/.clawdbot 自体をシンボリックリンクにして、設定ファイルを一元管理
+    activation.setupClawdbot = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      DOTFILES_CLAWDBOT="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/clawdbot"
+      CLAWDBOT_DIR="${config.home.homeDirectory}/.clawdbot"
+
+      # dotfiles が存在しない場合はスキップ（初回セットアップ時などを考慮）
+      if [ ! -d "$DOTFILES_CLAWDBOT" ]; then
+        echo "Warning: $DOTFILES_CLAWDBOT does not exist. Skipping Clawdbot setup."
+        exit 0
+      fi
+
+      # ~/.clawdbot がシンボリックリンクでない場合の処理
+      if [ -e "$CLAWDBOT_DIR" ] && [ ! -L "$CLAWDBOT_DIR" ]; then
+        # 既存のディレクトリをバックアップ
+        BACKUP_DIR="$CLAWDBOT_DIR.backup.$(date +%Y%m%d%H%M%S)"
+        echo "Backing up existing .clawdbot directory to $BACKUP_DIR"
+        mv "$CLAWDBOT_DIR" "$BACKUP_DIR"
+
+        # バックアップから credentials, identity, .env をコピー（存在する場合）
+        if [ -d "$BACKUP_DIR/credentials" ]; then
+          cp -r "$BACKUP_DIR/credentials" "$DOTFILES_CLAWDBOT/credentials"
+        fi
+        if [ -d "$BACKUP_DIR/identity" ]; then
+          cp -r "$BACKUP_DIR/identity" "$DOTFILES_CLAWDBOT/identity"
+        fi
+        if [ -f "$BACKUP_DIR/.env" ]; then
+          cp "$BACKUP_DIR/.env" "$DOTFILES_CLAWDBOT/.env"
+        fi
+      elif [ -L "$CLAWDBOT_DIR" ]; then
+        # 既存のシンボリックリンクを削除（正しいリンク先に更新するため）
+        rm "$CLAWDBOT_DIR"
+      fi
+
+      # ~/.clawdbot → dotfiles/clawdbot/ のシンボリックリンク作成
+      ln -sfn "$DOTFILES_CLAWDBOT" "$CLAWDBOT_DIR"
+    '';
   };
 }
