@@ -68,19 +68,28 @@ if ! echo "$VALID_ACTIONS" | grep -qw "$ACTION"; then
     die_json "Invalid action: $ACTION. Must be one of: $VALID_ACTIONS" 1
 fi
 
-# Find state file
+# Find state file (Priority: --worktree > kickoff.json auto-detect > current dir)
 if [[ -n "$WORKTREE" ]]; then
-    # Validate worktree is a directory
+    # Explicit --worktree provided
     [[ -d "$WORKTREE" ]] || die_json "Worktree path does not exist: $WORKTREE" 1
-    # Prevent path traversal - resolve to absolute path
     WORKTREE=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
     STATE_FILE="$WORKTREE/.claude/iterate.json"
 else
     GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+
+    # First try iterate.json in current git root
     if [[ -n "$GIT_ROOT" && -f "$GIT_ROOT/.claude/iterate.json" ]]; then
         STATE_FILE="$GIT_ROOT/.claude/iterate.json"
+    # Then try to find worktree from kickoff.json
+    elif [[ -n "$GIT_ROOT" && -f "$GIT_ROOT/.claude/kickoff.json" ]]; then
+        DETECTED_WORKTREE=$(jq -r '.worktree // empty' "$GIT_ROOT/.claude/kickoff.json" 2>/dev/null || echo "")
+        if [[ -n "$DETECTED_WORKTREE" && -f "$DETECTED_WORKTREE/.claude/iterate.json" ]]; then
+            STATE_FILE="$DETECTED_WORKTREE/.claude/iterate.json"
+        else
+            die_json "State file not found. Use --worktree or initialize with init-iterate.sh" 1
+        fi
     else
-        die_json "State file not found" 1
+        die_json "State file not found. Use --worktree or initialize with init-iterate.sh" 1
     fi
 fi
 
