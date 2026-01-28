@@ -21,6 +21,7 @@ clawdbot/identity/
 clawdbot/memory/
 clawdbot/logs/
 clawdbot/devices/
+clawdbot/browser/
 clawdbot/agents/*/sessions/
 clawdbot/agents/*/agent/auth-profiles.json
 clawdbot/**/*.bak
