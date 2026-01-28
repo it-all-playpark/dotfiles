@@ -1,0 +1,4 @@
+{
+  "$schema": "https://molt.bot/schemas/cron-jobs.json",
+  "jobs": []
+}
