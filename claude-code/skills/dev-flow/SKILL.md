@@ -1,7 +1,8 @@
 ---
 name: dev-flow
 description: |
-  End-to-end development flow automation - from issue to merged PR.
+  End-to-end development flow automation - from issue to LGTM.
+  Note: Merge is performed manually by the user after review approval.
   Use when: (1) complete development cycle needed, (2) issue to PR automation,
   (3) keywords: full flow, development cycle, issue to PR
   Accepts args: <issue-number> [--strategy tdd|bdd|ddd] [--depth minimal|standard|comprehensive] [--base <branch>] [--max-iterations N]
@@ -12,7 +13,7 @@ allowed-tools:
 
 # Dev Flow
 
-End-to-end development automation from issue to merged PR.
+End-to-end development automation from issue to LGTM (merge manually).
 
 ## ⚠️ CRITICAL: Complete All Phases
 
@@ -22,7 +23,7 @@ End-to-end development automation from issue to merged PR.
 |------|--------|---------------|
 | 1 | `Skill: dev-kickoff` | PR URL available |
 | 2 | `gh pr view --json url` | URL captured |
-| 3 | `Skill: pr-iterate` | PR merged or max iterations |
+| 3 | `Skill: pr-iterate` | LGTM achieved or max iterations |
 
 ## Usage
 
@@ -45,9 +46,13 @@ Execute in order. Mark each complete before proceeding:
 | Condition | Action |
 |-----------|--------|
 | pr-iterate completes | ✅ Workflow complete |
-| PR merged | ✅ Workflow complete |
+| LGTM achieved | ✅ Workflow complete (merge manually) |
 | Max iterations reached | ⚠️ Report status, user decides |
 | Any step fails | ❌ Report error, do not proceed |
+
+## ⚠️ Important: No Auto-Merge
+
+**This workflow does NOT merge the PR.** After achieving LGTM, the user should manually merge using `gh pr merge` or the GitHub UI.
 
 ## State Recovery
 

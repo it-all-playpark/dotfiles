@@ -135,4 +135,4 @@ cat $WORKTREE/.claude/kickoff.json | jq '.pr'
 ### With GitHub CLI
 - `gh pr view` for PR status
 - `gh pr checks` for CI status
-- `gh pr merge` when ready
+- `gh pr merge` - User performs manually after LGTM (not automated by this workflow)
