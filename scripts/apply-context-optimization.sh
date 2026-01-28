@@ -35,8 +35,10 @@ UNUSED_SKILLS=(
 deleted=0
 skipped=0
 for skill in "${UNUSED_SKILLS[@]}"; do
-  if [ -d "${SKILLS_DIR}/${skill}" ]; then
-    rm -rf "${SKILLS_DIR}/${skill}"
+  target="${SKILLS_DIR}/${skill}"
+  # Check for directory, symlink (valid or broken)
+  if [ -d "$target" ] || [ -L "$target" ]; then
+    rm -rf "$target"
     echo "  Deleted: ${skill}"
     ((deleted++))
   else
