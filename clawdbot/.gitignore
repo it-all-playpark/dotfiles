@@ -1,0 +1,23 @@
+# Secrets
+.env
+credentials/
+identity/
+
+# Runtime generated
+memory/
+logs/
+devices/
+
+# Backups
+*.bak
+clawdbot.json.bak
+
+# Sessions
+agents/*/sessions/
+
+# State files
+update-check.json
+exec-approvals.json
+
+# Cron state
+cron/state.json
