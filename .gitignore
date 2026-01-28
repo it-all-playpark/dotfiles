@@ -1,4 +1,5 @@
 # Claude Code - sensitive and runtime data
+.claude/
 claude-code/.credentials.json
 claude-code/history.jsonl
 claude-code/cache/

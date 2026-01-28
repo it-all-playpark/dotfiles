@@ -23,6 +23,7 @@ SUMMARY=""
 FIXES=""
 COMPLETE_STATUS=""
 WORKTREE=""
+NO_SUMMARY=false
 
 # Valid enum values for validation
 VALID_ACTIONS="review ci fix next complete"
@@ -46,6 +47,7 @@ while [[ $# -gt 0 ]]; do
         --summary) SUMMARY="$2"; shift 2 ;;
         --applied) FIXES="$2"; shift 2 ;;
         --worktree) WORKTREE="$2"; shift 2 ;;
+        --no-summary) NO_SUMMARY=true; shift ;;
         review|ci|fix|next|complete)
             ACTION="$1"; shift
             ;;
@@ -200,6 +202,16 @@ TMP_FILE=$(mktemp)
 if jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$STATE_FILE" > "$TMP_FILE"; then
     mv "$TMP_FILE" "$STATE_FILE"
     echo "{\"status\":\"recorded\",\"action\":\"$ACTION\",\"iteration\":$CURRENT}"
+
+    # Post summary on LGTM completion (unless --no-summary specified)
+    if [[ "$ACTION" == "complete" && "$COMPLETE_STATUS" == "lgtm" && "$NO_SUMMARY" == false ]]; then
+        WORKTREE_ARG=""
+        if [[ -n "$WORKTREE" ]]; then
+            WORKTREE_ARG="--worktree $WORKTREE"
+        fi
+        # shellcheck disable=SC2086
+        "$SCRIPT_DIR/post-summary.sh" $WORKTREE_ARG 2>/dev/null || true
+    fi
 else
     rm -f "$TMP_FILE"
     die_json "Failed to update state" 1
