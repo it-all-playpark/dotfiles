@@ -81,7 +81,10 @@ require_git_repo() {
 
 require_gh_auth() {
     require_cmd "gh" "GitHub CLI (gh) not installed. Install: brew install gh"
-    gh auth status &>/dev/null 2>&1 || die_json "GitHub CLI not authenticated. Run: gh auth login" 129
+    # Use 'gh auth token' instead of 'gh auth status' to check authentication
+    # 'gh auth status' returns exit code 1 if ANY account is invalid, even if active account works
+    # 'gh auth token' only checks if active account has a valid token
+    gh auth token &>/dev/null || die_json "GitHub CLI not authenticated. Run: gh auth login" 129
 }
 
 require_cmds() {
