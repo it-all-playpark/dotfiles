@@ -18,7 +18,6 @@ STRATEGY="tdd"
 DEPTH="standard"
 LANG="ja"
 ENV_MODE="hardlink"
-SKIP_PR="false"
 
 # Valid enum values
 VALID_STRATEGIES="tdd bdd ddd none"
@@ -34,7 +33,6 @@ while [[ $# -gt 0 ]]; do
         --depth) DEPTH="$2"; shift 2 ;;
         --lang) LANG="$2"; shift 2 ;;
         --env-mode) ENV_MODE="$2"; shift 2 ;;
-        --skip-pr) SKIP_PR="true"; shift ;;
         -*)
             die_json "Unknown option: $1" 1
             ;;
@@ -98,7 +96,6 @@ jq -n \
     --arg depth "$DEPTH" \
     --arg lang "$LANG" \
     --arg env_mode "$ENV_MODE" \
-    --argjson skip_pr "$SKIP_PR" \
     '{
         version: "1.0",
         issue: $issue,
@@ -122,8 +119,7 @@ jq -n \
             strategy: $strategy,
             depth: $depth,
             lang: $lang,
-            env_mode: $env_mode,
-            skip_pr: $skip_pr
+            env_mode: $env_mode
         }
     }' > "$STATE_FILE"
 
