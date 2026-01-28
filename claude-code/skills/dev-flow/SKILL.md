@@ -12,14 +12,55 @@ allowed-tools:
 
 # Dev Flow
 
+End-to-end development automation from issue to merged PR.
+
+## ⚠️ CRITICAL: Complete All Phases
+
+**This workflow has 3 steps. DO NOT EXIT until pr-iterate completes.**
+
+| Step | Action | Complete When |
+|------|--------|---------------|
+| 1 | `Skill: dev-kickoff` | PR URL available |
+| 2 | `gh pr view --json url` | URL captured |
+| 3 | `Skill: pr-iterate` | PR merged or max iterations |
+
 ## Usage
 
 ```
-/dev-flow <issue> [--strategy tdd] [--depth comprehensive] [--base dev] [--max-iterations 10]
+/dev-flow <issue> [--strategy tdd] [--depth comprehensive] [--base main] [--max-iterations 10]
 ```
 
-## Workflow
+## Workflow Checklist
 
-1. Skill: `dev-kickoff $ISSUE --strategy $STRATEGY --depth $DEPTH --base $BASE`
-2. Get PR URL: `gh pr view --json url --jq .url`
-3. Skill: `pr-iterate $PR --max-iterations $MAX`
+Execute in order. Mark each complete before proceeding:
+
+```
+[ ] Step 1: Skill: dev-kickoff $ISSUE --strategy $STRATEGY --depth $DEPTH --base $BASE
+[ ] Step 2: PR_URL=$(gh pr view --json url --jq .url)
+[ ] Step 3: Skill: pr-iterate $PR_URL --max-iterations $MAX
+```
+
+## Completion Conditions
+
+| Condition | Action |
+|-----------|--------|
+| pr-iterate completes | ✅ Workflow complete |
+| PR merged | ✅ Workflow complete |
+| Max iterations reached | ⚠️ Report status, user decides |
+| Any step fails | ❌ Report error, do not proceed |
+
+## State Recovery
+
+After auto-compact, check worktree state:
+
+```bash
+~/.claude/skills/dev-flow/scripts/flow-status.sh --worktree $WORKTREE
+```
+
+Output tells you the next action.
+
+## References
+
+- [Workflow Details](references/workflow-detail.md) - Full phase descriptions
+- [dev-kickoff](../dev-kickoff/SKILL.md) - Orchestrator skill
+- [pr-iterate](../pr-iterate/SKILL.md) - PR iteration skill
