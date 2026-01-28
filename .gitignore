@@ -16,6 +16,7 @@ claude-code/skills/**/__pycache__/
 
 # Clawdbot - sensitive and runtime data
 clawdbot/.env
+clawdbot/skills
 clawdbot/credentials/
 clawdbot/identity/
 clawdbot/memory/
