@@ -19,6 +19,7 @@ clawdbot/.env
 clawdbot/skills
 clawdbot/credentials/
 clawdbot/identity/
+clawdbot/media/
 clawdbot/memory/
 clawdbot/logs/
 clawdbot/devices/
