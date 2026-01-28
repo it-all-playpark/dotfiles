@@ -171,11 +171,12 @@ in
         mv "$CLAWDBOT_DIR" "$BACKUP_DIR"
 
         # バックアップから credentials, identity, .env をコピー（存在する場合）
+        # -p オプションでパーミッションを保持（機密ファイル向け）
         if [ -d "$BACKUP_DIR/credentials" ]; then
-          cp -r "$BACKUP_DIR/credentials" "$DOTFILES_CLAWDBOT/credentials"
+          cp -rp "$BACKUP_DIR/credentials" "$DOTFILES_CLAWDBOT/credentials"
         fi
         if [ -d "$BACKUP_DIR/identity" ]; then
-          cp -r "$BACKUP_DIR/identity" "$DOTFILES_CLAWDBOT/identity"
+          cp -rp "$BACKUP_DIR/identity" "$DOTFILES_CLAWDBOT/identity"
         fi
         if [ -f "$BACKUP_DIR/.env" ]; then
           cp "$BACKUP_DIR/.env" "$DOTFILES_CLAWDBOT/.env"
