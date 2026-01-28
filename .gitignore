@@ -14,6 +14,19 @@ claude-code/.superclaude-metadata.json
 claude-code/skills/**/.env
 claude-code/skills/**/__pycache__/
 
+# Clawdbot - sensitive and runtime data
+clawdbot/.env
+clawdbot/credentials/
+clawdbot/identity/
+clawdbot/memory/
+clawdbot/logs/
+clawdbot/devices/
+clawdbot/agents/*/sessions/
+clawdbot/*.bak
+clawdbot/update-check.json
+clawdbot/exec-approvals.json
+clawdbot/cron/state.json
+
 # Nix
 result
 result-*
