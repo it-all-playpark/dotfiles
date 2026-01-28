@@ -187,7 +187,7 @@ main() {
         local skills_subpath="${config##*:}"
 
         if setup_symlink "${config_dir}" "${skills_subpath}"; then
-            ((success_count++))
+            ((success_count++)) || true
         fi
         echo ""
     done
