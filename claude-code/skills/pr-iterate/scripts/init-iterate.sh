@@ -33,6 +33,11 @@ done
 
 [[ -n "$PR_INPUT" ]] || die_json "PR number or URL required" 1
 
+# Validate MAX_ITERATIONS is numeric
+if ! [[ "$MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
+    die_json "Max iterations must be a positive integer" 1
+fi
+
 # Extract PR number from URL if needed
 if [[ "$PR_INPUT" =~ ^https?:// ]]; then
     PR_NUMBER=$(echo "$PR_INPUT" | grep -oE '[0-9]+$')
@@ -40,6 +45,11 @@ if [[ "$PR_INPUT" =~ ^https?:// ]]; then
 else
     PR_NUMBER="$PR_INPUT"
     PR_URL=""
+fi
+
+# Validate PR_NUMBER is numeric
+if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+    die_json "PR number must be a positive integer" 1
 fi
 
 # Get PR info from GitHub
@@ -53,6 +63,10 @@ BASE_BRANCH=$(echo "$PR_INFO" | jq -r '.baseRefName')
 
 # Determine state file location
 if [[ -n "$WORKTREE" ]]; then
+    # Validate worktree is a directory
+    [[ -d "$WORKTREE" ]] || die_json "Worktree path does not exist: $WORKTREE" 1
+    # Prevent path traversal - resolve to absolute path
+    WORKTREE=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
     STATE_DIR="$WORKTREE/.claude"
 else
     GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
@@ -64,29 +78,34 @@ mkdir -p "$STATE_DIR"
 STATE_FILE="$STATE_DIR/iterate.json"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Create initial state
-cat > "$STATE_FILE" <<EOF
-{
-  "version": "1.0",
-  "pr_number": $PR_NUMBER,
-  "pr_url": "$PR_URL",
-  "branch": "$BRANCH",
-  "base_branch": "$BASE_BRANCH",
-  "started_at": "$NOW",
-  "updated_at": "$NOW",
-  "current_iteration": 1,
-  "max_iterations": $MAX_ITERATIONS,
-  "status": "in_progress",
-  "iterations": [
-    {
-      "number": 1,
-      "started_at": "$NOW",
-      "review": { "decision": "pending" },
-      "ci_status": "pending"
-    }
-  ],
-  "next_actions": ["Run pr-review"]
-}
-EOF
+# Create initial state using jq to prevent JSON injection
+jq -n \
+    --argjson pr_number "$PR_NUMBER" \
+    --arg pr_url "$PR_URL" \
+    --arg branch "$BRANCH" \
+    --arg base_branch "$BASE_BRANCH" \
+    --arg now "$NOW" \
+    --argjson max_iterations "$MAX_ITERATIONS" \
+    '{
+        version: "1.0",
+        pr_number: $pr_number,
+        pr_url: $pr_url,
+        branch: $branch,
+        base_branch: $base_branch,
+        started_at: $now,
+        updated_at: $now,
+        current_iteration: 1,
+        max_iterations: $max_iterations,
+        status: "in_progress",
+        iterations: [
+            {
+                number: 1,
+                started_at: $now,
+                review: { decision: "pending" },
+                ci_status: "pending"
+            }
+        ],
+        next_actions: ["Run pr-review"]
+    }' > "$STATE_FILE"
 
 echo "{\"status\":\"initialized\",\"state_file\":\"$STATE_FILE\",\"pr_number\":$PR_NUMBER}"

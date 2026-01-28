@@ -16,6 +16,10 @@ ERROR=""
 WORKTREE=""
 NEXT_ACTIONS=""
 
+# Valid phases and statuses for validation
+VALID_PHASES="1_prepare 2_analyze 3_implement 4_validate 5_commit 6_pr"
+VALID_STATUSES="pending in_progress done failed skipped"
+
 # Parse args
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -40,8 +44,22 @@ done
 [[ -n "$PHASE" ]] || die_json "Phase required (1_prepare|2_analyze|3_implement|4_validate|5_commit|6_pr)" 1
 [[ -n "$STATUS" ]] || die_json "Status required (pending|in_progress|done|failed|skipped)" 1
 
+# Validate PHASE enum
+if ! echo "$VALID_PHASES" | grep -qw "$PHASE"; then
+    die_json "Invalid phase: $PHASE. Must be one of: $VALID_PHASES" 1
+fi
+
+# Validate STATUS enum
+if ! echo "$VALID_STATUSES" | grep -qw "$STATUS"; then
+    die_json "Invalid status: $STATUS. Must be one of: $VALID_STATUSES" 1
+fi
+
 # Find state file
 if [[ -n "$WORKTREE" ]]; then
+    # Validate worktree is a directory and within a git repo
+    [[ -d "$WORKTREE" ]] || die_json "Worktree path does not exist: $WORKTREE" 1
+    # Prevent path traversal - resolve to absolute path
+    WORKTREE=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
     STATE_FILE="$WORKTREE/.claude/kickoff.json"
 else
     # Try to find in current git root
@@ -57,46 +75,51 @@ fi
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Build jq update expression
-JQ_UPDATE=".updated_at = \"$NOW\" | .phases.\"$PHASE\".status = \"$STATUS\""
+# Build jq update using --arg to prevent injection
+# Base update: set updated_at and phase status
+JQ_ARGS=(--arg now "$NOW" --arg phase "$PHASE" --arg status "$STATUS")
+JQ_FILTER='.updated_at = $now | .phases[$phase].status = $status'
 
 case "$STATUS" in
     in_progress)
-        JQ_UPDATE="$JQ_UPDATE | .phases.\"$PHASE\".started_at = \"$NOW\" | .current_phase = \"$PHASE\""
+        JQ_FILTER="$JQ_FILTER | .phases[\$phase].started_at = \$now | .current_phase = \$phase"
         ;;
     done)
-        JQ_UPDATE="$JQ_UPDATE | .phases.\"$PHASE\".completed_at = \"$NOW\""
+        JQ_FILTER="$JQ_FILTER | .phases[\$phase].completed_at = \$now"
         # Advance current_phase to next
         case "$PHASE" in
-            1_prepare) JQ_UPDATE="$JQ_UPDATE | .current_phase = \"2_analyze\"" ;;
-            2_analyze) JQ_UPDATE="$JQ_UPDATE | .current_phase = \"3_implement\"" ;;
-            3_implement) JQ_UPDATE="$JQ_UPDATE | .current_phase = \"4_validate\"" ;;
-            4_validate) JQ_UPDATE="$JQ_UPDATE | .current_phase = \"5_commit\"" ;;
-            5_commit) JQ_UPDATE="$JQ_UPDATE | .current_phase = \"6_pr\"" ;;
-            6_pr) JQ_UPDATE="$JQ_UPDATE | .current_phase = \"completed\"" ;;
+            1_prepare) JQ_ARGS+=(--arg next "2_analyze"); JQ_FILTER="$JQ_FILTER | .current_phase = \$next" ;;
+            2_analyze) JQ_ARGS+=(--arg next "3_implement"); JQ_FILTER="$JQ_FILTER | .current_phase = \$next" ;;
+            3_implement) JQ_ARGS+=(--arg next "4_validate"); JQ_FILTER="$JQ_FILTER | .current_phase = \$next" ;;
+            4_validate) JQ_ARGS+=(--arg next "5_commit"); JQ_FILTER="$JQ_FILTER | .current_phase = \$next" ;;
+            5_commit) JQ_ARGS+=(--arg next "6_pr"); JQ_FILTER="$JQ_FILTER | .current_phase = \$next" ;;
+            6_pr) JQ_ARGS+=(--arg next "completed"); JQ_FILTER="$JQ_FILTER | .current_phase = \$next" ;;
         esac
         ;;
     failed)
-        JQ_UPDATE="$JQ_UPDATE | .phases.\"$PHASE\".completed_at = \"$NOW\""
+        JQ_FILTER="$JQ_FILTER | .phases[\$phase].completed_at = \$now"
         ;;
 esac
 
 if [[ -n "$RESULT" ]]; then
-    JQ_UPDATE="$JQ_UPDATE | .phases.\"$PHASE\".result = $(json_str "$RESULT")"
+    JQ_ARGS+=(--arg result "$RESULT")
+    JQ_FILTER="$JQ_FILTER | .phases[\$phase].result = \$result"
 fi
 
 if [[ -n "$ERROR" ]]; then
-    JQ_UPDATE="$JQ_UPDATE | .phases.\"$PHASE\".error = $(json_str "$ERROR")"
+    JQ_ARGS+=(--arg error "$ERROR")
+    JQ_FILTER="$JQ_FILTER | .phases[\$phase].error = \$error"
 fi
 
 if [[ -n "$NEXT_ACTIONS" ]]; then
-    # Parse comma-separated actions into array
-    JQ_UPDATE="$JQ_UPDATE | .next_actions = $(echo "$NEXT_ACTIONS" | tr ',' '\n' | jq -R . | jq -s .)"
+    # Parse comma-separated actions into array safely
+    JQ_ARGS+=(--arg actions "$NEXT_ACTIONS")
+    JQ_FILTER="$JQ_FILTER | .next_actions = (\$actions | split(\",\") | map(. | gsub(\"^\\\\s+|\\\\s+$\"; \"\")))"
 fi
 
 # Apply update
 TMP_FILE=$(mktemp)
-if jq "$JQ_UPDATE" "$STATE_FILE" > "$TMP_FILE"; then
+if jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$STATE_FILE" > "$TMP_FILE"; then
     mv "$TMP_FILE" "$STATE_FILE"
     echo "{\"status\":\"updated\",\"phase\":\"$PHASE\",\"new_status\":\"$STATUS\"}"
 else

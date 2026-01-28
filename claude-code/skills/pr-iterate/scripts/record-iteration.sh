@@ -24,6 +24,12 @@ FIXES=""
 COMPLETE_STATUS=""
 WORKTREE=""
 
+# Valid enum values for validation
+VALID_ACTIONS="review ci fix next complete"
+VALID_DECISIONS="approved request-changes comment pending"
+VALID_CI_STATUSES="passed failed pending"
+VALID_COMPLETE_STATUSES="lgtm failed max_reached"
+
 # Parse args
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -57,8 +63,17 @@ done
 
 [[ -n "$ACTION" ]] || die_json "Action required (review|ci|fix|next|complete)" 1
 
+# Validate ACTION enum
+if ! echo "$VALID_ACTIONS" | grep -qw "$ACTION"; then
+    die_json "Invalid action: $ACTION. Must be one of: $VALID_ACTIONS" 1
+fi
+
 # Find state file
 if [[ -n "$WORKTREE" ]]; then
+    # Validate worktree is a directory
+    [[ -d "$WORKTREE" ]] || die_json "Worktree path does not exist: $WORKTREE" 1
+    # Prevent path traversal - resolve to absolute path
+    WORKTREE=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
     STATE_FILE="$WORKTREE/.claude/iterate.json"
 else
     GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
@@ -74,71 +89,96 @@ fi
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 CURRENT=$(jq -r '.current_iteration' "$STATE_FILE")
 
+# Base jq args
+JQ_ARGS=(--arg now "$NOW" --argjson current "$CURRENT")
+JQ_FILTER=""
+
 case "$ACTION" in
     review)
         [[ -n "$DECISION" ]] || die_json "Decision required for review action" 1
+        
+        # Validate DECISION enum
+        if ! echo "$VALID_DECISIONS" | grep -qw "$DECISION"; then
+            die_json "Invalid decision: $DECISION. Must be one of: $VALID_DECISIONS" 1
+        fi
 
-        JQ_UPDATE=".updated_at = \"$NOW\" |
-            .iterations[$CURRENT - 1].review.decision = \"$DECISION\""
+        JQ_ARGS+=(--arg decision "$DECISION")
+        JQ_FILTER='.updated_at = $now | .iterations[$current - 1].review.decision = $decision'
 
         if [[ -n "$ISSUES" ]]; then
-            ISSUES_JSON=$(echo "$ISSUES" | tr ',' '\n' | jq -R . | jq -s .)
-            JQ_UPDATE="$JQ_UPDATE | .iterations[$CURRENT - 1].review.issues = $ISSUES_JSON"
+            JQ_ARGS+=(--arg issues "$ISSUES")
+            JQ_FILTER="$JQ_FILTER | .iterations[\$current - 1].review.issues = (\$issues | split(\",\") | map(. | gsub(\"^\\\\s+|\\\\s+\$\"; \"\")))"
         fi
 
         if [[ -n "$SUMMARY" ]]; then
-            JQ_UPDATE="$JQ_UPDATE | .iterations[$CURRENT - 1].review.summary = $(json_str "$SUMMARY")"
+            JQ_ARGS+=(--arg summary "$SUMMARY")
+            JQ_FILTER="$JQ_FILTER | .iterations[\$current - 1].review.summary = \$summary"
         fi
 
         # Update next_actions based on decision
         if [[ "$DECISION" == "approved" ]]; then
-            JQ_UPDATE="$JQ_UPDATE | .next_actions = [\"LGTM! Consider completing.\"] | .status = \"lgtm\""
+            JQ_FILTER="$JQ_FILTER | .next_actions = [\"LGTM! Consider completing.\"] | .status = \"lgtm\""
         else
-            JQ_UPDATE="$JQ_UPDATE | .next_actions = [\"Run pr-fix to address issues\"]"
+            JQ_FILTER="$JQ_FILTER | .next_actions = [\"Run pr-fix to address issues\"]"
         fi
         ;;
 
     ci)
         [[ -n "$CI_STATUS" ]] || die_json "Status required for ci action" 1
-        JQ_UPDATE=".updated_at = \"$NOW\" |
-            .iterations[$CURRENT - 1].ci_status = \"$CI_STATUS\""
+        
+        # Validate CI_STATUS enum
+        if ! echo "$VALID_CI_STATUSES" | grep -qw "$CI_STATUS"; then
+            die_json "Invalid CI status: $CI_STATUS. Must be one of: $VALID_CI_STATUSES" 1
+        fi
+
+        JQ_ARGS+=(--arg ci_status "$CI_STATUS")
+        JQ_FILTER='.updated_at = $now | .iterations[$current - 1].ci_status = $ci_status'
 
         if [[ "$CI_STATUS" == "failed" ]]; then
-            JQ_UPDATE="$JQ_UPDATE | .next_actions = [\"Fix CI failures\"]"
+            JQ_FILTER="$JQ_FILTER | .next_actions = [\"Fix CI failures\"]"
         fi
         ;;
 
     fix)
         [[ -n "$FIXES" ]] || die_json "Applied fixes required for fix action" 1
-        FIXES_JSON=$(echo "$FIXES" | tr ',' '\n' | jq -R . | jq -s .)
-        JQ_UPDATE=".updated_at = \"$NOW\" |
-            .iterations[$CURRENT - 1].fixes_applied = (.iterations[$CURRENT - 1].fixes_applied // []) + $FIXES_JSON |
-            .next_actions = [\"Run pr-review to check fixes\"]"
+        JQ_ARGS+=(--arg fixes "$FIXES")
+        JQ_FILTER='.updated_at = $now |
+            .iterations[$current - 1].fixes_applied = (.iterations[$current - 1].fixes_applied // []) + ($fixes | split(",") | map(. | gsub("^\\s+|\\s+$"; ""))) |
+            .next_actions = ["Run pr-review to check fixes"]'
         ;;
 
     next)
         NEXT=$((CURRENT + 1))
         MAX=$(jq -r '.max_iterations' "$STATE_FILE")
 
+        JQ_ARGS+=(--argjson next "$NEXT" --argjson max "$MAX")
+
         if [[ $NEXT -gt $MAX ]]; then
-            JQ_UPDATE=".updated_at = \"$NOW\" |
-                .status = \"max_reached\" |
-                .next_actions = [\"Maximum iterations reached. Manual intervention required.\"]"
+            JQ_FILTER='.updated_at = $now |
+                .status = "max_reached" |
+                .next_actions = ["Maximum iterations reached. Manual intervention required."]'
         else
-            JQ_UPDATE=".updated_at = \"$NOW\" |
-                .current_iteration = $NEXT |
-                .iterations[$CURRENT - 1].completed_at = \"$NOW\" |
-                .iterations += [{\"number\": $NEXT, \"started_at\": \"$NOW\", \"review\": {\"decision\": \"pending\"}, \"ci_status\": \"pending\"}] |
-                .next_actions = [\"Run pr-review\"]"
+            JQ_FILTER='.updated_at = $now |
+                .current_iteration = $next |
+                .iterations[$current - 1].completed_at = $now |
+                .iterations += [{"number": $next, "started_at": $now, "review": {"decision": "pending"}, "ci_status": "pending"}] |
+                .next_actions = ["Run pr-review"]'
         fi
         ;;
 
     complete)
         [[ -n "$COMPLETE_STATUS" ]] || die_json "Status required for complete action" 1
-        JQ_UPDATE=".updated_at = \"$NOW\" |
-            .status = \"$COMPLETE_STATUS\" |
-            .iterations[$CURRENT - 1].completed_at = \"$NOW\" |
-            .next_actions = []"
+        
+        # Validate COMPLETE_STATUS enum
+        if ! echo "$VALID_COMPLETE_STATUSES" | grep -qw "$COMPLETE_STATUS"; then
+            die_json "Invalid complete status: $COMPLETE_STATUS. Must be one of: $VALID_COMPLETE_STATUSES" 1
+        fi
+
+        JQ_ARGS+=(--arg complete_status "$COMPLETE_STATUS")
+        JQ_FILTER='.updated_at = $now |
+            .status = $complete_status |
+            .iterations[$current - 1].completed_at = $now |
+            .next_actions = []'
         ;;
 
     *)
@@ -148,7 +188,7 @@ esac
 
 # Apply update
 TMP_FILE=$(mktemp)
-if jq "$JQ_UPDATE" "$STATE_FILE" > "$TMP_FILE"; then
+if jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$STATE_FILE" > "$TMP_FILE"; then
     mv "$TMP_FILE" "$STATE_FILE"
     echo "{\"status\":\"recorded\",\"action\":\"$ACTION\",\"iteration\":$CURRENT}"
 else

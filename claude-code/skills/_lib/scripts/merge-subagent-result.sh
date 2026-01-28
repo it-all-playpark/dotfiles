@@ -15,6 +15,9 @@ WORKTREE=""
 SUBAGENT_TYPE=""
 SUBAGENT_ID=""
 
+# Valid phases for validation
+VALID_PHASES="1_prepare 2_analyze 3_implement 4_validate 5_commit 6_pr"
+
 # Parse args
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -37,8 +40,17 @@ done
 [[ -n "$PHASE" ]] || die_json "Phase required" 1
 [[ -n "$RESULT" ]] || die_json "Result required (--result)" 1
 
+# Validate PHASE enum
+if ! echo "$VALID_PHASES" | grep -qw "$PHASE"; then
+    die_json "Invalid phase: $PHASE. Must be one of: $VALID_PHASES" 1
+fi
+
 # Find state file
 if [[ -n "$WORKTREE" ]]; then
+    # Validate worktree is a directory
+    [[ -d "$WORKTREE" ]] || die_json "Worktree path does not exist: $WORKTREE" 1
+    # Prevent path traversal - resolve to absolute path
+    WORKTREE=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
     STATE_FILE="$WORKTREE/.claude/kickoff.json"
 else
     GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
@@ -52,24 +64,30 @@ fi
 [[ -f "$STATE_FILE" ]] || die_json "State file not found: $STATE_FILE" 1
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+TIMESTAMP_KEY=$(date +%s)
 
-# Build subagent result object
-SUBAGENT_OBJ="{\"timestamp\":\"$NOW\",\"result\":$(json_str "$RESULT")}"
+# Build jq args and filter using --arg to prevent injection
+JQ_ARGS=(--arg now "$NOW" --arg phase "$PHASE" --arg result "$RESULT" --arg ts_key "$TIMESTAMP_KEY")
+JQ_FILTER='.updated_at = $now | .phases[$phase].subagent_results = (.phases[$phase].subagent_results // {}) + {($ts_key): {timestamp: $now, result: $result}}'
 
 if [[ -n "$SUBAGENT_TYPE" ]]; then
-    SUBAGENT_OBJ=$(echo "$SUBAGENT_OBJ" | jq --arg t "$SUBAGENT_TYPE" '. + {type: $t}')
+    JQ_ARGS+=(--arg subagent_type "$SUBAGENT_TYPE")
+    JQ_FILTER='.updated_at = $now | .phases[$phase].subagent_results = (.phases[$phase].subagent_results // {}) + {($ts_key): {timestamp: $now, result: $result, type: $subagent_type}}'
 fi
 
 if [[ -n "$SUBAGENT_ID" ]]; then
-    SUBAGENT_OBJ=$(echo "$SUBAGENT_OBJ" | jq --arg id "$SUBAGENT_ID" '. + {id: $id}')
+    JQ_ARGS+=(--arg subagent_id "$SUBAGENT_ID")
+    # Rebuild filter with id included
+    if [[ -n "$SUBAGENT_TYPE" ]]; then
+        JQ_FILTER='.updated_at = $now | .phases[$phase].subagent_results = (.phases[$phase].subagent_results // {}) + {($ts_key): {timestamp: $now, result: $result, type: $subagent_type, id: $subagent_id}}'
+    else
+        JQ_FILTER='.updated_at = $now | .phases[$phase].subagent_results = (.phases[$phase].subagent_results // {}) + {($ts_key): {timestamp: $now, result: $result, id: $subagent_id}}'
+    fi
 fi
 
 # Update state
 TMP_FILE=$(mktemp)
-if jq --argjson sub "$SUBAGENT_OBJ" \
-    ".updated_at = \"$NOW\" |
-     .phases.\"$PHASE\".subagent_results = (.phases.\"$PHASE\".subagent_results // {}) + {\"$(date +%s)\": \$sub}" \
-    "$STATE_FILE" > "$TMP_FILE"; then
+if jq "${JQ_ARGS[@]}" "$JQ_FILTER" "$STATE_FILE" > "$TMP_FILE"; then
     mv "$TMP_FILE" "$STATE_FILE"
     echo "{\"status\":\"merged\",\"phase\":\"$PHASE\",\"timestamp\":\"$NOW\"}"
 else
