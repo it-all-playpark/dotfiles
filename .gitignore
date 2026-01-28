@@ -21,11 +21,18 @@ clawdbot/identity/
 clawdbot/memory/
 clawdbot/logs/
 clawdbot/devices/
+clawdbot/browser/
 clawdbot/agents/*/sessions/
-clawdbot/*.bak
+clawdbot/agents/*/agent/auth-profiles.json
+clawdbot/**/*.bak
 clawdbot/update-check.json
 clawdbot/exec-approvals.json
 clawdbot/cron/state.json
+
+# Sensitive authentication files (global)
+**/auth-profiles.json
+**/*.credentials.json
+**/oauth-tokens.json
 
 # Nix
 result
