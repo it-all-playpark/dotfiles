@@ -15,6 +15,8 @@ RESULT=""
 ERROR=""
 WORKTREE=""
 NEXT_ACTIONS=""
+PR_URL=""
+PR_NUMBER=""
 
 # Valid phases and statuses for validation
 VALID_PHASES="1_prepare 2_analyze 3_implement 4_validate 5_commit 6_pr"
@@ -27,6 +29,8 @@ while [[ $# -gt 0 ]]; do
         --error) ERROR="$2"; shift 2 ;;
         --worktree) WORKTREE="$2"; shift 2 ;;
         --next) NEXT_ACTIONS="$2"; shift 2 ;;
+        --pr-url) PR_URL="$2"; shift 2 ;;
+        --pr-number) PR_NUMBER="$2"; shift 2 ;;
         -*)
             die_json "Unknown option: $1" 1
             ;;
@@ -115,6 +119,31 @@ if [[ -n "$NEXT_ACTIONS" ]]; then
     # Parse comma-separated actions into array safely
     JQ_ARGS+=(--arg actions "$NEXT_ACTIONS")
     JQ_FILTER="$JQ_FILTER | .next_actions = (\$actions | split(\",\") | map(. | gsub(\"^\\\\s+|\\\\s+$\"; \"\")))"
+fi
+
+# Handle PR info (for phase 6_pr completion)
+if [[ -n "$PR_URL" || -n "$PR_NUMBER" ]]; then
+    # Validate PR_NUMBER is numeric if provided
+    if [[ -n "$PR_NUMBER" ]] && ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+        die_json "PR number must be a positive integer" 1
+    fi
+
+    JQ_FILTER="$JQ_FILTER | .pr = (.pr // {})"
+
+    if [[ -n "$PR_NUMBER" ]]; then
+        JQ_ARGS+=(--argjson pr_number "$PR_NUMBER")
+        JQ_FILTER="$JQ_FILTER | .pr.number = \$pr_number"
+    fi
+
+    if [[ -n "$PR_URL" ]]; then
+        JQ_ARGS+=(--arg pr_url "$PR_URL")
+        JQ_FILTER="$JQ_FILTER | .pr.url = \$pr_url"
+    fi
+
+    JQ_FILTER="$JQ_FILTER | .pr.created_at = \$now"
+
+    # Set next_action for pr-iterate handoff
+    JQ_FILTER="$JQ_FILTER | .next_action = \"pr-iterate\""
 fi
 
 # Apply update

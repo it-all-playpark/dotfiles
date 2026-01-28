@@ -24,11 +24,22 @@ allowed-tools:
 
 ## State Persistence
 
-State is persisted in `.claude/iterate.json` for recovery after auto-compact.
+State is persisted in `$WORKTREE/.claude/iterate.json` for recovery after auto-compact.
+
+### Worktree Auto-Detection
+
+The scripts automatically detect the worktree path using this priority:
+1. `--worktree` explicit argument
+2. `kickoff.json` auto-detect (reads `worktree` field from `.claude/kickoff.json`)
+3. Current git root (fallback)
 
 ### Initialize State
 
 ```bash
+# Explicit worktree
+~/.claude/skills/pr-iterate/scripts/init-iterate.sh $PR [--max-iterations N] --worktree $PATH
+
+# Auto-detect from kickoff.json (when running from worktree or main repo with kickoff.json)
 ~/.claude/skills/pr-iterate/scripts/init-iterate.sh $PR [--max-iterations N]
 ```
 
@@ -80,11 +91,25 @@ State is persisted in `.claude/iterate.json` for recovery after auto-compact.
 ## State File Location
 
 ```
-$REPO/
+$WORKTREE/
 ├── .claude/
-│   └── iterate.json    # Machine-readable state
+│   ├── kickoff.json    # From dev-kickoff (contains worktree path, PR info)
+│   └── iterate.json    # pr-iterate state
 └── docs/
     └── STATE.md        # Human-readable summary (auto-generated)
+```
+
+## iterate.json Schema
+
+```json
+{
+  "pr_number": 456,
+  "pr_url": "https://github.com/org/repo/pull/456",
+  "worktree_path": "/path/to/worktree",
+  "current_iteration": 1,
+  "max_iterations": 10,
+  "status": "in_progress"
+}
 ```
 
 ## Error Handling

@@ -37,6 +37,15 @@ After completing a phase:
 ~/.claude/skills/dev-kickoff/scripts/update-phase.sh <phase> done --result "Summary" --worktree $PATH
 ```
 
+After PR creation (phase 6_pr), record PR info for pr-iterate handoff:
+```bash
+~/.claude/skills/dev-kickoff/scripts/update-phase.sh 6_pr done \
+  --result "PR created" \
+  --pr-number 123 \
+  --pr-url "https://github.com/org/repo/pull/123" \
+  --worktree $PATH
+```
+
 On failure:
 ```bash
 ~/.claude/skills/dev-kickoff/scripts/update-phase.sh <phase> failed --error "Error message" --worktree $PATH
@@ -51,8 +60,10 @@ On failure:
 ## Workflow
 
 ```
-git-prepare.sh → init-kickoff.sh → dev-issue-analyze → dev-implement → dev-validate → git-commit → git-pr
+git-prepare.sh → init-kickoff.sh → dev-issue-analyze → dev-implement → dev-validate → git-commit → git-pr → pr-iterate
 ```
+
+After PR creation, kickoff.json is updated with PR info and `next_action: "pr-iterate"`. The pr-iterate skill automatically detects the worktree from kickoff.json.
 
 ## Phase Execution
 
@@ -118,7 +129,23 @@ ls $WORKTREE_PATH/.env || echo "ERROR: .env not linked - script was not used"
 ```
 $WORKTREE/
 ├── .claude/
-│   └── kickoff.json    # Machine-readable state
+│   ├── kickoff.json    # Machine-readable state
+│   └── iterate.json    # pr-iterate state (created after PR)
 └── docs/
     └── STATE.md        # Human-readable summary (optional)
+```
+
+## kickoff.json Schema (with PR info)
+
+```json
+{
+  "issue": 123,
+  "worktree": "/path/to/worktree",
+  "pr": {
+    "number": 456,
+    "url": "https://github.com/org/repo/pull/456",
+    "created_at": "2026-01-28T10:00:00Z"
+  },
+  "next_action": "pr-iterate"
+}
 ```

@@ -61,18 +61,31 @@ BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName')
 BASE_BRANCH=$(echo "$PR_INFO" | jq -r '.baseRefName')
 [[ -z "$PR_URL" ]] && PR_URL=$(echo "$PR_INFO" | jq -r '.url')
 
-# Determine state file location
+# Determine state file location (Priority: --worktree > kickoff.json auto-detect > current dir)
+WORKTREE_PATH=""
 if [[ -n "$WORKTREE" ]]; then
-    # Validate worktree is a directory
+    # Explicit --worktree provided
     [[ -d "$WORKTREE" ]] || die_json "Worktree path does not exist: $WORKTREE" 1
-    # Prevent path traversal - resolve to absolute path
-    WORKTREE=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
-    STATE_DIR="$WORKTREE/.claude"
+    WORKTREE_PATH=$(cd "$WORKTREE" && pwd) || die_json "Cannot resolve worktree path" 1
 else
+    # Try to auto-detect from kickoff.json
     GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
-    [[ -n "$GIT_ROOT" ]] || die_json "Not in a git repository" 1
-    STATE_DIR="$GIT_ROOT/.claude"
+    if [[ -n "$GIT_ROOT" && -f "$GIT_ROOT/.claude/kickoff.json" ]]; then
+        # Extract worktree path from kickoff.json
+        DETECTED_WORKTREE=$(jq -r '.worktree // empty' "$GIT_ROOT/.claude/kickoff.json" 2>/dev/null || echo "")
+        if [[ -n "$DETECTED_WORKTREE" && -d "$DETECTED_WORKTREE" ]]; then
+            WORKTREE_PATH="$DETECTED_WORKTREE"
+        fi
+    fi
+
+    # Fallback to current git root
+    if [[ -z "$WORKTREE_PATH" ]]; then
+        [[ -n "$GIT_ROOT" ]] || die_json "Not in a git repository and no worktree specified" 1
+        WORKTREE_PATH="$GIT_ROOT"
+    fi
 fi
+
+STATE_DIR="$WORKTREE_PATH/.claude"
 
 mkdir -p "$STATE_DIR"
 STATE_FILE="$STATE_DIR/iterate.json"
@@ -84,6 +97,7 @@ jq -n \
     --arg pr_url "$PR_URL" \
     --arg branch "$BRANCH" \
     --arg base_branch "$BASE_BRANCH" \
+    --arg worktree_path "$WORKTREE_PATH" \
     --arg now "$NOW" \
     --argjson max_iterations "$MAX_ITERATIONS" \
     '{
@@ -92,6 +106,7 @@ jq -n \
         pr_url: $pr_url,
         branch: $branch,
         base_branch: $base_branch,
+        worktree_path: $worktree_path,
         started_at: $now,
         updated_at: $now,
         current_iteration: 1,
