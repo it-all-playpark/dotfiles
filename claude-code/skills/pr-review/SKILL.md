@@ -40,16 +40,23 @@ Using [review-sections.md](references/review-sections.md) checklist, determine:
 
 ### Step 3: Submit Directly
 
-Submit using heredoc (extract PR number from context above):
+**Important**: Use a single Bash call with fallback to prevent duplicate submissions.
+
 ```bash
+# Single command with fallback (DO NOT run separate commands)
 gh pr review <pr-number> --approve --body "$(cat <<'EOF'
+<review-content>
+EOF
+)" 2>&1 || gh pr review <pr-number> --comment --body "$(cat <<'EOF'
 <review-content>
 EOF
 )"
 ```
 
+⚠️ **Do NOT execute additional review commands after the fallback succeeds.**
+
 Options:
-- `--approve` for LGTM (falls back to `--comment` for own PRs)
+- `--approve` for LGTM (auto-falls back to `--comment` for own PRs)
 - `--request-changes` for issues found
 
 Report PR URL when complete.
