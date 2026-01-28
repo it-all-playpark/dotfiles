@@ -12,6 +12,10 @@ allowed-tools:
 
 # PR Iterate
 
+## ⚠️ Important: No Auto-Merge
+
+**This skill does NOT merge the PR.** After achieving LGTM, the user should manually merge using `gh pr merge` or the GitHub UI.
+
 ## Usage
 
 ```
