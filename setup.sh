@@ -38,3 +38,11 @@ fi
 
 # 引数をnix runコマンドに渡す
 nix run .#update "$1"
+
+# Agent Skillsのセットアップ
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/scripts/setup-skills.sh" ]; then
+  echo ""
+  echo "Agent Skillsをセットアップしています..."
+  "${SCRIPT_DIR}/scripts/setup-skills.sh"
+fi

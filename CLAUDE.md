@@ -60,6 +60,8 @@ After making configuration changes, always run the update command to apply them.
 
 4. **Recent Changes**: The tmux configuration has been modified to use tnrs keys instead of hjkl for navigation.
 
+5. **Agent Skills**: Skills have been moved to a separate repository ([it-all-playpark/skills](https://github.com/it-all-playpark/skills)). The `scripts/setup-skills.sh` script creates symlinks for Claude Code, Clawdbot, Codex, and Antigravity.
+
 ## Key Configuration Files
 
 When modifying configurations:

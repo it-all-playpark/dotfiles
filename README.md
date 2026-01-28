@@ -38,6 +38,8 @@ dotconfig/
 │   ├── default.nix   # home-manager全体の設定
 │   ├── home/         # ユーザー固有のdotfiles設定（nvim, tmux, gitなど）
 │   └── programs/     # 各プログラム（fish, zsh, git, neovimなど）の設定
+├── scripts/
+│   └── setup-skills.sh  # Agent Skills セットアップスクリプト
 └── setup.sh          # 環境セットアップ用スクリプト（Nixインストール＆更新）
 ```
 
@@ -70,6 +72,7 @@ dotconfig/
 
 - Nixが未インストールの場合、自動でインストール
 - `nix run .#update` コマンドでFlake定義に基づく最新の環境（nix-darwinおよびhome-manager）の適用
+- Agent Skills（AIエージェントツール用スキル）のセットアップ
 
 3. **環境の更新**
 
@@ -80,6 +83,35 @@ nix run .#update
 ```
 
 flake.nix内のアップデートスクリプトが、home-managerとnix-darwinの両方の設定を切り替えます。
+
+## Agent Skills
+
+本リポジトリは [Agent Skills](https://agentskills.io) をサポートしており、複数のAIエージェントツール間でスキルを共有できます。
+
+### サポートされるエージェント
+
+| ツール | Symlink パス |
+|--------|-------------|
+| Claude Code | `~/.claude/skills` |
+| Clawdbot | `~/.clawdbot/skills` |
+| Codex | `~/.codex/skills` |
+| Antigravity | `~/.gemini/antigravity/skills` |
+
+### セットアップ
+
+`setup.sh` 実行時に自動でセットアップされます。手動でセットアップする場合：
+
+```bash
+./scripts/setup-skills.sh
+```
+
+カスタムパスを指定する場合：
+
+```bash
+./scripts/setup-skills.sh --skills-repo /path/to/your/skills
+```
+
+Skills の詳細は [it-all-playpark/skills](https://github.com/it-all-playpark/skills) を参照してください。
 
 ## 注意事項
 
