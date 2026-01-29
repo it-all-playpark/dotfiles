@@ -99,19 +99,8 @@ in
       # ~/.claude ディレクトリ作成
       mkdir -p "$CLAUDE_DIR"
 
-      # skills ディレクトリへのシンボリックリンク
-      # 既存のディレクトリ（シンボリックリンクでない）はバックアップしてから置換
-      # 注意: -d はシンボリックリンク先がディレクトリの場合も true を返すため、
-      # -L でシンボリックリンクチェックを先に行う
-      if [ -e "$CLAUDE_DIR/skills" ] && [ ! -L "$CLAUDE_DIR/skills" ]; then
-        BACKUP_DIR="$CLAUDE_DIR/skills.backup.$(date +%Y%m%d%H%M%S)"
-        echo "Backing up existing skills directory to $BACKUP_DIR"
-        mv "$CLAUDE_DIR/skills" "$BACKUP_DIR"
-      elif [ -L "$CLAUDE_DIR/skills" ]; then
-        # 既存のシンボリックリンクを削除（正しいリンク先に更新するため）
-        rm "$CLAUDE_DIR/skills"
-      fi
-      ln -sfn "$DOTFILES_CLAUDE/skills" "$CLAUDE_DIR/skills"
+      # skills ディレクトリは setup-skills.sh で管理（setup.sh から呼び出される）
+      # ここでは触れない - 既存の symlink を保持するため
 
       # settings.json へのシンボリックリンク
       # 既存ファイルがシンボリックリンクでない場合は削除
