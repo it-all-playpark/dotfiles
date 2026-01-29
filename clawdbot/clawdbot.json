@@ -27,6 +27,10 @@
       "google:default": {
         "provider": "google",
         "mode": "api_key"
+      },
+      "ollama:default": {
+        "provider": "ollama",
+        "mode": "api_key"
       }
     }
   },
@@ -37,12 +41,15 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "google/gemini-3-flash-preview",
+        "primary": "ollama/qwen3:8b",
         "fallbacks": [
-          "google/gemini-3-pro-preview"
+          "google/gemini-3-flash-preview"
         ]
       },
       "models": {
+        "ollama/qwen3:8b": {
+          "alias": "qwen"
+        },
         "minimax/MiniMax-M2.1": {
           "alias": "Minimax"
         },

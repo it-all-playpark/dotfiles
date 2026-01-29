@@ -36,6 +36,7 @@ in
       mariadb
       marp-cli
       mise
+      ollama
       # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
       opentofu
       postgresql_17
@@ -189,5 +190,11 @@ in
       # ~/.clawdbot → dotfiles/clawdbot/ のシンボリックリンク作成
       ln -sfn "$DOTFILES_CLAWDBOT" "$CLAWDBOT_DIR"
     '';
+  };
+
+  # Ollama サーバーをログイン時に自動起動
+  # macOS: launchd agent, Linux: systemd user service
+  services.ollama = {
+    enable = true;
   };
 }
