@@ -62,6 +62,11 @@ After making configuration changes, always run the update command to apply them.
 
 5. **Agent Skills**: Skills have been moved to a separate repository ([it-all-playpark/skills](https://github.com/it-all-playpark/skills)). The `scripts/setup-skills.sh` script creates symlinks for Claude Code, Clawdbot, Codex, and Antigravity.
 
+6. **Clawdbot Configuration**: `~/.clawdbot` is symlinked to `clawdbot/` in this repo.
+   - **⚠️ Do NOT use `clawdbot config set`** - it expands environment variables and hardcodes secrets
+   - Edit `clawdbot/clawdbot.json` directly to preserve `${ENV_VAR}` references
+   - Sensitive values use env vars: `${SLACK_BOT_TOKEN}`, `${SLACK_APP_TOKEN}`, `${CLAWDBOT_GATEWAY_TOKEN}`, `${HOME}`
+
 ## Key Configuration Files
 
 When modifying configurations:

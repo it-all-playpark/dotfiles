@@ -26,7 +26,9 @@ clawdbot/devices/
 clawdbot/browser/
 clawdbot/agents/*/sessions/
 clawdbot/agents/*/agent/auth-profiles.json
+clawdbot/agents/*/agent/models.json
 clawdbot/**/*.bak
+clawdbot/**/*.bak.*
 clawdbot/update-check.json
 clawdbot/exec-approvals.json
 clawdbot/cron/state.json
