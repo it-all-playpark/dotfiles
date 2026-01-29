@@ -191,4 +191,10 @@ in
       ln -sfn "$DOTFILES_CLAWDBOT" "$CLAWDBOT_DIR"
     '';
   };
+
+  # Ollama サーバーをログイン時に自動起動
+  # macOS: launchd agent, Linux: systemd user service
+  services.ollama = {
+    enable = true;
+  };
 }
