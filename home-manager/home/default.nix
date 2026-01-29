@@ -36,6 +36,7 @@ in
       mariadb
       marp-cli
       mise
+      ollama
       # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
       opentofu
       postgresql_17
