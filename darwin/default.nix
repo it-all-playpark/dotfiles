@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, username, ... }:
 let
   packages = import ../common/packages.nix { inherit pkgs; };
 in
@@ -32,7 +32,7 @@ in
   };
 
   # プライマリユーザーの設定（システムデフォルト設定の適用対象）
-  system.primaryUser = "naramotoyuuji";
+  system.primaryUser = username;
 
   # Nixビルドユーザーグループの設定（GID不一致エラー対応）
   ids.gids.nixbld = 350;

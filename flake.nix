@@ -41,6 +41,13 @@
         inherit system;
         overlays = [ claude-code-overlay.overlays.default ];
       });
+
+      # サポートするユーザーのリスト
+      usernames = [
+        "naramotoyuuji"
+        "yuji_naramoto"
+        # 他のユーザー名を追加できます
+      ];
     in
     {
       # 各システム向けのホームマネージャー構成を出力
@@ -74,13 +81,6 @@
             };
           };
 
-          # サポートするユーザーのリスト
-          usernames = [
-            "naramotoyuuji"
-            "yuji_naramoto"
-            # 他のユーザー名を追加できます
-          ];
-
           # 複数ユーザーの設定をマージ
           mergeConfigs = configs: username:
             configs // (mkHomeConfig username);
@@ -89,10 +89,18 @@
         nixpkgs.lib.foldl mergeConfigs { } usernames;
 
       # Darwinの構成を出力に追加（macOSのみ）
-      darwinConfigurations."MyMBP" = nix-darwin.lib.darwinSystem {
-        system = "aarch64-darwin"; # Apple Silicon MacBook用
-        modules = [ ./darwin/default.nix ];
-      };
+      # ユーザーごとにdarwin構成を生成
+      darwinConfigurations = nixpkgs.lib.foldl (configs: username:
+        configs // {
+          "MyMBP-${username}" = nix-darwin.lib.darwinSystem {
+            system = "aarch64-darwin"; # Apple Silicon MacBook用
+            modules = [
+              ./darwin/default.nix
+              { _module.args.username = username; }
+            ];
+          };
+        }
+      ) { } usernames;
 
       # 一括アップデート用のスクリプトを定義（各システム向け）
       apps = forAllSystems (system: {
@@ -114,7 +122,7 @@
               nix run home-manager -- switch --flake .#''${USERNAME}-darwin
 
               echo "Updating nix-darwin..."
-              sudo nix run nix-darwin -- switch --flake .#MyMBP
+              sudo nix run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
             else
               # Linux系の場合（WSLを含む）
               echo "Detected Linux environment"
@@ -149,15 +157,15 @@
 
             # システムタイプに基づいて処理
             if [[ "$(uname)" == "Darwin" ]]; then
-              # macOS系の場合、nix-darwinを一度だけ更新
+              # macOS系の場合
               echo "Detected macOS environment"
-              echo "Updating nix-darwin..."
-              sudo nix run nix-darwin -- switch --flake .#MyMBP
 
-              # 各ユーザーのhome-manager設定を更新
+              # 各ユーザーのhome-managerとnix-darwin設定を更新
               for USERNAME in "''${USERNAMES[@]}"; do
                 echo "Updating home-manager for user: $USERNAME..."
                 nix run home-manager -- switch --flake .#''${USERNAME}-darwin
+                echo "Updating nix-darwin for user: $USERNAME..."
+                sudo nix run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
               done
             else
               # Linux系の場合
