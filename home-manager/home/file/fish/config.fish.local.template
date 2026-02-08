@@ -10,8 +10,7 @@ set -x MORPH_API_KEY '<MORPH_API_KEY>'
 # === Ollama (local LLM) ===
 set -x OLLAMA_API_KEY 'ollama'
 
-# === Clawdbot ===
+# === OpenClaw ===
 set -x SLACK_BOT_TOKEN '<SLACK_BOT_TOKEN>'
 set -x SLACK_APP_TOKEN '<SLACK_APP_TOKEN>'
-set -x CLAWDBOT_GATEWAY_TOKEN '<CLAWDBOT_GATEWAY_TOKEN>'
 set -x OPENCLAW_GATEWAY_TOKEN '<OPENCLAW_GATEWAY_TOKEN>'

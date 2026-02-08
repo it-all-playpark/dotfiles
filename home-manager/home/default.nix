@@ -141,43 +141,43 @@ in
       done
     '';
 
-    # Clawdbot 設定を dotfiles/clawdbot/ からシンボリックリンクで参照
-    # ~/.clawdbot 自体をシンボリックリンクにして、設定ファイルを一元管理
-    activation.setupClawdbot = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      DOTFILES_CLAWDBOT="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/clawdbot"
-      CLAWDBOT_DIR="${config.home.homeDirectory}/.clawdbot"
+    # OpenClaw 設定を dotfiles/openclaw/ からシンボリックリンクで参照
+    # ~/.openclaw 自体をシンボリックリンクにして、設定ファイルを一元管理
+    activation.setupOpenclaw = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      DOTFILES_OPENCLAW="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/openclaw"
+      OPENCLAW_DIR="${config.home.homeDirectory}/.openclaw"
 
       # dotfiles が存在しない場合はスキップ（初回セットアップ時などを考慮）
-      if [ ! -d "$DOTFILES_CLAWDBOT" ]; then
-        echo "Warning: $DOTFILES_CLAWDBOT does not exist. Skipping Clawdbot setup."
+      if [ ! -d "$DOTFILES_OPENCLAW" ]; then
+        echo "Warning: $DOTFILES_OPENCLAW does not exist. Skipping OpenClaw setup."
         exit 0
       fi
 
-      # ~/.clawdbot がシンボリックリンクでない場合の処理
-      if [ -e "$CLAWDBOT_DIR" ] && [ ! -L "$CLAWDBOT_DIR" ]; then
+      # ~/.openclaw がシンボリックリンクでない場合の処理
+      if [ -e "$OPENCLAW_DIR" ] && [ ! -L "$OPENCLAW_DIR" ]; then
         # 既存のディレクトリをバックアップ
-        BACKUP_DIR="$CLAWDBOT_DIR.backup.$(date +%Y%m%d%H%M%S)"
-        echo "Backing up existing .clawdbot directory to $BACKUP_DIR"
-        mv "$CLAWDBOT_DIR" "$BACKUP_DIR"
+        BACKUP_DIR="$OPENCLAW_DIR.backup.$(date +%Y%m%d%H%M%S)"
+        echo "Backing up existing .openclaw directory to $BACKUP_DIR"
+        mv "$OPENCLAW_DIR" "$BACKUP_DIR"
 
         # バックアップから credentials, identity, .env をコピー（存在する場合）
         # -p オプションでパーミッションを保持（機密ファイル向け）
         if [ -d "$BACKUP_DIR/credentials" ]; then
-          cp -rp "$BACKUP_DIR/credentials" "$DOTFILES_CLAWDBOT/credentials"
+          cp -rp "$BACKUP_DIR/credentials" "$DOTFILES_OPENCLAW/credentials"
         fi
         if [ -d "$BACKUP_DIR/identity" ]; then
-          cp -rp "$BACKUP_DIR/identity" "$DOTFILES_CLAWDBOT/identity"
+          cp -rp "$BACKUP_DIR/identity" "$DOTFILES_OPENCLAW/identity"
         fi
         if [ -f "$BACKUP_DIR/.env" ]; then
-          cp "$BACKUP_DIR/.env" "$DOTFILES_CLAWDBOT/.env"
+          cp "$BACKUP_DIR/.env" "$DOTFILES_OPENCLAW/.env"
         fi
-      elif [ -L "$CLAWDBOT_DIR" ]; then
+      elif [ -L "$OPENCLAW_DIR" ]; then
         # 既存のシンボリックリンクを削除（正しいリンク先に更新するため）
-        rm "$CLAWDBOT_DIR"
+        rm "$OPENCLAW_DIR"
       fi
 
-      # ~/.clawdbot → dotfiles/clawdbot/ のシンボリックリンク作成
-      ln -sfn "$DOTFILES_CLAWDBOT" "$CLAWDBOT_DIR"
+      # ~/.openclaw → dotfiles/openclaw/ のシンボリックリンク作成
+      ln -sfn "$DOTFILES_OPENCLAW" "$OPENCLAW_DIR"
     '';
   };
 

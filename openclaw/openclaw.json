@@ -117,7 +117,7 @@
     "bind": "loopback",
     "auth": {
       "mode": "token",
-      "token": "${CLAWDBOT_GATEWAY_TOKEN}"
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
     },
     "tailscale": {
       "mode": "off",
