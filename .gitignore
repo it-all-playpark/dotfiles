@@ -24,6 +24,7 @@ openclaw/memory/
 openclaw/logs/
 openclaw/devices/
 openclaw/browser/
+openclaw/canvas/
 openclaw/agents/*/sessions/
 openclaw/agents/*/agent/auth-profiles.json
 openclaw/agents/*/agent/models.json
