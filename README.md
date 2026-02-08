@@ -93,7 +93,7 @@ flake.nix内のアップデートスクリプトが、home-managerとnix-darwin�
 | ツール | Symlink パス |
 |--------|-------------|
 | Claude Code | `~/.claude/skills` |
-| Clawdbot | `~/.clawdbot/skills` |
+| OpenClaw | `~/.openclaw/skills` |
 | Codex | `~/.codex/skills` |
 | Antigravity | `~/.gemini/antigravity/skills` |
 

@@ -60,12 +60,12 @@ After making configuration changes, always run the update command to apply them.
 
 4. **Recent Changes**: The tmux configuration has been modified to use tnrs keys instead of hjkl for navigation.
 
-5. **Agent Skills**: Skills have been moved to a separate repository ([it-all-playpark/skills](https://github.com/it-all-playpark/skills)). The `scripts/setup-skills.sh` script creates symlinks for Claude Code, Clawdbot, Codex, and Antigravity.
+5. **Agent Skills**: Skills have been moved to a separate repository ([it-all-playpark/skills](https://github.com/it-all-playpark/skills)). The `scripts/setup-skills.sh` script creates symlinks for Claude Code, OpenClaw, Codex, and Antigravity.
 
-6. **Clawdbot Configuration**: `~/.clawdbot` is symlinked to `clawdbot/` in this repo.
-   - **⚠️ Do NOT use `clawdbot config set`** - it expands environment variables and hardcodes secrets
-   - Edit `clawdbot/clawdbot.json` directly to preserve `${ENV_VAR}` references
-   - Sensitive values use env vars: `${SLACK_BOT_TOKEN}`, `${SLACK_APP_TOKEN}`, `${CLAWDBOT_GATEWAY_TOKEN}`, `${HOME}`
+6. **OpenClaw Configuration**: `~/.openclaw` is symlinked to `openclaw/` in this repo.
+   - **⚠️ Do NOT use `openclaw config set`** - it expands environment variables and hardcodes secrets
+   - Edit `openclaw/openclaw.json` directly to preserve `${ENV_VAR}` references
+   - Sensitive values use env vars: `${SLACK_BOT_TOKEN}`, `${SLACK_APP_TOKEN}`, `${OPENCLAW_GATEWAY_TOKEN}`, `${HOME}`
 
 ## Key Configuration Files
 

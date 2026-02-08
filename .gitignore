@@ -14,24 +14,25 @@ claude-code/.superclaude-metadata.json
 claude-code/skills/**/.env
 claude-code/skills/**/__pycache__/
 
-# Clawdbot - sensitive and runtime data
-clawdbot/.env
-clawdbot/skills
-clawdbot/credentials/
-clawdbot/identity/
-clawdbot/media/
-clawdbot/memory/
-clawdbot/logs/
-clawdbot/devices/
-clawdbot/browser/
-clawdbot/agents/*/sessions/
-clawdbot/agents/*/agent/auth-profiles.json
-clawdbot/agents/*/agent/models.json
-clawdbot/**/*.bak
-clawdbot/**/*.bak.*
-clawdbot/update-check.json
-clawdbot/exec-approvals.json
-clawdbot/cron/state.json
+# OpenClaw - sensitive and runtime data
+openclaw/.env
+openclaw/skills
+openclaw/credentials/
+openclaw/identity/
+openclaw/media/
+openclaw/memory/
+openclaw/logs/
+openclaw/devices/
+openclaw/browser/
+openclaw/canvas/
+openclaw/agents/*/sessions/
+openclaw/agents/*/agent/auth-profiles.json
+openclaw/agents/*/agent/models.json
+openclaw/**/*.bak
+openclaw/**/*.bak.*
+openclaw/update-check.json
+openclaw/exec-approvals.json
+openclaw/cron/state.json
 
 # Sensitive authentication files (global)
 **/auth-profiles.json

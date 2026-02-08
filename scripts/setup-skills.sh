@@ -3,7 +3,7 @@
 # setup-skills.sh - Setup Agent Skills symlinks for multiple AI tools
 #
 # This script creates symlinks from various AI agent tools to a shared
-# skills repository, enabling skill sharing across Claude Code, Clawdbot,
+# skills repository, enabling skill sharing across Claude Code, OpenClaw,
 # Codex, and Antigravity.
 #
 # Usage:
@@ -30,7 +30,7 @@ SKILLS_REPO="${DEFAULT_SKILLS_REPO}"
 # skills_subpath: Subdirectory for skills within the config (e.g., "skills" or "antigravity/skills")
 AGENT_CONFIGS=(
     "${HOME}/.claude:skills"
-    "${HOME}/.clawdbot:skills"
+    "${HOME}/.openclaw:skills"
     "${HOME}/.codex:skills"
     "${HOME}/.gemini:antigravity/skills"
 )
@@ -60,7 +60,7 @@ print_usage() {
     echo ""
     echo "Supported AI Agents:"
     echo "  - Claude Code  (~/.claude/skills)"
-    echo "  - Clawdbot     (~/.clawdbot/skills)"
+    echo "  - OpenClaw     (~/.openclaw/skills)"
     echo "  - Codex        (~/.codex/skills)"
     echo "  - Antigravity  (~/.gemini/antigravity/skills)"
 }
