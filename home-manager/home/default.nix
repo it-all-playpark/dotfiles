@@ -26,6 +26,7 @@ in
       eza
       fastfetch
       fd
+      ffmpeg
       flyctl
       fzf
       gh
