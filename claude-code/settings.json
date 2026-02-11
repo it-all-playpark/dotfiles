@@ -62,9 +62,12 @@
     "defaultMode": "acceptEdits",
     "disableBypassPermissionsMode": "disable",
     "allow": [
+      "Read",
       "Write",
       "Edit",
+      "MultiEdit",
       "Bash",
+      "Task",
       "mcp__*"
     ],
     "deny": [
