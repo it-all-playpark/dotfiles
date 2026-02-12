@@ -26,6 +26,7 @@ in
       eza
       fastfetch
       fd
+      ffmpeg
       flyctl
       fzf
       gh
@@ -139,6 +140,20 @@ in
           ln -sf "$f" "$target"
         fi
       done
+
+      # hooks ディレクトリ内のスクリプトへのシンボリックリンク
+      if [ -d "$DOTFILES_CLAUDE/hooks" ]; then
+        mkdir -p "$CLAUDE_DIR/hooks"
+        for f in "$DOTFILES_CLAUDE"/hooks/*.py; do
+          if [ -f "$f" ]; then
+            target="$CLAUDE_DIR/hooks/$(basename "$f")"
+            if [ -f "$target" ] && [ ! -L "$target" ]; then
+              rm "$target"
+            fi
+            ln -sf "$f" "$target"
+          fi
+        done
+      fi
     '';
 
     # OpenClaw 設定を dotfiles/openclaw/ からシンボリックリンクで参照
