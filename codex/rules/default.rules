@@ -87,3 +87,5 @@ prefix_rule(pattern=["gh", "issue", "list", "--repo", "playpark-llc/dai-co", "--
 prefix_rule(pattern=["nix", "build"], decision="allow")
 prefix_rule(pattern=["nix", "run", "home-manager", "--", "switch"], decision="allow")
 prefix_rule(pattern=["git", "switch", "-c", "feat-codex-dotfiles-management"], decision="allow")
+prefix_rule(pattern=["git", "commit", "-m", "feat(home-manager): 🎸 Codex設定をdotfiles管理に追加"], decision="allow")
+prefix_rule(pattern=["git", "add", "flake.lock", "codex/rules/default.rules"], decision="allow")
