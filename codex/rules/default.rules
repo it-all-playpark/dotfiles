@@ -1,25 +1,192 @@
+# =================================================================
 # Shared baseline execpolicy rules for dotfiles.
+# Source: claude-code/settings.json permissions.deny
+# =================================================================
 # Keep this file stable and repository-agnostic.
 # One-off approvals should stay in the local runtime copy under ~/.codex/rules/.
+#
+# decision="forbidden" : Auto-reject (dangerous, no valid agent use case)
+# decision="prompt"    : Require user confirmation before executing
+#
+# NOTES:
+# - File read restrictions (Read(.env), Read(.ssh/) etc.) are not
+#   expressible in prefix_rule format and are omitted.
+# - MCP-specific rules (mcp__gh__*) are omitted (Codex doesn't use MCP).
+# - Bare "git push" uses "prompt" instead of "forbidden" because
+#   prefix_rule would block ALL git push operations (too broad).
+# - Root-path glob patterns (mv /*, cp /*, rsync /*) cannot be
+#   faithfully translated to prefix_rule literal matching.
+# =================================================================
 
-# Block clearly dangerous commands.
+# ------- Git: Force/Dangerous Push (forbidden) -------
 prefix_rule(pattern=["git", "push", "--force"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "-f"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "--mirror"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "--all"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "--tags"], decision="forbidden")
+
+# ------- Git: Protected Branch Push (forbidden) -------
 prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/main"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/master"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/dev"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/develop"], decision="forbidden")
 prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/development"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--set-upstream", "origin", "main"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--set-upstream", "origin", "master"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--set-upstream", "origin", "dev"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--set-upstream", "origin", "develop"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--set-upstream", "origin", "development"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--force-with-lease", "origin", "HEAD:refs/heads/main"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--force-with-lease", "origin", "HEAD:refs/heads/master"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--force-with-lease", "origin", "HEAD:refs/heads/dev"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--force-with-lease", "origin", "HEAD:refs/heads/develop"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--force-with-lease", "origin", "HEAD:refs/heads/development"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "main:main"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "master:master"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "dev:dev"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "develop:develop"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "development:development"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "--delete", "main"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "--delete", "master"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "--delete", "dev"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "--delete", "develop"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "--delete", "development"], decision="forbidden")
+
+# ------- Git: Destructive Operations (forbidden) -------
 prefix_rule(pattern=["git", "reset", "--hard"], decision="forbidden")
-prefix_rule(pattern=["rm", "-rf"], decision="forbidden")
+prefix_rule(pattern=["git", "clean", "-f"], decision="forbidden")
+prefix_rule(pattern=["git", "clean", "-fd"], decision="forbidden")
+prefix_rule(pattern=["git", "clean", "-fx"], decision="forbidden")
+prefix_rule(pattern=["git", "clean", "-xf"], decision="forbidden")
+prefix_rule(pattern=["git", "checkout", "--", "."], decision="forbidden")
+prefix_rule(pattern=["git", "restore", "."], decision="forbidden")
+prefix_rule(pattern=["git", "branch", "-D"], decision="forbidden")
+
+# ------- System: Privilege Escalation (forbidden) -------
 prefix_rule(pattern=["sudo"], decision="forbidden")
 
-# Require confirmation for network/remote-impacting commands.
+# ------- System: Destructive File Operations (forbidden) -------
+prefix_rule(pattern=["rm", "-rf"], decision="forbidden")
+prefix_rule(pattern=["rm", "-fr"], decision="forbidden")
+prefix_rule(pattern=["rm", "-r", "-f"], decision="forbidden")
+prefix_rule(pattern=["rm", "-f", "-r"], decision="forbidden")
+prefix_rule(pattern=["find", "/", "-delete"], decision="forbidden")
+prefix_rule(pattern=["find", "/", "-exec", "rm"], decision="forbidden")
+
+# ------- System: Permission Changes (forbidden) -------
+prefix_rule(pattern=["chmod", "-R"], decision="forbidden")
+prefix_rule(pattern=["chown", "-R"], decision="forbidden")
+prefix_rule(pattern=["chgrp", "-R"], decision="forbidden")
+
+# ------- Disk Operations (forbidden) -------
+prefix_rule(pattern=["dd"], decision="forbidden")
+prefix_rule(pattern=["mkfs"], decision="forbidden")
+prefix_rule(pattern=["fdisk"], decision="forbidden")
+prefix_rule(pattern=["parted"], decision="forbidden")
+prefix_rule(pattern=["cfdisk"], decision="forbidden")
+prefix_rule(pattern=["sfdisk"], decision="forbidden")
+prefix_rule(pattern=["gdisk"], decision="forbidden")
+prefix_rule(pattern=["sgdisk"], decision="forbidden")
+prefix_rule(pattern=["diskutil"], decision="forbidden")
+prefix_rule(pattern=["format"], decision="forbidden")
+
+# ------- Process Management (forbidden) -------
+prefix_rule(pattern=["kill", "-9", "-1"], decision="forbidden")
+prefix_rule(pattern=["kill", "-9", "1"], decision="forbidden")
+prefix_rule(pattern=["kill", "-KILL", "-1"], decision="forbidden")
+prefix_rule(pattern=["kill", "-KILL", "1"], decision="forbidden")
+prefix_rule(pattern=["kill", "-TERM", "-1"], decision="forbidden")
+prefix_rule(pattern=["killall", "-KILL"], decision="forbidden")
+prefix_rule(pattern=["killall", "-TERM"], decision="forbidden")
+prefix_rule(pattern=["killall", "-9"], decision="forbidden")
+prefix_rule(pattern=["pkill", "-KILL"], decision="forbidden")
+prefix_rule(pattern=["pkill", "-TERM"], decision="forbidden")
+prefix_rule(pattern=["pkill", "-9"], decision="forbidden")
+
+# ------- System Control (forbidden) -------
+prefix_rule(pattern=["reboot"], decision="forbidden")
+prefix_rule(pattern=["shutdown"], decision="forbidden")
+prefix_rule(pattern=["halt"], decision="forbidden")
+prefix_rule(pattern=["poweroff"], decision="forbidden")
+prefix_rule(pattern=["init", "0"], decision="forbidden")
+prefix_rule(pattern=["init", "6"], decision="forbidden")
+prefix_rule(pattern=["systemctl", "reboot"], decision="forbidden")
+prefix_rule(pattern=["systemctl", "shutdown"], decision="forbidden")
+prefix_rule(pattern=["systemctl", "poweroff"], decision="forbidden")
+prefix_rule(pattern=["systemctl", "halt"], decision="forbidden")
+
+# ------- macOS: System Configuration (forbidden) -------
+prefix_rule(pattern=["launchctl", "unload"], decision="forbidden")
+prefix_rule(pattern=["launchctl", "load"], decision="forbidden")
+prefix_rule(pattern=["defaults", "write"], decision="forbidden")
+prefix_rule(pattern=["scutil"], decision="forbidden")
+prefix_rule(pattern=["nvram"], decision="forbidden")
+prefix_rule(pattern=["csrutil"], decision="forbidden")
+prefix_rule(pattern=["spctl"], decision="forbidden")
+prefix_rule(pattern=["networksetup"], decision="forbidden")
+prefix_rule(pattern=["dscl"], decision="forbidden")
+prefix_rule(pattern=["dseditgroup"], decision="forbidden")
+prefix_rule(pattern=["pmset"], decision="forbidden")
+prefix_rule(pattern=["tmutil"], decision="forbidden")
+
+# ------- macOS: Keychain Access (forbidden) -------
+prefix_rule(pattern=["security", "find-generic-password"], decision="forbidden")
+prefix_rule(pattern=["security", "find-internet-password"], decision="forbidden")
+prefix_rule(pattern=["security", "dump-keychain"], decision="forbidden")
+
+# =================================================================
+# Require confirmation (prompt)
+# =================================================================
+
+# ------- Git: Push (requires confirmation) -------
 prefix_rule(pattern=["git", "push"], decision="prompt")
-prefix_rule(pattern=["gh", "pr", "merge"], decision="prompt")
+
+# ------- GitHub CLI: Destructive Operations (prompt) -------
 prefix_rule(pattern=["gh", "repo", "delete"], decision="prompt")
+prefix_rule(pattern=["gh", "repo", "rename"], decision="prompt")
+prefix_rule(pattern=["gh", "repo", "transfer"], decision="prompt")
+prefix_rule(pattern=["gh", "repo", "edit"], decision="prompt")
+prefix_rule(pattern=["gh", "repo", "fork"], decision="prompt")
+prefix_rule(pattern=["gh", "release", "delete"], decision="prompt")
+prefix_rule(pattern=["gh", "pr", "merge"], decision="prompt")
+prefix_rule(pattern=["gh", "secret", "set"], decision="prompt")
+prefix_rule(pattern=["gh", "secret", "remove"], decision="prompt")
+prefix_rule(pattern=["gh", "auth", "token"], decision="prompt")
+
+# ------- GitHub API: Mutating Methods (prompt) -------
+prefix_rule(pattern=["gh", "api", "--method", "DELETE"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "--method", "POST"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "--method", "PUT"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "--method", "PATCH"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "-X", "DELETE"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "-X", "POST"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "-X", "PUT"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "-X", "PATCH"], decision="prompt")
+prefix_rule(pattern=["gh", "api", "graphql"], decision="prompt")
+
+# ------- Network Operations (prompt) -------
 prefix_rule(pattern=["curl"], decision="prompt")
 prefix_rule(pattern=["wget"], decision="prompt")
+prefix_rule(pattern=["ssh"], decision="prompt")
+prefix_rule(pattern=["nc"], decision="prompt")
+prefix_rule(pattern=["netcat"], decision="prompt")
+prefix_rule(pattern=["ncat"], decision="prompt")
+prefix_rule(pattern=["telnet"], decision="prompt")
+prefix_rule(pattern=["ftp"], decision="prompt")
+prefix_rule(pattern=["sftp"], decision="prompt")
+prefix_rule(pattern=["scp"], decision="prompt")
+
+# ------- Package Management (prompt) -------
+prefix_rule(pattern=["brew"], decision="prompt")
+prefix_rule(pattern=["nix-env", "-i"], decision="prompt")
+prefix_rule(pattern=["nix", "profile", "install"], decision="prompt")
+prefix_rule(pattern=["nix-store", "--delete"], decision="prompt")
+prefix_rule(pattern=["nix-collect-garbage", "-d"], decision="prompt")
+prefix_rule(pattern=["apt-get"], decision="prompt")
+prefix_rule(pattern=["yum"], decision="prompt")
+prefix_rule(pattern=["pip", "install"], decision="prompt")
+prefix_rule(pattern=["pip3", "install"], decision="prompt")
+prefix_rule(pattern=["pipx", "install"], decision="prompt")
+prefix_rule(pattern=["npm", "publish"], decision="prompt")
+prefix_rule(pattern=["pnpm", "publish"], decision="prompt")
+prefix_rule(pattern=["cargo", "publish"], decision="prompt")
