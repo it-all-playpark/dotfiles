@@ -212,7 +212,8 @@ in
       mkdir -p "$CODEX_DIR"
 
       # 静的アセットをシンボリックリンクで同期
-      for d in prompts rules policy; do
+      # NOTE: rules は Codex runtime で更新されるため symlink 管理しない
+      for d in prompts policy; do
         src="$DOTFILES_CODEX/$d"
         target="$CODEX_DIR/$d"
 
@@ -230,6 +231,25 @@ in
 
         ln -sfn "$src" "$target"
       done
+
+      # rules は runtime で更新されるためローカル実体ファイルを保持する
+      rules_dir="$CODEX_DIR/rules"
+      if [ -L "$rules_dir" ]; then
+        rm "$rules_dir"
+      elif [ -e "$rules_dir" ] && [ ! -d "$rules_dir" ]; then
+        backup="$CODEX_DIR/rules.backup.$(date +%Y%m%d%H%M%S)"
+        echo "Backing up existing $rules_dir to $backup"
+        mv "$rules_dir" "$backup"
+      fi
+      mkdir -p "$rules_dir"
+
+      rules_target="$rules_dir/default.rules"
+      if [ -L "$rules_target" ]; then
+        rm "$rules_target"
+      fi
+      if [ ! -f "$rules_target" ] && [ -f "$DOTFILES_CODEX/rules/default.rules" ]; then
+        cp "$DOTFILES_CODEX/rules/default.rules" "$rules_target"
+      fi
 
       # base config をシンボリックリンクで同期
       if [ -f "$CODEX_DIR/config.base.toml" ] && [ ! -L "$CODEX_DIR/config.base.toml" ]; then
