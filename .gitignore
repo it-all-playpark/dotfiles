@@ -14,6 +14,12 @@ claude-code/.superclaude-metadata.json
 claude-code/skills/**/.env
 claude-code/skills/**/__pycache__/
 
+# Codex - sensitive and runtime data
+.codex/
+codex/config.local.toml
+codex/*.local.toml
+codex/**/*.local.toml
+
 # OpenClaw - sensitive and runtime data
 openclaw/.env
 openclaw/skills

@@ -113,6 +113,22 @@ flake.nix内のアップデートスクリプトが、home-managerとnix-darwin�
 
 Skills の詳細は [it-all-playpark/skills](https://github.com/it-all-playpark/skills) を参照してください。
 
+## Codex 設定管理
+
+Codex の設定は `codex/` ディレクトリで管理します。
+
+- `codex/config.base.toml`: 全ユーザー共通の設定
+- `codex/config.local.toml.template`: ローカル専用設定のテンプレート
+- `codex/prompts/`, `codex/rules/`, `codex/policy/`: 静的アセット
+
+`nix run .#update <username>` 実行時に Home Manager activation が以下を実施します。
+
+- `codex/prompts`, `codex/rules`, `codex/policy` を `~/.codex/` にシンボリックリンク
+- `~/.codex/config.local.toml` がなければ既存 `config.toml` の `projects` / `mcp_servers` セクションを移行（バックアップ作成）またはテンプレートから生成
+- `~/.codex/config.toml` を `config.base.toml + config.local.toml` で再生成
+
+機密情報（MCPキー等）は `~/.codex/config.local.toml` にのみ記載してください。
+
 ## 注意事項
 
 - バックアップの推奨
