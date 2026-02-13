@@ -17,8 +17,9 @@ prefix_rule(pattern=["git", "reset", "--hard"], decision="forbidden")
 prefix_rule(pattern=["rm", "-rf"], decision="forbidden")
 prefix_rule(pattern=["sudo"], decision="forbidden")
 
-# Require confirmation for network/remote-impacting commands.
-prefix_rule(pattern=["git", "push"], decision="prompt")
+# Require confirmation for destructive/network-impacting commands.
+# Plain `git push` is intentionally not prompted here; protected branch/force
+# pushes are still forbidden above.
 prefix_rule(pattern=["gh", "pr", "merge"], decision="prompt")
 prefix_rule(pattern=["gh", "repo", "delete"], decision="prompt")
 prefix_rule(pattern=["curl"], decision="prompt")

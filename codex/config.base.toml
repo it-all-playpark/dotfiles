@@ -5,6 +5,16 @@ model = "gpt-5.3-codex"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 
+# Reduce approval friction for normal project work:
+# - run inside workspace sandbox
+# - only ask when a command must leave sandbox and fails there
+approval_policy = "on-failure"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+# Allow git push / gh / package installs without escalating outside sandbox.
+network_access = true
+
 [notice]
 hide_gpt5_1_migration_prompt = true
 "hide_gpt-5.1-codex-max_migration_prompt" = true
