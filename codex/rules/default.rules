@@ -1,0 +1,25 @@
+# Shared baseline execpolicy rules for dotfiles.
+# Keep this file stable and repository-agnostic.
+# One-off approvals should stay in the local runtime copy under ~/.codex/rules/.
+
+# Block clearly dangerous commands.
+prefix_rule(pattern=["git", "push", "--force"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "-f"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--mirror"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--all"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "--tags"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/main"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/master"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/dev"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/develop"], decision="forbidden")
+prefix_rule(pattern=["git", "push", "origin", "HEAD:refs/heads/development"], decision="forbidden")
+prefix_rule(pattern=["git", "reset", "--hard"], decision="forbidden")
+prefix_rule(pattern=["rm", "-rf"], decision="forbidden")
+prefix_rule(pattern=["sudo"], decision="forbidden")
+
+# Require confirmation for network/remote-impacting commands.
+prefix_rule(pattern=["git", "push"], decision="prompt")
+prefix_rule(pattern=["gh", "pr", "merge"], decision="prompt")
+prefix_rule(pattern=["gh", "repo", "delete"], decision="prompt")
+prefix_rule(pattern=["curl"], decision="prompt")
+prefix_rule(pattern=["wget"], decision="prompt")

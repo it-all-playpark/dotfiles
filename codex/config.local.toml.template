@@ -1,0 +1,16 @@
+# Local-only Codex settings.
+# This file is copied to ~/.codex/config.local.toml on first activation if missing.
+# Do not commit secrets.
+
+# Project trust settings are local because paths differ per user.
+# [projects."/Users/<username>/ghq/github.com/it-all-playpark/dotfiles"]
+# trust_level = "trusted"
+
+# MCP settings are local because they may include credentials.
+# [mcp_servers.serena]
+# command = "uvx"
+# args = ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"]
+
+# [mcp_servers.gh]
+# command = "npx"
+# args = ["-y", "@smithery/cli@latest", "run", "@smithery-ai/github", "--key", "<YOUR_KEY>", "--profile", "<YOUR_PROFILE>"]
