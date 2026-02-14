@@ -138,8 +138,11 @@ prefix_rule(pattern=["security", "dump-keychain"], decision="forbidden")
 # Require confirmation (prompt)
 # =================================================================
 
-# ------- Git: Push (requires confirmation) -------
-prefix_rule(pattern=["git", "push"], decision="prompt")
+# NOTE:
+# - We intentionally do NOT prompt on plain "git push" here.
+# - Baseline allows non-force push, while protected branches remain forbidden above.
+# - Approval frequency is mainly controlled by config.toml:
+#   approval_policy + sandbox_mode + sandbox_workspace_write.network_access.
 
 # ------- GitHub CLI: Destructive Operations (prompt) -------
 prefix_rule(pattern=["gh", "repo", "delete"], decision="prompt")
