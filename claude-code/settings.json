@@ -190,7 +190,10 @@
     ],
     "defaultMode": "acceptEdits",
     "disableBypassPermissionsMode": "disable",
-    "additionalDirectories": []
+    "additionalDirectories": [
+      "/Users/naramotoyuuji/ghq/github.com/playpark-llc",
+      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark"
+    ]
   },
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [],
