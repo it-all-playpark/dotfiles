@@ -27,8 +27,8 @@
     y = ''yazi'';
     # git worktree移動（fzfで選択、ブランチ名表示）
     w = ''cd "$(git worktree list | awk '{print $3, $1}' | sd '\[|\]' "" | fzf --layout=reverse --prompt 'WORKTREE>' --with-nth=1 --preview 'git -C {2} log --oneline -20' | awk '{print $2}')"'';
-    # merge済みworktree一括削除（main worktree除く、GitHub squash merge対応）
-    wrm = ''bash -c 'git worktree list | tail -n +2 | while read p _ b; do b=''${b//[\[\]]/}; gh pr view "$b" --json state -q .state 2>/dev/null | grep -q MERGED && git worktree remove "$p" && echo "Removed: $b"; done' '';
+    # merge済みworktree一括削除（PR未作成・MERGED対象、OPEN除外）
+    wrm = ''bash -c 'git worktree prune; git worktree list | tail -n +2 | while read p _ b _rest; do b=''${b//[\[\]]/}; state=$(gh pr view "$b" --json state -q .state 2>/dev/null); if [ "$state" = "MERGED" ] || [ -z "$state" ]; then git worktree remove "$p" && echo "Removed: $b (''${state:-no PR})"; fi; done' '';
     # カレントディレクトリのパスをクリップボードにコピー 
     pwdc = ''echo -n "$(pwd)" | pbcopy; pbpaste'';
     # 選択したディレクトリ配下の指定したディレクトリ配下のファイルパスと中身を一括取得
