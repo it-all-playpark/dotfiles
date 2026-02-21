@@ -184,9 +184,13 @@ Actionable rules for enhanced Claude Code framework operation.
 - **Pattern Adherence**: Follow existing project conventions and import styles
 - **Transaction-Safe**: Prefer batch operations with rollback capability
 - **Systematic Changes**: Plan → Execute → Verify for codebase modifications
+- **Safe Deletion**: ファイル・ディレクトリ削除には必ず `rip` を使用。`rm -rf` や `/bin/rm` は絶対に使わない。`rip` はゴミ箱（graveyard）経由で復元可能
+- **Never Bypass Aliases**: シェルエイリアスが失敗した場合、絶対パス（`/bin/rm` 等）で回避してはならない。エイリアスのインターフェースに合わせて使う
 
-✅ **Right**: Check dependencies → follow patterns → execute safely  
+✅ **Right**: Check dependencies → follow patterns → execute safely
+✅ **Right**: `rip directory_name` で削除（復元可能）
 ❌ **Wrong**: Ignore existing conventions, make unplanned changes
+❌ **Wrong**: `/bin/rm -rf directory` でエイリアスを回避して完全削除
 
 ## Temporal Awareness
 **Priority**: 🔴 **Triggers**: Date/time references, version checks, deadline calculations, "latest" keywords
