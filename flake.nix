@@ -122,7 +122,7 @@
               nix run home-manager -- switch --flake .#''${USERNAME}-darwin
 
               echo "Updating nix-darwin..."
-              sudo nix run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
+              sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
             else
               # Linux系の場合（WSLを含む）
               echo "Detected Linux environment"
@@ -165,7 +165,7 @@
                 echo "Updating home-manager for user: $USERNAME..."
                 nix run home-manager -- switch --flake .#''${USERNAME}-darwin
                 echo "Updating nix-darwin for user: $USERNAME..."
-                sudo nix run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
+                sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
               done
             else
               # Linux系の場合
