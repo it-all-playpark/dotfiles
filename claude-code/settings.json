@@ -15,6 +15,10 @@
       "MultiEdit",
       "Bash",
       "Task",
+      "Skill",
+      "WebSearch",
+      "mcp__morphllm-fast-apply",
+      "mcp__serena",
       "mcp__*"
     ],
     "deny": [
