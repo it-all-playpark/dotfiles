@@ -58,6 +58,7 @@ in
       "google-chrome"
       "google-drive"
       "google-japanese-ime"
+      "ghostty"
       "hhkb-keymap-tool"
       "jump-desktop-connect"
       "monitorcontrol"
