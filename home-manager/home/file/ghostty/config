@@ -2,6 +2,13 @@
 background-opacity = 0.85
 background-blur-radius = 20
 
+# Option キーを Alt（Meta）として動作させる（tmux の M- バインド用）
+macos-option-as-alt = true
+
 # Quick Terminal
 quick-terminal-screen = main
 keybind = global:alt+space=toggle_quick_terminal
+
+# Alt+Arrow をデフォルトの単語移動（ESC b/f）から解放し、tmux に渡す
+keybind = alt+right=unbind
+keybind = alt+left=unbind
