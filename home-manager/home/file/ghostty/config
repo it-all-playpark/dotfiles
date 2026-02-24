@@ -1,3 +1,7 @@
+# Appearance
+background-opacity = 0.85
+background-blur-radius = 20
+
 # Keybindings (大西配列: t=left, n=down, r=up, s=right)
 
 # Tab navigation
@@ -24,3 +28,6 @@ keybind = ctrl+alt+s=resize_split:right,10
 # Split management
 keybind = alt+z=toggle_split_zoom
 keybind = alt+q=close_surface
+
+# Quick terminal
+keybind = global:alt+/=toggle_quick_terminal
