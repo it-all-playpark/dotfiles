@@ -2,32 +2,6 @@
 background-opacity = 0.85
 background-blur-radius = 20
 
-# Keybindings (大西配列: t=left, n=down, r=up, s=right)
-
-# Tab navigation
-keybind = alt+shift+t=previous_tab
-keybind = alt+shift+s=next_tab
-keybind = alt+y=new_tab
-
-# Split navigation
-keybind = alt+t=goto_split:left
-keybind = alt+n=goto_split:bottom
-keybind = alt+r=goto_split:top
-keybind = alt+s=goto_split:right
-
-# Split creation
-keybind = alt+down=new_split:down
-keybind = alt+right=new_split:right
-
-# Split resize
-keybind = ctrl+alt+t=resize_split:left,10
-keybind = ctrl+alt+n=resize_split:down,10
-keybind = ctrl+alt+r=resize_split:up,10
-keybind = ctrl+alt+s=resize_split:right,10
-
-# Split management
-keybind = alt+z=toggle_split_zoom
-keybind = alt+q=close_surface
-
-# Quick terminal
+# Quick Terminal
+quick-terminal-screen = main
 keybind = global:alt+space=toggle_quick_terminal
