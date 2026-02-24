@@ -22,7 +22,7 @@ in
       bat
       claude-code
       python313Packages.deepl
-      devcontainer
+      # devcontainer  # TODO: 一時的に無効化 - node-gyp offline build failure (nixpkgs upstream issue)
       eza
       fastfetch
       fd
@@ -81,6 +81,10 @@ in
       };
       ".warp" = {
         source = ./file/.warp;
+        recursive = true;
+      };
+      ".config/ghostty" = {
+        source = ./file/ghostty;
         recursive = true;
       };
     };
