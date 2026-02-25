@@ -30,7 +30,7 @@
     # merge済みworktree一括削除（PR未作成・MERGED対象、OPEN除外）
     wrm = ''bash -c 'git worktree prune; git worktree list | tail -n +2 | while read p _ b _rest; do b=''${b//[\[\]]/}; state=$(gh pr view "$b" --json state -q .state 2>/dev/null); if [ "$state" = "MERGED" ] || [ -z "$state" ]; then git worktree remove "$p" && echo "Removed: $b (''${state:-no PR})"; fi; done' '';
     # マージ済み・リモート削除済みローカルブランチ一括削除（確認あり）
-    brm = ''bash -c 'git fetch --prune; b=$({ git branch --merged main | grep -v -E "^\*|main|master"; git branch -vv | grep ": gone]" | awk "{print \$1}"; } | sort -u); [ -z "$b" ] && echo "削除対象なし" && exit 0; echo "$b"; read -p "削除OK? (y/N): " a; [ "$a" = y ] && echo "$b" | xargs git branch -D' '';
+    brm = ''bash -c 'git fetch --prune; b=$({ git branch --merged main | grep -v -E "^\*|main|master"; git branch -vv | grep ": gone]" | awk "{print \$1}"; } | sed "s/^[ ]*//" | sort -u); [ -z "$b" ] && echo "削除対象なし" && exit 0; echo "$b"; read -p "削除OK? (y/N): " a; [ "$a" = y ] && echo "$b" | xargs git branch -D' '';
     # ローカルブランチをfzf選択して削除（protected除外・未マージ警告）
     bd = ''bash -c 'p="^(main|master|dev|develop|staging|production)$"; b=$(git branch | grep -v "^\*" | sed "s/^  //" | grep -v -E "$p" | fzf --layout=reverse --prompt "DELETE BRANCH>" --preview "if git merge-base --is-ancestor {} main 2>/dev/null; then echo \"[MERGED] mainにマージ済み\"; else echo \"[UNMERGED] 未マージコミットあり\"; git log main..{} --oneline; fi; echo; git log {} --oneline -5"); [ -z "$b" ] && exit 0; if git merge-base --is-ancestor "$b" main 2>/dev/null; then git branch -d "$b" && echo "削除: $b"; else read -p "未マージのコミットがあります。削除? (y/N): " a; [ "$a" = y ] && git branch -D "$b" && echo "強制削除: $b" || echo "キャンセル"; fi' '';
     # カレントディレクトリのパスをクリップボードにコピー
