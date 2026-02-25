@@ -247,6 +247,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\""
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
