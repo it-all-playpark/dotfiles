@@ -49,6 +49,7 @@ in
         opentofu
         postgresql_17
         procs
+        rclone
         rip2
         ripgrep
         ripgrep-all
