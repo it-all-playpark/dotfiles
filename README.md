@@ -32,6 +32,7 @@ dotconfig/
 ├── README.md
 ├── flake.nix         # nix-darwin / home-manager設定を統合したFlake定義
 ├── flake.lock        # Flake依存関係のロックファイル
+├── treefmt.nix       # treefmt-nix フォーマッター設定
 ├── darwin/
 │   └── default.nix   # nix-darwin（システム設定）の定義
 ├── home-manager/
@@ -130,6 +131,39 @@ Codex の設定は `codex/` ディレクトリで管理します。
 - `~/.codex/config.toml` を `config.base.toml + config.local.toml` で再生成
 
 機密情報（MCPキー等）は `~/.codex/config.local.toml` にのみ記載してください。
+
+## コード品質（Format / Lint）
+
+[treefmt-nix](https://github.com/numtide/treefmt-nix) を利用したフォーマット・リント基盤を導入しています。
+
+### 対応ツール
+
+| 言語 | フォーマッター | リンター |
+|------|--------------|---------|
+| Nix | nixfmt | - |
+| Python | ruff format | ruff check |
+| Lua | stylua | - |
+| Shell | shfmt | shellcheck |
+
+### 使い方
+
+```bash
+# 全ファイルをフォーマット
+nix fmt
+
+# フォーマット違反がないかチェック（CI向け）
+nix flake check
+
+# devShell に入る（shellcheck 等のリンターが使える）
+nix develop
+```
+
+### Pre-commit Hook
+
+`nix develop` で devShell に入ると、`.git/hooks/pre-commit` が自動設置されます。
+以降のコミット時に treefmt + shellcheck が自動実行され、フォーマット済みのコードのみがコミットされます。
+
+devShell 外からのコミットではフォーマットはスキップされます（警告メッセージを表示）。
 
 ## 注意事項
 

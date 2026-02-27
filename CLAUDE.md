@@ -29,6 +29,16 @@ nix run .#update-all
 ### Testing Changes
 After making configuration changes, always run the update command to apply them. The system will automatically rebuild and switch to the new configuration.
 
+### Format / Lint
+```bash
+# Format all files (nixfmt, ruff, stylua, shfmt)
+nix fmt
+
+# Check formatting (CI)
+nix flake check
+```
+The `nix develop` devShell auto-installs a git pre-commit hook that runs treefmt + shellcheck on staged files.
+
 ## Architecture and Key Components
 
 ### Flake Structure
@@ -37,6 +47,9 @@ After making configuration changes, always run the update command to apply them.
   - Platform detection (darwin/linux-x86/linux-arm)
   - Update scripts for easy maintenance
   - Integration of nix-darwin and home-manager
+  - treefmt-nix formatter integration (`nix fmt`)
+  - devShell with linters and pre-commit hook
+- **treefmt.nix**: Formatter configuration (nixfmt, ruff, stylua, shfmt)
 
 ### Configuration Organization
 - **darwin/**: macOS system-level settings (Dock, Finder, keyboard, Homebrew casks)
