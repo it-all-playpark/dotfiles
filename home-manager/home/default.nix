@@ -1,11 +1,16 @@
-{ pkgs, lib, config, username ? "naramotoyuuji", ... }:
+{
+  pkgs,
+  lib,
+  config,
+  username ? "naramotoyuuji",
+  ...
+}:
 let
   packages = import ../../common/packages.nix { inherit pkgs; };
 in
 {
   # claude-code のみ unfree を許可
-  nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (pkgs.lib.getName pkg) [ "claude-code" ];
+  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "claude-code" ];
 
   home = {
     username = username;
@@ -17,43 +22,45 @@ in
     stateVersion = "24.05"; # Please read the comment before changing.
 
     # 共通パッケージを全プラットフォームでインストール
-    packages = packages.commonPackages ++ (with pkgs; [
-      act
-      bat
-      claude-code
-      python313Packages.deepl
-      # devcontainer  # TODO: 一時的に無効化 - node-gyp offline build failure (nixpkgs upstream issue)
-      eza
-      fastfetch
-      fd
-      ffmpeg
-      flyctl
-      fzf
-      gh
-      ghq
-      jq
-      lazydocker
-      lazygit
-      mariadb
-      marp-cli
-      mise
-      ollama
-      # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
-      opentofu
-      postgresql_17
-      procs
-      rip2
-      ripgrep
-      ripgrep-all
-      sd
-      starship
-      stripe-cli
-      tbls
-      tldr
-      tmux
-      vips
-      zoxide
-    ]);
+    packages =
+      packages.commonPackages
+      ++ (with pkgs; [
+        act
+        bat
+        claude-code
+        python313Packages.deepl
+        # devcontainer  # TODO: 一時的に無効化 - node-gyp offline build failure (nixpkgs upstream issue)
+        eza
+        fastfetch
+        fd
+        ffmpeg
+        flyctl
+        fzf
+        gh
+        ghq
+        jq
+        lazydocker
+        lazygit
+        mariadb
+        marp-cli
+        mise
+        ollama
+        # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
+        opentofu
+        postgresql_17
+        procs
+        rip2
+        ripgrep
+        ripgrep-all
+        sd
+        starship
+        stripe-cli
+        tbls
+        tldr
+        tmux
+        vips
+        zoxide
+      ]);
 
     file = {
       ".tmux.conf".source = ./file/.tmux.conf;

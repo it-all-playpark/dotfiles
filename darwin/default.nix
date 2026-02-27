@@ -89,7 +89,10 @@ in
   # NixデーモンやNixコマンドの設定
   system.stateVersion = 4; # システムの状態バージョン（推奨値に更新）
   nix.settings = {
-    experimental-features = [ "nix-command" "flakes" ]; # 実験的機能を有効化
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ]; # 実験的機能を有効化
     trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
   };
 

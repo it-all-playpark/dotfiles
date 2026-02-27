@@ -9,6 +9,7 @@ Thresholds (tuned for 18GB RAM):
   - WARNING:  4 GB total claude RSS
   - CRITICAL: 8 GB total claude RSS
 """
+
 import json
 import os
 import subprocess

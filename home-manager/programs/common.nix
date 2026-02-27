@@ -1,15 +1,15 @@
 {
   shellSortcuts = {
     # ezaをlsとして利用
-    ls = ''eza --icons --git --time-style relative -la'';
+    ls = "eza --icons --git --time-style relative -la";
     lt = ''eza --icons --git --time-style relative --tree -aI "node_modules|.git|.cache"'';
     ltl = ''eza --icons --git --time-style relative --tree -alI "node_modules|.git|.cache"'';
     # batをcatとして利用
-    cat = ''bat'';
+    cat = "bat";
     # ripをrmとして利用
-    rm = ''rip'';
+    rm = "rip";
     # 選択した過去の実行コマンドをクリップボードにコピー
-    h = ''echo -n $(history | fzf +s --layout=reverse) | pbcopy'';
+    h = "echo -n $(history | fzf +s --layout=reverse) | pbcopy";
     # 選択したローカルリポジトリリストへの移動をgと定義
     g = ''cd "$(ghq list --full-path | fzf --layout=reverse --preview 'eza --icons --git --time-style relative -la {1}')"'';
     # git
@@ -18,13 +18,13 @@
     S = ''git switch "$(git branch -av | fzf --layout=reverse --prompt "GIT BRANCH>" | sd "\*" "" |awk '{print $1}')"'';
     # gh
     # githubブラウザページを開く
-    ghb = ''gh browse'';
+    ghb = "gh browse";
     # lazigit
-    lg = ''lazygit'';
+    lg = "lazygit";
     # lazydocker
-    ld = ''lazydocker'';
+    ld = "lazydocker";
     # yazi
-    y = ''yazi'';
+    y = "yazi";
     # git worktree移動（fzfで選択、ブランチ名表示）
     w = ''cd "$(git worktree list | awk '{print $3, $1}' | sd '\[|\]' "" | fzf --layout=reverse --prompt 'WORKTREE>' --with-nth=1 --preview 'git -C {2} log --oneline -20' | awk '{print $2}')"'';
     # merge済みworktree一括削除（PR未作成・MERGED対象、OPEN除外）
@@ -56,30 +56,30 @@
     dir = ''docker image rm $(docker image ls | fzf --layout=reverse --prompt "Docker Image>" --preview 'docker image inspect {3}'| awk '{print $3}')'';
     # 選択したコンテナボリュームを削除する
     dvr = ''docker volume rm $(docker volume ls | fzf --layout=reverse --prompt "Docker Volume>" --preview 'docker volume inspect {2}'| awk '{print $2}')'';
-    dp = ''docker ps'';
-    dpr = ''docker system prune -f'';
+    dp = "docker ps";
+    dpr = "docker system prune -f";
     # docker composeの略記
-    dc = ''docker compose'';
-    dcb = ''docker compose build --no-cache'';
-    dcu = ''docker compose up -d'';
-    dcd = ''docker compose down'';
-    dcp = ''docker compose ps'';
+    dc = "docker compose";
+    dcb = "docker compose build --no-cache";
+    dcu = "docker compose up -d";
+    dcd = "docker compose down";
+    dcp = "docker compose ps";
     # devcontainer
-    dvcb = ''devcontainer build --workspace-folder . --no-cache'';
-    dvcu = ''devcontainer up --workspace-folder .'';
-    dvcur = ''devcontainer up --workspace-folder . --remove-existing-container'';
-    dvcd = ''docker compose -p (basename (pwd))_devcontainer down'';
-    dvce = ''vt devcontainer exec --workspace-folder . zsh'';
-    dvcc = ''vt devcontainer exec --workspace-folder . claude --dangerously-skip-permissions -r'';
+    dvcb = "devcontainer build --workspace-folder . --no-cache";
+    dvcu = "devcontainer up --workspace-folder .";
+    dvcur = "devcontainer up --workspace-folder . --remove-existing-container";
+    dvcd = "docker compose -p (basename (pwd))_devcontainer down";
+    dvce = "vt devcontainer exec --workspace-folder . zsh";
+    dvcc = "vt devcontainer exec --workspace-folder . claude --dangerously-skip-permissions -r";
     # gcloud
     # config切り替え
-    gca = ''gcloud config configurations activate $(gcloud config configurations list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')'';
-    gcp = ''gcloud config set project $(gcloud projects list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')'';
+    gca = "gcloud config configurations activate $(gcloud config configurations list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')";
+    gcp = "gcloud config set project $(gcloud projects list | fzf --layout=reverse --prompt 'config>' | awk '{print $1}')";
     # global ip確認
-    ip = ''echo -n $(dig myip.opendns.com @208.67.222.222 +short) | pbcopy ; pbpaste'';
+    ip = "echo -n $(dig myip.opendns.com @208.67.222.222 +short) | pbcopy ; pbpaste";
     # deepl
-    tre = ''deepl text --to en-us '';
-    trj = ''deepl text --to ja '';
+    tre = "deepl text --to en-us ";
+    trj = "deepl text --to ja ";
   };
   shellAleases = { };
 }

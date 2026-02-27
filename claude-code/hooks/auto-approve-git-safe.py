@@ -5,6 +5,7 @@ Auto-approves:
 - git add, commit, status, restore --staged (and chained combinations)
 - git commit with -m / -F flags (with optional env/config prefixes)
 """
+
 import json
 import re
 import sys

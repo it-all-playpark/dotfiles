@@ -6,6 +6,7 @@ Blocks:
 2. git push from protected branches
 3. git push to protected branches via refspec
 """
+
 import json
 import re
 import subprocess

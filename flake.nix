@@ -20,27 +20,43 @@
       url = "github:ryoppippi/claude-code-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # treefmt-nix - フォーマッター統合（nix fmt）
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { nixpkgs
-    , home-manager
-    , nix-darwin
-    , claude-code-overlay
-    , ...
+    {
+      self,
+      nixpkgs,
+      home-manager,
+      nix-darwin,
+      claude-code-overlay,
+      treefmt-nix,
+      ...
     }:
     let
       # サポートするシステムのリスト
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
 
       # 各システム向けの関数を生成するヘルパー関数
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
       # 各システム用のnixpkgsインスタンスを生成（claude-code-overlay を適用）
-      nixpkgsFor = forAllSystems (system: import nixpkgs {
-        inherit system;
-        overlays = [ claude-code-overlay.overlays.default ];
-      });
+      nixpkgsFor = forAllSystems (
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [ claude-code-overlay.overlays.default ];
+        }
+      );
 
       # サポートするユーザーのリスト
       usernames = [
@@ -82,16 +98,17 @@
           };
 
           # 複数ユーザーの設定をマージ
-          mergeConfigs = configs: username:
-            configs // (mkHomeConfig username);
+          mergeConfigs = configs: username: configs // (mkHomeConfig username);
         in
         # すべてのユーザー設定をマージして含める
         nixpkgs.lib.foldl mergeConfigs { } usernames;
 
       # Darwinの構成を出力に追加（macOSのみ）
       # ユーザーごとにdarwin構成を生成
-      darwinConfigurations = nixpkgs.lib.foldl (configs: username:
-        configs // {
+      darwinConfigurations = nixpkgs.lib.foldl (
+        configs: username:
+        configs
+        // {
           "MyMBP-${username}" = nix-darwin.lib.darwinSystem {
             system = "aarch64-darwin"; # Apple Silicon MacBook用
             modules = [
@@ -106,94 +123,164 @@
       apps = forAllSystems (system: {
         update = {
           type = "app";
-          program = toString (nixpkgsFor.${system}.writeShellScript "update-script" ''
-            set -e
-            # デフォルトユーザー名を設定
-            USERNAME=''${1:-naramotoyuuji}
+          program = toString (
+            nixpkgsFor.${system}.writeShellScript "update-script" ''
+              set -e
+              # デフォルトユーザー名を設定
+              USERNAME=''${1:-naramotoyuuji}
 
-            echo "Updating flake for user: $USERNAME..."
-            nix flake update
+              echo "Updating flake for user: $USERNAME..."
+              nix flake update
 
-            # システムタイプに基づいて適切な設定を使用
-            if [[ "$(uname)" == "Darwin" ]]; then
-              # macOS系の場合
-              echo "Detected macOS environment"
-              echo "Updating home-manager..."
-              nix run home-manager -- switch --flake .#''${USERNAME}-darwin
+              # システムタイプに基づいて適切な設定を使用
+              if [[ "$(uname)" == "Darwin" ]]; then
+                # macOS系の場合
+                echo "Detected macOS environment"
+                echo "Updating home-manager..."
+                nix run home-manager -- switch --flake .#''${USERNAME}-darwin
 
-              echo "Updating nix-darwin..."
-              sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
-            else
-              # Linux系の場合（WSLを含む）
-              echo "Detected Linux environment"
-              echo "Updating home-manager..."
-
-              # アーキテクチャを検出
-              ARCH=$(uname -m)
-              if [[ "$ARCH" == "x86_64" ]]; then
-                nix run home-manager -- switch --flake .#''${USERNAME}-linux-x86
-              elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-                nix run home-manager -- switch --flake .#''${USERNAME}-linux-arm
+                echo "Updating nix-darwin..."
+                sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
               else
-                echo "Unsupported architecture: $ARCH"
-                exit 1
-              fi
-            fi
+                # Linux系の場合（WSLを含む）
+                echo "Detected Linux environment"
+                echo "Updating home-manager..."
 
-            echo "Update complete!"
-          '');
+                # アーキテクチャを検出
+                ARCH=$(uname -m)
+                if [[ "$ARCH" == "x86_64" ]]; then
+                  nix run home-manager -- switch --flake .#''${USERNAME}-linux-x86
+                elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+                  nix run home-manager -- switch --flake .#''${USERNAME}-linux-arm
+                else
+                  echo "Unsupported architecture: $ARCH"
+                  exit 1
+                fi
+              fi
+
+              echo "Update complete!"
+            ''
+          );
         };
 
         # すべてのユーザーを更新するスクリプト
         "update-all" = {
           type = "app";
-          program = toString (nixpkgsFor.${system}.writeShellScript "update-all-script" ''
-            set -e
-            # すべてのユーザー名を配列で定義
-            USERNAMES=("naramotoyuuji" "yuji_naramoto")
+          program = toString (
+            nixpkgsFor.${system}.writeShellScript "update-all-script" ''
+              set -e
+              # すべてのユーザー名を配列で定義
+              USERNAMES=("naramotoyuuji" "yuji_naramoto")
 
-            echo "Updating flake for all users..."
-            nix flake update
+              echo "Updating flake for all users..."
+              nix flake update
 
-            # システムタイプに基づいて処理
-            if [[ "$(uname)" == "Darwin" ]]; then
-              # macOS系の場合
-              echo "Detected macOS environment"
+              # システムタイプに基づいて処理
+              if [[ "$(uname)" == "Darwin" ]]; then
+                # macOS系の場合
+                echo "Detected macOS environment"
 
-              # 各ユーザーのhome-managerとnix-darwin設定を更新
-              for USERNAME in "''${USERNAMES[@]}"; do
-                echo "Updating home-manager for user: $USERNAME..."
-                nix run home-manager -- switch --flake .#''${USERNAME}-darwin
-                echo "Updating nix-darwin for user: $USERNAME..."
-                sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
-              done
-            else
-              # Linux系の場合
-              echo "Detected Linux environment"
-
-              # アーキテクチャを検出
-              ARCH=$(uname -m)
-              SUFFIX=""
-
-              if [[ "$ARCH" == "x86_64" ]]; then
-                SUFFIX="linux-x86"
-              elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-                SUFFIX="linux-arm"
+                # 各ユーザーのhome-managerとnix-darwin設定を更新
+                for USERNAME in "''${USERNAMES[@]}"; do
+                  echo "Updating home-manager for user: $USERNAME..."
+                  nix run home-manager -- switch --flake .#''${USERNAME}-darwin
+                  echo "Updating nix-darwin for user: $USERNAME..."
+                  sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
+                done
               else
-                echo "Unsupported architecture: $ARCH"
-                exit 1
+                # Linux系の場合
+                echo "Detected Linux environment"
+
+                # アーキテクチャを検出
+                ARCH=$(uname -m)
+                SUFFIX=""
+
+                if [[ "$ARCH" == "x86_64" ]]; then
+                  SUFFIX="linux-x86"
+                elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+                  SUFFIX="linux-arm"
+                else
+                  echo "Unsupported architecture: $ARCH"
+                  exit 1
+                fi
+
+                # 各ユーザーのhome-manager設定を更新
+                for USERNAME in "''${USERNAMES[@]}"; do
+                  echo "Updating home-manager for user: $USERNAME..."
+                  nix run home-manager -- switch --flake .#''${USERNAME}-$SUFFIX
+                done
               fi
 
-              # 各ユーザーのhome-manager設定を更新
-              for USERNAME in "''${USERNAMES[@]}"; do
-                echo "Updating home-manager for user: $USERNAME..."
-                nix run home-manager -- switch --flake .#''${USERNAME}-$SUFFIX
-              done
-            fi
-
-            echo "All updates complete!"
-          '');
+              echo "All updates complete!"
+            ''
+          );
         };
       });
+
+      # フォーマッター（nix fmt で実行）
+      formatter = forAllSystems (
+        system:
+        let
+          treefmtEval = treefmt-nix.lib.evalModule nixpkgsFor.${system} ./treefmt.nix;
+        in
+        treefmtEval.config.build.wrapper
+      );
+
+      # フォーマットチェック（nix flake check で実行）
+      checks = forAllSystems (
+        system:
+        let
+          treefmtEval = treefmt-nix.lib.evalModule nixpkgsFor.${system} ./treefmt.nix;
+        in
+        {
+          formatting = treefmtEval.config.build.check self;
+        }
+      );
+
+      # 開発シェル（リンター等の追加ツール + pre-commit hook 自動設置）
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgsFor.${system};
+          treefmtEval = treefmt-nix.lib.evalModule nixpkgsFor.${system} ./treefmt.nix;
+          treefmtWrapper = treefmtEval.config.build.wrapper;
+        in
+        {
+          default = pkgs.mkShell {
+            packages = [
+              treefmtWrapper
+              pkgs.shellcheck
+            ];
+            shellHook = ''
+                            if [ -d .git ]; then
+                              mkdir -p .git/hooks
+                              cat > .git/hooks/pre-commit << 'HOOK'
+              #!/usr/bin/env bash
+              set -euo pipefail
+
+              # Get staged files
+              STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+              [ -z "$STAGED" ] && exit 0
+
+              # Format staged files with treefmt (skip if not in devShell)
+              if command -v treefmt &>/dev/null; then
+                echo "$STAGED" | xargs treefmt
+                echo "$STAGED" | xargs git add
+              else
+                echo "pre-commit: treefmt not found, skipping format (run 'nix develop' first)"
+              fi
+
+              # Lint: shellcheck
+              SH_FILES=$(echo "$STAGED" | grep '\.sh$' || true)
+              if [ -n "$SH_FILES" ] && command -v shellcheck &>/dev/null; then
+                echo "$SH_FILES" | xargs shellcheck
+              fi
+              HOOK
+                              chmod +x .git/hooks/pre-commit
+                            fi
+            '';
+          };
+        }
+      );
     };
 }

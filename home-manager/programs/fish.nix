@@ -37,7 +37,7 @@ in
         rm -f -- "$tmp"
       '';
       # terraformをopenTofuで代用
-      terraform = ''tofu'';
+      terraform = "tofu";
       # rembg: 専用venv環境で実行 (numba互換性問題の回避)
       rembg = ''
         set -l venv_path "$HOME/.local/share/rembg-env"

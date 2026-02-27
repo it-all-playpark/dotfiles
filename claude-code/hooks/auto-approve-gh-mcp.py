@@ -4,6 +4,7 @@
 Safe gh MCP tools (read-only operations) are auto-approved.
 Tools containing destructive keywords are left for manual approval.
 """
+
 import json
 import re
 import sys
