@@ -216,6 +216,15 @@
             "command": "echo 'Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes.'"
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SCRIPT=\"$HOME/.claude/skills/claude-zombie-kill/scripts/zombie-kill.sh\"; [[ -x \"$SCRIPT\" ]] && bash \"$SCRIPT\" --force --min-hours 48"
+          }
+        ]
       }
     ],
     "PreToolUse": [
