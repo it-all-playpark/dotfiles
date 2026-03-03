@@ -45,9 +45,8 @@
 │       └── common.nix
 ├── claude-code/                # Claude Code project config (hooks, modes, settings)
 ├── codex/                      # Codex AI agent config
-├── openclaw/                   # OpenClaw config (symlinked from ~/.openclaw)
 └── scripts/
-    └── setup-skills.sh         # Skills symlink setup (Claude Code, OpenClaw, Codex, Antigravity)
+    └── setup-skills.sh         # Skills symlink setup (Claude Code, Codex, Antigravity)
 ```
 
 ## Template Files
@@ -75,7 +74,6 @@ Skills are in a separate repository: [it-all-playpark/skills](https://github.com
 `scripts/setup-skills.sh` creates symlinks for:
 
 - Claude Code (`~/.claude/skills`)
-- OpenClaw (`~/.openclaw/skills`)
 - Codex (`~/.codex/skills`)
 - Antigravity (`~/.gemini/antigravity/skills`)
 

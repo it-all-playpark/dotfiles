@@ -168,45 +168,6 @@ in
       fi
     '';
 
-    # OpenClaw 設定を dotfiles/openclaw/ からシンボリックリンクで参照
-    # ~/.openclaw 自体をシンボリックリンクにして、設定ファイルを一元管理
-    activation.setupOpenclaw = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      DOTFILES_OPENCLAW="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/openclaw"
-      OPENCLAW_DIR="${config.home.homeDirectory}/.openclaw"
-
-      # dotfiles が存在しない場合はスキップ（初回セットアップ時などを考慮）
-      if [ ! -d "$DOTFILES_OPENCLAW" ]; then
-        echo "Warning: $DOTFILES_OPENCLAW does not exist. Skipping OpenClaw setup."
-        exit 0
-      fi
-
-      # ~/.openclaw がシンボリックリンクでない場合の処理
-      if [ -e "$OPENCLAW_DIR" ] && [ ! -L "$OPENCLAW_DIR" ]; then
-        # 既存のディレクトリをバックアップ
-        BACKUP_DIR="$OPENCLAW_DIR.backup.$(date +%Y%m%d%H%M%S)"
-        echo "Backing up existing .openclaw directory to $BACKUP_DIR"
-        mv "$OPENCLAW_DIR" "$BACKUP_DIR"
-
-        # バックアップから credentials, identity, .env をコピー（存在する場合）
-        # -p オプションでパーミッションを保持（機密ファイル向け）
-        if [ -d "$BACKUP_DIR/credentials" ]; then
-          cp -rp "$BACKUP_DIR/credentials" "$DOTFILES_OPENCLAW/credentials"
-        fi
-        if [ -d "$BACKUP_DIR/identity" ]; then
-          cp -rp "$BACKUP_DIR/identity" "$DOTFILES_OPENCLAW/identity"
-        fi
-        if [ -f "$BACKUP_DIR/.env" ]; then
-          cp "$BACKUP_DIR/.env" "$DOTFILES_OPENCLAW/.env"
-        fi
-      elif [ -L "$OPENCLAW_DIR" ]; then
-        # 既存のシンボリックリンクを削除（正しいリンク先に更新するため）
-        rm "$OPENCLAW_DIR"
-      fi
-
-      # ~/.openclaw → dotfiles/openclaw/ のシンボリックリンク作成
-      ln -sfn "$DOTFILES_OPENCLAW" "$OPENCLAW_DIR"
-    '';
-
     # Codex 設定を dotfiles/codex/ から同期
     # runtime データを維持しつつ、静的設定のみを管理する
     activation.setupCodex = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

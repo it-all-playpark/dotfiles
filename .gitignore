@@ -20,26 +20,6 @@ codex/config.local.toml
 codex/*.local.toml
 codex/**/*.local.toml
 
-# OpenClaw - sensitive and runtime data
-openclaw/.env
-openclaw/skills
-openclaw/credentials/
-openclaw/identity/
-openclaw/media/
-openclaw/memory/
-openclaw/logs/
-openclaw/devices/
-openclaw/browser/
-openclaw/canvas/
-openclaw/agents/*/sessions/
-openclaw/agents/*/agent/auth-profiles.json
-openclaw/agents/*/agent/models.json
-openclaw/**/*.bak
-openclaw/**/*.bak.*
-openclaw/update-check.json
-openclaw/exec-approvals.json
-openclaw/cron/state.json
-
 # Sensitive authentication files (global)
 **/auth-profiles.json
 **/*.credentials.json
