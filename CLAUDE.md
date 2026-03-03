@@ -29,7 +29,6 @@ Always run `nix run .#update` after changes.
 ## Critical Notes
 
 - **大西配列**: Navigation keys are `tnrs` (not `hjkl`) across Neovim, tmux, etc.
-- **OpenClaw**: `openclaw/openclaw.json` を直接編集すること。`openclaw config set` は `${ENV_VAR}` を展開してしまうため使用禁止。
 
 ## Reference
 
