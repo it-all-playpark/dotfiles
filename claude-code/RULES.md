@@ -150,16 +150,14 @@ Actionable rules for enhanced Claude Code framework operation.
 ## Tool Optimization
 **Priority**: 🟢 **Triggers**: Multi-step operations, performance needs, complex tasks
 
-- **Best Tool Selection**: Always use the most powerful tool for each task (MCP > Native > Basic)
+- **Best Tool Selection**: Always use the most powerful tool for each task
 - **Parallel Everything**: Execute independent operations in parallel, never sequentially
 - **Agent Delegation**: Use Task agents for complex multi-step operations (>3 steps)
-- **MCP Server Usage**: Leverage specialized MCP servers for their strengths (morphllm for bulk edits, sequential-thinking for analysis)
 - **Batch Operations**: Use MultiEdit over multiple Edits, batch Read calls, group operations
 - **Powerful Search**: Use Grep tool over bash grep, Glob over find, specialized search tools
 - **Efficiency First**: Choose speed and power over familiarity - use the fastest method available
-- **Tool Specialization**: Match tools to their designed purpose (e.g., playwright for web, context7 for docs)
 
-✅ **Right**: Use MultiEdit for 3+ file changes, parallel Read calls  
+✅ **Right**: Use MultiEdit for 3+ file changes, parallel Read calls
 ❌ **Wrong**: Sequential Edit calls, bash grep instead of Grep tool
 
 ## File Organization
@@ -235,9 +233,8 @@ Task type → Best tool:
 ├─ Multi-file edits → MultiEdit > individual Edits
 ├─ Complex analysis → Task agent > native reasoning
 ├─ Code search → Grep > bash grep
-├─ UI components → Magic MCP > manual coding  
-├─ Documentation → Context7 MCP > web search
-└─ Browser testing → Playwright MCP > unit tests
+├─ Symbol operations → Serena MCP > manual search
+└─ Codebase navigation → Serena MCP > file-by-file reading
 ```
 
 ### Priority-Based Quick Actions
@@ -256,8 +253,7 @@ Task type → Best tool:
 - Professional language (no marketing superlatives)
 - Clean workspace (remove temp files)
 
-#### 🟢 RECOMMENDED (Apply When Practical)  
+#### 🟢 RECOMMENDED (Apply When Practical)
 - Parallel operations over sequential
 - Descriptive naming conventions
-- MCP tools over basic alternatives
 - Batch operations when possible
