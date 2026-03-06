@@ -17,20 +17,10 @@
       "Task",
       "Skill",
       "WebSearch",
-      "mcp__morphllm-fast-apply",
       "mcp__serena",
       "mcp__*"
     ],
     "deny": [
-      "mcp__gh__merge_pull_request",
-      "mcp__gh__delete_repo",
-      "mcp__gh__transfer_repo",
-      "mcp__gh__archive_repo",
-      "mcp__gh__delete_ref",
-      "mcp__gh__update_ref",
-      "mcp__gh__secret_set",
-      "mcp__gh__secret_remove",
-      "mcp__gh__auth_token",
       "Bash(gh repo delete:*)",
       "Bash(gh repo rename:*)",
       "Bash(gh repo transfer:*)",
@@ -228,15 +218,6 @@
       }
     ],
     "PreToolUse": [
-      {
-        "matcher": "mcp__gh__",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$HOME/.claude/hooks/auto-approve-gh-mcp.py\""
-          }
-        ]
-      },
       {
         "matcher": "Bash",
         "hooks": [

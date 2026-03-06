@@ -134,7 +134,7 @@ Actionable rules for enhanced Claude Code framework operation.
 **Priority**: 🔴 **Triggers**: Session start, before changes, risky operations
 
 - **Always Check Status First**: Start every session with `git status` and `git branch`
-- **Feature Branches Only**: Create feature branches for ALL work, never work on main/master
+- **Feature Branches Only**: Create feature branches for ALL work, never work on main/master. Exception: `dev` branch allows direct push
 - **Incremental Commits**: Commit frequently with meaningful messages, not giant commits
 - **Verify Before Commit**: Always `git diff` to review changes before staging
 - **Create Restore Points**: Commit before risky operations for easy rollback
@@ -142,9 +142,10 @@ Actionable rules for enhanced Claude Code framework operation.
 - **Clean History**: Use descriptive commit messages, avoid "fix", "update", "changes"
 - **Non-Destructive Workflow**: Always preserve ability to rollback changes
 
-✅ **Right**: `git checkout -b feature/auth` → work → commit → PR  
-❌ **Wrong**: Work directly on main/master branch  
-**Detection**: `git branch` should show feature branch, not main/master
+✅ **Right**: `git checkout -b feature/auth` → work → commit → PR
+✅ **Right**: Direct push to `dev` for small fixes or CI/config changes
+❌ **Wrong**: Work directly on main/master branch
+**Detection**: `git branch` should show feature branch or dev, not main/master
 
 ## Tool Optimization
 **Priority**: 🟢 **Triggers**: Multi-step operations, performance needs, complex tasks
