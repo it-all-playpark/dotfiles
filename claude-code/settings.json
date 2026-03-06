@@ -223,15 +223,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$HOME/.claude/hooks/auto-approve-git-safe.py\""
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
             "command": "python3 \"$HOME/.claude/hooks/protect-branches.py\""
           }
         ]
