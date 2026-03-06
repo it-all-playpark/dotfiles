@@ -68,6 +68,16 @@
       "Bash(git push origin main:main)",
       "Bash(git push origin master:master)",
       "Bash(git push origin :*)",
+      "Bash(git push *:main)",
+      "Bash(git push *:master)",
+      "Bash(git push *:dev)",
+      "Bash(git push *:develop)",
+      "Bash(git push *:development)",
+      "Bash(git push *:refs/heads/main)",
+      "Bash(git push *:refs/heads/master)",
+      "Bash(git push *:refs/heads/dev)",
+      "Bash(git push *:refs/heads/develop)",
+      "Bash(git push *:refs/heads/development)",
       "Bash(git push origin --delete dev)",
       "Bash(git push origin --delete develop)",
       "Bash(git push origin --delete development)",
@@ -217,17 +227,7 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$HOME/.claude/hooks/protect-branches.py\""
-          }
-        ]
-      }
-    ],
+    "PreToolUse": [],
     "PostToolUse": [
       {
         "matcher": "",
