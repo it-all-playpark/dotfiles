@@ -16,10 +16,12 @@ uv = "latest"
 "npm:tsx" = "latest"
 "npm:dotenv-cli" = "latest"
 "npm:neonctl" = "latest"
+"npm:@googleworkspace/cli" = "latest"
 rust = "latest"
 pnpm = "latest"
 go = "latest"
 yarn = "latest"
+java = "21"
 
 [settings]
 experimental = true
