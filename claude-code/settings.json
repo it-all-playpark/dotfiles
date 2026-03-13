@@ -251,5 +251,6 @@
       }
     ]
   },
-  "language": "ja"
+  "language": "ja",
+  "voiceEnabled": true
 }
