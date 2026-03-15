@@ -1,0 +1,114 @@
+{
+  "blog-fact-check": {
+    "check_targets": ["statistics", "pricing", "versions", "dates"],
+    "severity_threshold": "warning",
+    "output_dir": "claudedocs"
+  },
+
+  "blog-seo-improve": {
+    "thresholds": {
+      "low_ctr": 0.02,
+      "high_bounce": 0.75,
+      "min_impressions": 50
+    },
+    "output_dir": "claudedocs"
+  },
+
+  "blog-internal-links": {
+    "min_links_per_article": 2,
+    "max_links_per_article": 5,
+    "prevent_future_links": true,
+    "output_dir": "claudedocs"
+  },
+
+  "blog-schedule-overview": {
+    "publish_days": ["monday", "thursday"],
+    "lookahead_days": 30,
+    "lookback_days": 7
+  },
+
+  "get-publish-date": {
+    "publish_days": ["monday", "thursday"],
+    "content_dir": "content/blog"
+  },
+
+  "blog-mv-date": {
+    "content_dir": "content/blog",
+    "image_dir": "public/blog",
+    "image_ext": ".webp",
+    "seed_dir": "seed",
+    "sns_post_dir": "post/blog"
+  },
+
+  "blog-swap-dates": {
+    "content_dir": "content/blog",
+    "image_dir": "public/blog",
+    "image_ext": ".webp",
+    "seed_dir": "seed",
+    "sns_post_dir": "post/blog"
+  },
+
+  "cross-post-publish": {
+    "content_dir": "content/blog",
+    "cross_post_dir": "post/cross-post",
+    "cross_post_categories": ["tech-tips", "lab-reports"]
+  },
+
+  "generate-thumbnail": {
+    "output_dir": "public/blog",
+    "gemini_model": "gemini-3-pro-image-preview",
+    "aspect_ratio": "16:9",
+    "brand_prompt_path": ""
+  },
+
+  "sales-tracker": {
+    "spreadsheet": {
+      "id": "1ZhUcU6IVPIAC6Y0jjASLEjmyoW5n0Qq0ZjfPPrMnVEg",
+      "name": "営業パイプライン管理",
+      "sheets": {
+        "pipeline": "パイプライン",
+        "customer": "顧客マスタ",
+        "activity": "活動履歴"
+      }
+    },
+    "pipeline_columns": [
+      "企業名", "担当者名", "アポ回数", "ステータス", "セールスフェーズ",
+      "最終接触日", "ネクストアクション", "NA期限", "NA予定者"
+    ],
+    "customer_columns": [
+      "企業名", "電話番号", "メールアドレス", "部署・拠点名", "担当者名",
+      "担当者名カナ", "役職", "FAX番号", "郵便番号", "住所", "企業HP URL",
+      "設立年月日", "上場区分", "従業員数", "業種（分類１）", "業種（分類２）",
+      "業種（分類３）", "資本金", "売上高", "決算期", "リード取得元", "アプローチリスト名称"
+    ],
+    "activity_columns": [
+      "企業名", "日付", "種別", "アプローチ手法",
+      "議題・内容サマリー", "結果", "ネクストアクション", "議事録リンク"
+    ],
+    "statuses": [
+      "初回ヒアリング済", "提案中", "見積提出", "クロージング", "受注", "失注"
+    ],
+    "slack": {
+      "workspace": "playpark",
+      "channel": "sales",
+      "remind_days_before": 1
+    }
+  },
+
+  "meeting-followup": {
+    "defaults": {
+      "scheduling_url": "https://timerex.net/s/yuuki.eguchi_0083/09860501",
+      "document_url": "https://sales-crowd.jp/doc_uploadfile/sales_1750382296.pdf",
+      "meeting_url": "https://meet.google.com/auo-tude-jko",
+      "sender_name": "奈良本",
+      "company_name": "プレイパーク"
+    },
+    "email_template": {
+      "subject": "本日のお打ち合わせのお礼【{{company_name}} {{sender_name}}】",
+      "closing": "引き続き、どうぞよろしくお願いいたします。"
+    },
+    "minutes": {
+      "output_dir": "claudedocs/minutes"
+    }
+  }
+}
