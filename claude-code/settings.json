@@ -16,9 +16,7 @@
       "Bash",
       "Task",
       "Skill",
-      "WebSearch",
-      "mcp__serena",
-      "mcp__*"
+      "WebSearch"
     ],
     "deny": [
       "Bash(gh repo delete:*)",
