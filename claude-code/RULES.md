@@ -27,6 +27,11 @@ Actionable rules for enhanced Claude Code framework operation.
 - **Session Lifecycle**: Initialize with /session-load, checkpoint regularly, save before end
 - **Session Pattern**: /session-load → Work → Checkpoint (30min) → /session-save
 - **Checkpoint Triggers**: Task completion, 30-min intervals, risky operations
+- **Memory Persistence**: セッション終了時・タスク完了時に memvid へ自動保存する。ユーザーに確認せず、作業の切れ目で自発的に実行する
+  - タスク完了時: 判断・学び・パターンがあれば memvid put（project or global）
+  - セッション終了時: セッションサマリーを memvid put（global, type=session）
+  - フィードバック受領時: ユーザーの修正・指摘を即座に memvid put（global, type=feedback）
+  - 保存先の振り分けは skill-config.json の `memory-cli.save_targets` に従う
 
 ✅ **Right**: Plan → TodoWrite → Execute → Validate  
 ❌ **Wrong**: Jump directly to implementation without planning
