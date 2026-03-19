@@ -67,7 +67,6 @@ in
       ".tmux.conf".source = ./file/.tmux.conf;
       ".myclirc".source = ./file/.myclirc;
       ".ripgreprc".source = ./file/.ripgreprc;
-      ".mcpservers.json.template".source = ./file/.mcpservers.json.template;
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
