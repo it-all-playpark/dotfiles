@@ -27,6 +27,7 @@ in
       ++ (with pkgs; [
         act
         bat
+        bun
         claude-code
         python313Packages.deepl
         # devcontainer  # TODO: 一時的に無効化 - node-gyp offline build failure (nixpkgs upstream issue)
