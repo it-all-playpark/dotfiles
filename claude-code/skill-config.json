@@ -61,41 +61,7 @@
     "brand_prompt_path": ""
   },
 
-  "sales-tracker": {
-    "spreadsheet": {
-      "id": "1ZhUcU6IVPIAC6Y0jjASLEjmyoW5n0Qq0ZjfPPrMnVEg",
-      "name": "営業パイプライン管理",
-      "sheets": {
-        "pipeline": "パイプライン",
-        "customer": "顧客マスタ",
-        "activity": "活動履歴"
-      }
-    },
-    "pipeline_columns": [
-      "企業名", "担当者名", "アポ回数", "ステータス", "セールスフェーズ",
-      "最終接触日", "ネクストアクション", "NA期限", "NA予定者"
-    ],
-    "customer_columns": [
-      "企業名", "電話番号", "メールアドレス", "部署・拠点名", "担当者名",
-      "担当者名カナ", "役職", "FAX番号", "郵便番号", "住所", "企業HP URL",
-      "設立年月日", "上場区分", "従業員数", "業種（分類１）", "業種（分類２）",
-      "業種（分類３）", "資本金", "売上高", "決算期", "リード取得元", "アプローチリスト名称"
-    ],
-    "activity_columns": [
-      "企業名", "日付", "種別", "アプローチ手法",
-      "議題・内容サマリー", "結果", "ネクストアクション", "議事録リンク"
-    ],
-    "statuses": [
-      "初回ヒアリング済", "提案中", "見積提出", "クロージング", "受注", "失注"
-    ],
-    "slack": {
-      "workspace": "playpark",
-      "channel": "sales",
-      "remind_days_before": 1
-    }
-  },
-
-  "meeting-followup": {
+  "sales": {
     "defaults": {
       "scheduling_url": "https://timerex.net/s/yuuki.eguchi_0083/09860501",
       "document_url": "https://sales-crowd.jp/doc_uploadfile/sales_1750382296.pdf",
@@ -107,8 +73,7 @@
       "subject": "本日のお打ち合わせのお礼【{{company_name}} {{sender_name}}】",
       "closing": "引き続き、どうぞよろしくお願いいたします。"
     },
-    "minutes": {
-      "output_dir": "claudedocs/minutes"
-    }
+    "remind_days_before": 1,
+    "repo_path": "~/ghq/github.com/playpark-llc/sales"
   }
 }
