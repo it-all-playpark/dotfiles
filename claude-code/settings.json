@@ -16,7 +16,11 @@
       "Bash",
       "Task",
       "Skill",
-      "WebSearch"
+      "WebSearch",
+      "mcp__plugin_telegram_telegram__reply",
+      "mcp__plugin_telegram_telegram__react",
+      "mcp__plugin_telegram_telegram__edit_message",
+      "mcp__plugin_telegram_telegram__download_attachment"
     ],
     "deny": [
       "Bash(gh repo delete:*)",
@@ -248,6 +252,10 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true
   },
   "language": "ja",
   "voiceEnabled": true
