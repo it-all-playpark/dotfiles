@@ -30,7 +30,6 @@ in
         bun
         claude-code
         python313Packages.deepl
-        # devcontainer  # TODO: 一時的に無効化 - node-gyp offline build failure (nixpkgs upstream issue)
         eza
         fastfetch
         fd
@@ -40,13 +39,11 @@ in
         gh
         ghq
         jq
-        lazydocker
         lazygit
         mariadb
         marp-cli
         mise
         ollama
-        # mycli  # TODO: 一時的に無効化 - llm 0.28 のテスト失敗 (nixpkgs upstream issue)
         opentofu
         postgresql_17
         procs
