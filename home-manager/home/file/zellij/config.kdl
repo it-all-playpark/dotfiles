@@ -1,0 +1,137 @@
+// Zellij config — tmux.conf からの移植
+// 大西配列: t=left, n=down, r=up, s=right
+
+// テーマ・外観
+theme "default"
+default_layout "compact"
+pane_frames false
+ui {
+    pane_frames {
+        rounded_corners true
+        hide_session_name true
+    }
+}
+
+// マウス操作を有効化
+mouse_mode true
+
+// コピーモード: vi キーバインド
+copy_command "pbcopy"
+scrollback_editor "nvim"
+
+// セッション名を表示
+session_serialization true
+serialize_pane_viewport true
+
+// キーバインド定義
+keybinds clear-defaults=true {
+
+    // === 共通（全モードで有効） ===
+    shared_except "locked" {
+        // ペイン移動（大西配列: Alt+t/n/r/s）
+        bind "Alt t" { MoveFocusOrTab "Left"; }
+        bind "Alt n" { MoveFocus "Down"; }
+        bind "Alt r" { MoveFocus "Up"; }
+        bind "Alt s" { MoveFocusOrTab "Right"; }
+
+        // ペインリサイズ（Ctrl+Alt+t/n/r/s）
+        bind "Ctrl Alt t" { Resize "Increase Left"; }
+        bind "Ctrl Alt n" { Resize "Increase Down"; }
+        bind "Ctrl Alt r" { Resize "Increase Up"; }
+        bind "Ctrl Alt s" { Resize "Increase Right"; }
+
+        // ペイン分割
+        bind "Alt Right" { NewPane "Right"; }
+        bind "Alt Down" { NewPane "Down"; }
+
+        // ペイン操作
+        bind "Alt q" { CloseFocus; }
+        bind "Alt z" { ToggleFocusFullscreen; }
+
+        // タブ（ウィンドウ）操作
+        bind "Alt T" { GoToPreviousTab; }
+        bind "Alt S" { GoToNextTab; }
+        bind "Alt y" { NewTab; }
+        bind "Alt Q" { CloseTab; }
+
+        // タブ番号で直接移動
+        bind "Alt 1" { GoToTab 1; }
+        bind "Alt 2" { GoToTab 2; }
+        bind "Alt 3" { GoToTab 3; }
+        bind "Alt 4" { GoToTab 4; }
+        bind "Alt 5" { GoToTab 5; }
+        bind "Alt 6" { GoToTab 6; }
+        bind "Alt 7" { GoToTab 7; }
+        bind "Alt 8" { GoToTab 8; }
+        bind "Alt 9" { GoToTab 9; }
+
+        // コピーモード（スクロール）
+        bind "Alt i" { SwitchToMode "Scroll"; }
+
+        // セッション操作
+        bind "Ctrl a" { SwitchToMode "Tmux"; }
+    }
+
+    // === スクロール / コピーモード（大西配列） ===
+    scroll {
+        bind "t" { MoveFocusOrTab "Left"; }
+        bind "n" { ScrollDown; }
+        bind "r" { ScrollUp; }
+        bind "s" { MoveFocusOrTab "Right"; }
+        bind "d" { HalfPageScrollDown; }
+        bind "u" { HalfPageScrollUp; }
+        bind "v" { SwitchToMode "EnterSearch"; SearchToggleOption "CaseSensitivity"; }
+        bind "Esc" { SwitchToMode "Normal"; }
+        bind "q" { SwitchToMode "Normal"; }
+    }
+
+    entersearch {
+        bind "Esc" { SwitchToMode "Scroll"; }
+        bind "Enter" { SwitchToMode "Search"; }
+    }
+
+    search {
+        bind "t" { MoveFocusOrTab "Left"; }
+        bind "n" { Search "down"; }
+        bind "r" { ScrollUp; }
+        bind "s" { MoveFocusOrTab "Right"; }
+        bind "j" { Search "down"; }
+        bind "J" { Search "up"; }
+        bind "d" { HalfPageScrollDown; }
+        bind "u" { HalfPageScrollUp; }
+        bind "Esc" { SwitchToMode "Normal"; }
+        bind "q" { SwitchToMode "Normal"; }
+    }
+
+    // === Tmux プレフィックスモード（Ctrl+a で起動） ===
+    tmux {
+        // ペイン分割（prefix + s/n）
+        bind "s" { NewPane "Right"; SwitchToMode "Normal"; }
+        bind "n" { NewPane "Down"; SwitchToMode "Normal"; }
+
+        // セッション一覧
+        bind "l" { SwitchToMode "Session"; }
+
+        // デタッチ
+        bind "q" { Detach; }
+
+        // 設定リロード的な操作（レイアウト切替）
+        bind "Space" { NextSwapLayout; SwitchToMode "Normal"; }
+
+        // ペイン入替え（tmux の C-]/C-[）
+        bind "]" { MovePane; SwitchToMode "Normal"; }
+        bind "[" { MovePaneBackwards; SwitchToMode "Normal"; }
+
+        bind "Esc" { SwitchToMode "Normal"; }
+    }
+
+    session {
+        bind "Esc" { SwitchToMode "Normal"; }
+        bind "q" { SwitchToMode "Normal"; }
+        bind "d" { Detach; }
+    }
+
+    locked {
+        bind "Ctrl g" { SwitchToMode "Normal"; }
+    }
+}

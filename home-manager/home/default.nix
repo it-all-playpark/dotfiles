@@ -56,8 +56,8 @@ in
         stripe-cli
         tbls
         tldr
-        tmux
         vips
+        zellij
         zoxide
       ]);
 
@@ -90,6 +90,10 @@ in
       };
       ".config/ghostty" = {
         source = ./file/ghostty;
+        recursive = true;
+      };
+      ".config/zellij" = {
+        source = ./file/zellij;
         recursive = true;
       };
     };
