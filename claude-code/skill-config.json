@@ -71,7 +71,8 @@
     },
     "email_template": {
       "subject": "本日のお打ち合わせのお礼【{{company_name}} {{sender_name}}】",
-      "closing": "引き続き、どうぞよろしくお願いいたします。"
+      "closing": "引き続き、どうぞよろしくお願いいたします。",
+      "signature": "＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/\n合同会社playpark\n奈良本 悠二 / Yuji Naramoto\n\n〒141-0033\n東京都品川区西品川一丁目１−１ 住友不動産大崎ガーデンタワー 9階 TUNNEL TOKYO\nTEL: 090-4200-9763\nEmail: yuji.naramoto@playpark.co.jp\nURL: https://www.playpark.co.jp/\n＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/＿/"
     },
     "remind_days_before": 1,
     "repo_path": "~/ghq/github.com/playpark-llc/sales"
