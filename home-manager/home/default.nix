@@ -62,7 +62,6 @@ in
       ]);
 
     file = {
-      ".tmux.conf".source = ./file/.tmux.conf;
       ".myclirc".source = ./file/.myclirc;
       ".ripgreprc".source = ./file/.ripgreprc;
       ".myclirc.local.template".source = ./file/.myclirc.local.template;

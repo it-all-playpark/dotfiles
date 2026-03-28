@@ -28,7 +28,7 @@ Always run `nix run .#update` after changes.
 
 ## Critical Notes
 
-- **大西配列**: Navigation keys are `tnrs` (not `hjkl`) across Neovim, tmux, etc.
+- **大西配列**: Navigation keys are `tnrs` (not `hjkl`) across Neovim, zellij, etc.
 
 ## Reference
 

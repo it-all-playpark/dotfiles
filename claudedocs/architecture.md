@@ -25,7 +25,6 @@
 │   ├── home/
 │   │   ├── default.nix         # User packages
 │   │   └── file/               # Dotfiles symlinked to ~
-│   │       ├── .tmux.conf
 │   │       ├── nvim/           # LazyVim config
 │   │       ├── fish/
 │   │       ├── git/
@@ -88,4 +87,4 @@ All navigation keybindings use **大西配列 (Onishi layout)** instead of hjkl:
 | `r` | up | `k` |
 | `s` | right | `l` |
 
-This applies to: Neovim, tmux (copy-mode), and other tools configured in this repo.
+This applies to: Neovim, zellij, and other tools configured in this repo.

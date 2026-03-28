@@ -37,7 +37,7 @@ dotconfig/
 │   └── default.nix   # nix-darwin（システム設定）の定義
 ├── home-manager/
 │   ├── default.nix   # home-manager全体の設定
-│   ├── home/         # ユーザー固有のdotfiles設定（nvim, tmux, gitなど）
+│   ├── home/         # ユーザー固有のdotfiles設定（nvim, zellij, gitなど）
 │   └── programs/     # 各プログラム（fish, zsh, git, neovimなど）の設定
 ├── scripts/
 │   └── setup-skills.sh  # Agent Skills セットアップスクリプト

@@ -7,11 +7,6 @@ in
   programs.fish = {
     enable = true;
     shellInit = ''
-      # tmux自動起動（Ghostty Quick Terminal内のみ）
-      if status is-interactive; and test "$TERM_PROGRAM" = ghostty; and not set -q TMUX
-          exec tmux new-session -A -s main
-      end
-
       # PATH設定
       fish_add_path $HOME/.nix-profile/bin
       ${shellCommon.getPathConfig.darwin}
