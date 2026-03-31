@@ -29,10 +29,10 @@ keybinds clear-defaults=true {
     // === 共通（全モードで有効） ===
     shared_except "locked" {
         // ペイン移動（大西配列: Alt+t/n/r/s）
-        bind "Alt t" { MoveFocusOrTab "Left"; }
+        bind "Alt t" { MoveFocus "Left"; }
         bind "Alt n" { MoveFocus "Down"; }
         bind "Alt r" { MoveFocus "Up"; }
-        bind "Alt s" { MoveFocusOrTab "Right"; }
+        bind "Alt s" { MoveFocus "Right"; }
 
         // ペインリサイズ（Ctrl+Alt+t/n/r/s）
         bind "Ctrl Alt t" { Resize "Increase Left"; }
@@ -74,13 +74,14 @@ keybinds clear-defaults=true {
 
     // === スクロール / コピーモード（大西配列） ===
     scroll {
-        bind "t" { MoveFocusOrTab "Left"; }
+        bind "t" { MoveFocus "Left"; }
         bind "n" { ScrollDown; }
         bind "r" { ScrollUp; }
-        bind "s" { MoveFocusOrTab "Right"; }
+        bind "s" { MoveFocus "Right"; }
         bind "d" { HalfPageScrollDown; }
         bind "u" { HalfPageScrollUp; }
         bind "v" { SwitchToMode "EnterSearch"; SearchToggleOption "CaseSensitivity"; }
+        bind "e" { EditScrollback; SwitchToMode "Normal"; }
         bind "Esc" { SwitchToMode "Normal"; }
         bind "q" { SwitchToMode "Normal"; }
     }
@@ -91,10 +92,10 @@ keybinds clear-defaults=true {
     }
 
     search {
-        bind "t" { MoveFocusOrTab "Left"; }
+        bind "t" { MoveFocus "Left"; }
         bind "n" { Search "down"; }
         bind "r" { ScrollUp; }
-        bind "s" { MoveFocusOrTab "Right"; }
+        bind "s" { MoveFocus "Right"; }
         bind "j" { Search "down"; }
         bind "J" { Search "up"; }
         bind "d" { HalfPageScrollDown; }
