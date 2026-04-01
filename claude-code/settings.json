@@ -29,7 +29,6 @@
       "Bash(gh repo edit:*)",
       "Bash(gh repo fork:*)",
       "Bash(gh release delete:*)",
-      "Bash(gh pr merge:*)",
       "Bash(gh secret set:*)",
       "Bash(gh secret remove:*)",
       "Bash(gh auth token:*)",
@@ -229,7 +228,20 @@
         ]
       }
     ],
-    "PreToolUse": [],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "if": "Bash(gh pr merge *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command' | { read -r cmd; pr_num=$(echo \"$cmd\" | grep -oE '[0-9]+' | head -1); if [ -z \"$pr_num\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"PR番号を検出できません\"}}'; exit 0; fi; base=$(gh pr view \"$pr_num\" --json baseRefName -q .baseRefName 2>/dev/null); if echo \"$base\" | grep -qE '^nightly/'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"nightly branch merge allowed\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"base='\"$base\"' — nightly/* 以外はユーザー確認が必要\"}}'; fi; }",
+            "timeout": 15,
+            "statusMessage": "PR merge ブランチチェック中..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "",
@@ -255,7 +267,16 @@
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true
+    "telegram@claude-plugins-official": true,
+    "vercel-plugin@vercel-vercel-plugin": true
+  },
+  "extraKnownMarketplaces": {
+    "vercel-vercel-plugin": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/naramotoyuuji/.cache/plugins/github.com-vercel-vercel-plugin"
+      }
+    }
   },
   "language": "ja",
   "voiceEnabled": true
