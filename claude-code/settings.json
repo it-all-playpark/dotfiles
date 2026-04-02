@@ -245,6 +245,18 @@
         ]
       },
       {
+        "matcher": "Write",
+        "if": "Write(*/SKILL.md)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
+            "timeout": 5,
+            "statusMessage": "SKILL.md frontmatter バリデーション中..."
+          }
+        ]
+      },
+      {
         "matcher": "Bash(git worktree add*)",
         "hooks": [
           {
