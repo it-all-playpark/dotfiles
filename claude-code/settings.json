@@ -246,10 +246,11 @@
       },
       {
         "matcher": "Bash",
+        "if": "Bash(gh pr merge *)",
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.command' | { read -r cmd; echo \"$cmd\" | grep -qE '^gh pr merge ' || { echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"not a pr merge command\"}}'; exit 0; }; pr_num=$(echo \"$cmd\" | grep -oE '[0-9]+' | head -1); if [ -z \"$pr_num\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"PR番号を検出できません\"}}'; exit 0; fi; base=$(gh pr view \"$pr_num\" --json baseRefName -q .baseRefName 2>/dev/null); if echo \"$base\" | grep -qE '^nightly/'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"nightly branch merge allowed\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"base='\"$base\"' — nightly/* 以外はユーザー確認が必要\"}}'; fi; }",
+            "command": "jq -r '.tool_input.command' | { read -r cmd; pr_num=$(echo \"$cmd\" | grep -oE '[0-9]+' | head -1); if [ -z \"$pr_num\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"PR番号を検出できません\"}}'; exit 0; fi; base=$(gh pr view \"$pr_num\" --json baseRefName -q .baseRefName 2>/dev/null); if echo \"$base\" | grep -qE '^nightly/'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"nightly branch merge allowed\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"base='\"$base\"' — nightly/* 以外はユーザー確認が必要\"}}'; fi; }",
             "timeout": 15,
             "statusMessage": "PR merge ブランチチェック中..."
           }
