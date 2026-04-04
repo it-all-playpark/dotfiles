@@ -245,6 +245,17 @@
         ]
       },
       {
+        "matcher": "Bash(git worktree add*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
+            "timeout": 10,
+            "statusMessage": ".worktreeinclude 自動生成チェック中..."
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "if": "Bash(gh pr merge *)",
         "hooks": [
