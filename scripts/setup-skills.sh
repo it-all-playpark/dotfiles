@@ -154,6 +154,50 @@ setup_symlink() {
   log_success "  Created symlink: ${target_path} -> ${SKILLS_REPO}"
 }
 
+setup_hooks() {
+  local hooks_src="${HOME}/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks"
+  local hooks_dst="${HOME}/.claude/hooks"
+
+  log_info "Setting up Claude Code hooks..."
+
+  if [[ ! -d ${hooks_src} ]]; then
+    log_warn "  Hooks source not found: ${hooks_src}"
+    return 1
+  fi
+
+  mkdir -p "${hooks_dst}"
+
+  local linked=0
+  for src_file in "${hooks_src}"/*; do
+    local filename
+    filename=$(basename "${src_file}")
+    local dst_file="${hooks_dst}/${filename}"
+
+    if [[ -L ${dst_file} ]]; then
+      local current_target
+      current_target=$(readlink "${dst_file}")
+      if [[ ${current_target} == "${src_file}" ]]; then
+        log_success "  Already linked: ${filename}"
+        ((linked++)) || true
+        continue
+      else
+        log_warn "  Updating symlink: ${filename}"
+        rm "${dst_file}"
+      fi
+    elif [[ -e ${dst_file} ]]; then
+      log_warn "  Skipping (not a symlink): ${filename}"
+      continue
+    fi
+
+    ln -s "${src_file}" "${dst_file}"
+    log_success "  Linked: ${filename}"
+    ((linked++)) || true
+  done
+
+  log_info "  ${linked} hook(s) configured"
+  echo ""
+}
+
 main() {
   parse_args "$@"
 
@@ -189,6 +233,9 @@ main() {
     fi
     echo ""
   done
+
+  # Setup Claude Code hooks symlinks
+  setup_hooks
 
   # Summary
   echo "=========================================="
