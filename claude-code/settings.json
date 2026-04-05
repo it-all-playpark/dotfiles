@@ -259,6 +259,13 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/allow-feature-push.sh\"",
+            "if": "Bash(git push*)",
+            "timeout": 5,
+            "statusMessage": "push ブランチチェック中..."
+          },
+          {
+            "type": "command",
             "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
             "if": "Bash(git worktree add*)",
             "timeout": 10,
