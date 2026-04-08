@@ -264,14 +264,24 @@
             "if": "Bash(git push*)",
             "timeout": 5,
             "statusMessage": "push ブランチチェック中..."
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
             "if": "Bash(git worktree add*)",
             "timeout": 10,
             "statusMessage": ".worktreeinclude 自動生成チェック中..."
-          },
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
           {
             "type": "command",
             "command": "jq -r '.tool_input.command' | { read -r cmd; pr_num=$(echo \"$cmd\" | grep -oE '[0-9]+' | head -1); if [ -z \"$pr_num\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"PR番号を検出できません\"}}'; exit 0; fi; base=$(gh pr view \"$pr_num\" --json baseRefName -q .baseRefName 2>/dev/null); if echo \"$base\" | grep -qE '^nightly/'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"nightly branch merge allowed\"}}'; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"base='\"$base\"' — nightly/* 以外はユーザー確認が必要\"}}'; fi; }",
@@ -305,6 +315,19 @@
         ]
       }
     ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
+            "timeout": 5,
+            "statusMessage": "permission request logging..."
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
@@ -319,13 +342,15 @@
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true
+    "telegram@claude-plugins-official": true,
+    "vercel@claude-plugins-official": true,
+    "vercel-plugin@vercel-vercel-plugin": true
   },
   "extraKnownMarketplaces": {
     "vercel-vercel-plugin": {
       "source": {
         "source": "directory",
-        "path": "/Users/naramotoyuuji/.cache/plugins/github.com-vercel-vercel-plugin"
+        "path": "/Users/naramotoyuuji/.cache/plugins/.install-staging/c225edf0f837122837b1638a4157f8668a28cf59/cursor/repo"
       }
     }
   },
