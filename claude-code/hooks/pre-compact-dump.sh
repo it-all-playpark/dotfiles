@@ -36,7 +36,8 @@ json_get() {
   fi
   if command -v jq >/dev/null 2>&1; then
     local v
-    v=$(printf '%s' "$INPUT" | jq -r ".$key // empty" 2>/dev/null || true)
+    # --arg で key を安全に注入 (key 名にドット等が混入しても壊れない)
+    v=$(printf '%s' "$INPUT" | jq -r --arg k "$key" '.[$k] // empty' 2>/dev/null || true)
     if [ -n "$v" ]; then
       printf '%s' "$v"
     else
@@ -92,9 +93,11 @@ fi
 RECENT_TOOLS=""
 PERM_LOG="$HOME/.claude/logs/permission-requests.jsonl"
 if [ -f "$PERM_LOG" ] && command -v jq >/dev/null 2>&1; then
+  # --arg sid で SESSION_ID を安全に注入 ("/\/$/改行 等が混入しても jq フィルタが壊れない)
   RECENT_TOOLS=$(tail -n 20 "$PERM_LOG" 2>/dev/null |
-    jq -r 'select(.session == "'"$SESSION_ID"'") | "- [" + .ts + "] " + .tool + ": " + (.detail // "")' 2>/dev/null ||
-    true)
+    jq -r --arg sid "$SESSION_ID" \
+      'select(.session == $sid) | "- [" + .ts + "] " + .tool + ": " + (.detail // "")' \
+      2>/dev/null || true)
   # session_id でマッチしない場合は末尾 10 件を無条件に拾う
   if [ -z "$RECENT_TOOLS" ]; then
     RECENT_TOOLS=$(tail -n 10 "$PERM_LOG" 2>/dev/null |

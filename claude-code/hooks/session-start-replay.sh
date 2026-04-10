@@ -39,10 +39,17 @@ fi
 CLAUDEDOCS_DIR="$PROJECT_ROOT/claudedocs"
 [ -d "$CLAUDEDOCS_DIR" ] || exit 0
 
-# 最新の session-*.md を検索 (mtime 降順)
+# 最新の session-*.md を検索
+# ファイル名が `session-YYYYMMDD-HHMMSS.md` なので lexicographic sort = 時刻降順。
+# ls -t (mtime) に依存しないので treefmt drift 等で touch された古いファイルを
+# 最新扱いしてしまうリスクを避けられる。
 LATEST=""
-# shellcheck disable=SC2012
-LATEST=$(ls -t "$CLAUDEDOCS_DIR"/session-*.md 2>/dev/null | head -n 1 || true)
+shopt -s nullglob
+candidates=("$CLAUDEDOCS_DIR"/session-*.md)
+shopt -u nullglob
+if ((${#candidates[@]} > 0)); then
+  LATEST=$(printf '%s\n' "${candidates[@]}" | sort -r | head -n 1)
+fi
 
 if [ -z "$LATEST" ] || [ ! -f "$LATEST" ]; then
   exit 0
