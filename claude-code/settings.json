@@ -375,18 +375,9 @@
   },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true,
-    "vercel-plugin@vercel-vercel-plugin": true
+    "telegram@claude-plugins-official": true
   },
-  "extraKnownMarketplaces": {
-    "vercel-vercel-plugin": {
-      "source": {
-        "source": "directory",
-        "path": "/Users/naramotoyuuji/.cache/plugins/.install-staging/c225edf0f837122837b1638a4157f8668a28cf59/cursor/repo"
-      }
-    }
-  },
+  "extraKnownMarketplaces": {},
   "language": "ja",
   "voiceEnabled": true,
   "skipAutoPermissionPrompt": true
