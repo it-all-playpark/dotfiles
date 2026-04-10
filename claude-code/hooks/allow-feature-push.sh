@@ -9,8 +9,8 @@ CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 # git push 系コマンドのみ対象
 case "$CMD" in
-  "git push"*) ;;
-  *) exit 0 ;;
+"git push"*) ;;
+*) exit 0 ;;
 esac
 
 # 現在のブランチを取得
@@ -23,10 +23,10 @@ fi
 
 # 保護ブランチなら deny
 case "$BRANCH" in
-  main|master|dev|develop|development)
-    echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"保護ブランチ ($BRANCH) への push は禁止\"}}"
-    exit 0
-    ;;
+main | master | dev | develop | development)
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"保護ブランチ ($BRANCH) への push は禁止\"}}"
+  exit 0
+  ;;
 esac
 
 # それ以外は allow
