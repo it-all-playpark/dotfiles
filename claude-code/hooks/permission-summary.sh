@@ -23,10 +23,22 @@ JSON_OUT=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --days)   DAYS="$2"; shift 2 ;;
-    --suggest) SUGGEST=true; shift ;;
-    --json)   JSON_OUT=true; shift ;;
-    *)        echo "Unknown option: $1"; exit 1 ;;
+  --days)
+    DAYS="$2"
+    shift 2
+    ;;
+  --suggest)
+    SUGGEST=true
+    shift
+    ;;
+  --json)
+    JSON_OUT=true
+    shift
+    ;;
+  *)
+    echo "Unknown option: $1"
+    exit 1
+    ;;
   esac
 done
 
@@ -103,17 +115,17 @@ echo "$DATA" | jq -r '.tool' | sort | uniq -c | sort -rn | head -20
 
 echo ""
 echo "--- Top Commands (Bash) ---"
-echo "$DATA" | jq -r 'select(.tool == "Bash") | .detail' | \
+echo "$DATA" | jq -r 'select(.tool == "Bash") | .detail' |
   awk '{print $1, $2}' | sort | uniq -c | sort -rn | head -15
 
 echo ""
 echo "--- Top Files (Read/Write/Edit) ---"
-echo "$DATA" | jq -r 'select(.tool == "Read" or .tool == "Write" or .tool == "Edit") | .detail' | \
+echo "$DATA" | jq -r 'select(.tool == "Read" or .tool == "Write" or .tool == "Edit") | .detail' |
   sort | uniq -c | sort -rn | head -15
 
 echo ""
 echo "--- Top Domains (WebFetch) ---"
-echo "$DATA" | jq -r 'select(.tool == "WebFetch") | .detail' | \
+echo "$DATA" | jq -r 'select(.tool == "WebFetch") | .detail' |
   grep -oE 'https?://[^/]+' | sort | uniq -c | sort -rn | head -10
 
 echo ""
