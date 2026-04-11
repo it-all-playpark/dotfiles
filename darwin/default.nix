@@ -66,6 +66,7 @@ in
       "microsoft-teams"
       "microsoft-powerpoint"
       "microsoft-word"
+      "obsidian"
       "onedrive"
       "orbstack"
       "postman"
