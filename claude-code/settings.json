@@ -203,9 +203,9 @@
     "defaultMode": "auto",
     "disableBypassPermissionsMode": "disable",
     "additionalDirectories": [
-      "/Users/naramotoyuuji/ghq/github.com/playpark-llc",
-      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark",
-      "/Users/naramotoyuuji/ghq/github.com/Cistree-dev"
+      "~/ghq/github.com/playpark-llc",
+      "~/ghq/github.com/it-all-playpark",
+      "~/ghq/github.com/Cistree-dev"
     ]
   },
   "enableAllProjectMcpServers": false,
