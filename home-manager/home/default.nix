@@ -153,14 +153,6 @@ in
         fi
       done
 
-      # agents ディレクトリへのシンボリックリンク（ディレクトリ単位）
-      if [ -d "$DOTFILES_CLAUDE/agents" ]; then
-        if [ -d "$CLAUDE_DIR/agents" ] && [ ! -L "$CLAUDE_DIR/agents" ]; then
-          rm -rf "$CLAUDE_DIR/agents"
-        fi
-        ln -sf "$DOTFILES_CLAUDE/agents" "$CLAUDE_DIR/agents"
-      fi
-
       # hooks ディレクトリ内のスクリプトへのシンボリックリンク
       if [ -d "$DOTFILES_CLAUDE/hooks" ]; then
         mkdir -p "$CLAUDE_DIR/hooks"
