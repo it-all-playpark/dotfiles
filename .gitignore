@@ -7,7 +7,7 @@ claude-code/logs/
 claude-code/file-history/
 claude-code/debug/
 claude-code/backups/
-claude-code/agents/
+# claude-code/agents/ は dotfiles 管理対象（symlink 元）
 claude-code/.superclaude-metadata.json
 
 # Skills - sensitive and generated files
