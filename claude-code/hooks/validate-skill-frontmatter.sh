@@ -7,7 +7,7 @@
 #   - name: required
 #   - description: required, max 500 chars
 #   - model: if present, must be haiku|sonnet|opus
-#   - effort: if present, must be low|medium|high
+#   - effort: if present, must be low|medium|high|xhigh|max
 #   - context: if present, must be fork
 
 set -euo pipefail
@@ -66,8 +66,8 @@ fi
 EFFORT=$(echo "$FRONTMATTER" | grep -E '^effort:\s*' | head -1 | sed 's/^effort:\s*//' | xargs 2>/dev/null || true)
 if [[ -n $EFFORT ]]; then
   case "$EFFORT" in
-  low | medium | high) ;;
-  *) ERRORS+=("Invalid effort: '${EFFORT}'. Must be one of: low, medium, high") ;;
+  low | medium | high | xhigh | max) ;;
+  *) ERRORS+=("Invalid effort: '${EFFORT}'. Must be one of: low, medium, high, xhigh, max") ;;
   esac
 fi
 
