@@ -1,10 +1,16 @@
 { pkgs, username, ... }:
 let
   packages = import ../common/packages.nix { inherit pkgs; };
+  # Swift/iOS 開発ツール (macOS 専用)
+  swiftDevPackages = with pkgs; [
+    xcodegen    # project.yml から .xcodeproj を生成
+    swiftlint   # Swift Lint
+    swiftformat # Swift Formatter
+  ];
 in
 {
   # システムで使用するパッケージ群（Nix経由）
-  environment.systemPackages = packages.commonPackages ++ [
+  environment.systemPackages = packages.commonPackages ++ swiftDevPackages ++ [
     # macOS専用のパッケージをここに追加
   ];
 
@@ -81,7 +87,7 @@ in
     ];
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
-      # Xcode = 497799835;
+      Xcode = 497799835;
     };
   };
   # NixデーモンやNixコマンドの設定
