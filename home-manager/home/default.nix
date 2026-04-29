@@ -99,6 +99,23 @@ in
 
     # Claude Code 設定を dotfiles/claude-code/ からシンボリックリンクで参照
     # Nixのread-only制約を回避し、直接編集可能にする
+    activation.cleanupClaudeCodeShim = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      LOCAL_CLAUDE_BIN="${config.home.homeDirectory}/.local/bin/claude"
+
+      # Claude Code の自己更新で作られた symlink が Nix 版を隠すことがあるため削除
+      if [ -L "$LOCAL_CLAUDE_BIN" ]; then
+        local_claude_target="$(readlink "$LOCAL_CLAUDE_BIN" || true)"
+        case "$local_claude_target" in
+          "${config.home.homeDirectory}/.local/share/claude/versions/"* | \
+          "${config.home.homeDirectory}/.local/share/claude/local/"* | \
+          ".local/share/claude/versions/"* | \
+          ".local/share/claude/local/"*)
+            rm "$LOCAL_CLAUDE_BIN"
+            ;;
+        esac
+      fi
+    '';
+
     activation.setupClaudeCode = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       DOTFILES_CLAUDE="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/claude-code"
       CLAUDE_DIR="${config.home.homeDirectory}/.claude"

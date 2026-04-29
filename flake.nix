@@ -49,6 +49,9 @@
       # 各システム向けの関数を生成するヘルパー関数
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
+      # Claude Code 2.1.121 で挙動が不安定なため、直前の安定版に固定
+      claudeCodeVersion = "2.1.120";
+
       # 各システム用のnixpkgsインスタンスを生成（claude-code-overlay を適用）
       nixpkgsFor = forAllSystems (
         system:
@@ -56,9 +59,14 @@
           inherit system;
           overlays = [
             claude-code-overlay.overlays.default
+            (_final: _prev: {
+              claude-code = claude-code-overlay.packages.${system}.${claudeCodeVersion};
+            })
             # direnv の checkPhase は macOS Nix サンドボックス内でハングするため無効化
             (_final: prev: {
-              direnv = prev.direnv.overrideAttrs (_: { doCheck = false; });
+              direnv = prev.direnv.overrideAttrs (_: {
+                doCheck = false;
+              });
             })
           ];
         }
