@@ -134,6 +134,7 @@
               set -e
               # デフォルトユーザー名を設定
               USERNAME=''${1:-naramotoyuuji}
+              BACKUP_EXT="backup-$(date +%Y%m%d%H%M%S)"
 
               echo "Updating flake for user: $USERNAME..."
               nix flake update
@@ -143,7 +144,7 @@
                 # macOS系の場合
                 echo "Detected macOS environment"
                 echo "Updating home-manager..."
-                nix run home-manager -- switch --flake .#''${USERNAME}-darwin
+                nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-darwin switch
 
                 echo "Updating nix-darwin..."
                 sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
@@ -155,9 +156,9 @@
                 # アーキテクチャを検出
                 ARCH=$(uname -m)
                 if [[ "$ARCH" == "x86_64" ]]; then
-                  nix run home-manager -- switch --flake .#''${USERNAME}-linux-x86
+                  nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-linux-x86 switch
                 elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-                  nix run home-manager -- switch --flake .#''${USERNAME}-linux-arm
+                  nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-linux-arm switch
                 else
                   echo "Unsupported architecture: $ARCH"
                   exit 1
@@ -177,6 +178,7 @@
               set -e
               # すべてのユーザー名を配列で定義
               USERNAMES=("naramotoyuuji" "yuji_naramoto")
+              BACKUP_EXT="backup-$(date +%Y%m%d%H%M%S)"
 
               echo "Updating flake for all users..."
               nix flake update
@@ -189,7 +191,7 @@
                 # 各ユーザーのhome-managerとnix-darwin設定を更新
                 for USERNAME in "''${USERNAMES[@]}"; do
                   echo "Updating home-manager for user: $USERNAME..."
-                  nix run home-manager -- switch --flake .#''${USERNAME}-darwin
+                  nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-darwin switch
                   echo "Updating nix-darwin for user: $USERNAME..."
                   sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
                 done
@@ -213,7 +215,7 @@
                 # 各ユーザーのhome-manager設定を更新
                 for USERNAME in "''${USERNAMES[@]}"; do
                   echo "Updating home-manager for user: $USERNAME..."
-                  nix run home-manager -- switch --flake .#''${USERNAME}-$SUFFIX
+                  nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-$SUFFIX switch
                 done
               fi
 

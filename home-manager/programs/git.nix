@@ -5,6 +5,7 @@
     includes = [
       { path = "config.local"; }
     ];
+    signing.format = "openpgp";
     settings = {
       init.default-branch = "main";
       hub.protocol = "ssh";
