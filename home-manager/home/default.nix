@@ -152,9 +152,13 @@ in
       # hooks ディレクトリ内のスクリプトへのシンボリックリンク
       if [ -d "$DOTFILES_CLAUDE/hooks" ]; then
         mkdir -p "$CLAUDE_DIR/hooks"
-        for f in "$DOTFILES_CLAUDE"/hooks/*.py; do
+        for f in "$DOTFILES_CLAUDE"/hooks/*.py "$DOTFILES_CLAUDE"/hooks/*.sh; do
           if [ -f "$f" ]; then
-            target="$CLAUDE_DIR/hooks/$(basename "$f")"
+            base="$(basename "$f")"
+            case "$base" in
+              *.test.sh) continue ;;
+            esac
+            target="$CLAUDE_DIR/hooks/$base"
             if [ -f "$target" ] && [ ! -L "$target" ]; then
               rm "$target"
             fi
