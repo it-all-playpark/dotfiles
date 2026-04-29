@@ -10,8 +10,8 @@ INPUT=$(cat)
 CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
 case "$CMD" in
-  "gh pr merge "*) ;;
-  *) exit 0 ;;
+"gh pr merge "*) ;;
+*) exit 0 ;;
 esac
 
 PR_NUM=$(echo "$CMD" | grep -oE '[0-9]+' | head -1)

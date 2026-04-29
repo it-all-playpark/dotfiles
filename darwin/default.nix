@@ -3,16 +3,19 @@ let
   packages = import ../common/packages.nix { inherit pkgs; };
   # Swift/iOS 開発ツール (macOS 専用)
   swiftDevPackages = with pkgs; [
-    xcodegen    # project.yml から .xcodeproj を生成
-    swiftlint   # Swift Lint
+    xcodegen # project.yml から .xcodeproj を生成
+    swiftlint # Swift Lint
     swiftformat # Swift Formatter
   ];
 in
 {
   # システムで使用するパッケージ群（Nix経由）
-  environment.systemPackages = packages.commonPackages ++ swiftDevPackages ++ [
-    # macOS専用のパッケージをここに追加
-  ];
+  environment.systemPackages =
+    packages.commonPackages
+    ++ swiftDevPackages
+    ++ [
+      # macOS専用のパッケージをここに追加
+    ];
 
   # macOSシステム設定
   system.defaults = {
