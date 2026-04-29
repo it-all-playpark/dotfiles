@@ -15,11 +15,6 @@
       url = "github:LnL7/nix-darwin";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # Claude Code overlay - 公式バイナリを Nix で管理
-    claude-code-overlay = {
-      url = "github:ryoppippi/claude-code-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     # treefmt-nix - フォーマッター統合（nix fmt）
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -33,7 +28,6 @@
       nixpkgs,
       home-manager,
       nix-darwin,
-      claude-code-overlay,
       treefmt-nix,
       ...
     }:
@@ -49,19 +43,13 @@
       # 各システム向けの関数を生成するヘルパー関数
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
-      # Claude Code 2.1.121 で挙動が不安定なため、直前の安定版に固定
-      claudeCodeVersion = "2.1.120";
-
-      # 各システム用のnixpkgsインスタンスを生成（claude-code-overlay を適用）
+      # 各システム用のnixpkgsインスタンスを生成
+      # claude-code は mise で管理（home-manager/home/file/mise/config.toml）
       nixpkgsFor = forAllSystems (
         system:
         import nixpkgs {
           inherit system;
           overlays = [
-            claude-code-overlay.overlays.default
-            (_final: _prev: {
-              claude-code = claude-code-overlay.packages.${system}.${claudeCodeVersion};
-            })
             # direnv の checkPhase は macOS Nix サンドボックス内でハングするため無効化
             (_final: prev: {
               direnv = prev.direnv.overrideAttrs (_: {
