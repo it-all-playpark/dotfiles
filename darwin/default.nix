@@ -107,6 +107,12 @@ in
   programs.fish.enable = true; # デフォルトシェルとしてfishを有効化
   programs.zsh.enable = false; # zshは無効化
 
+  # ログインシェルを fish に変更（$SHELL=fish になる）
+  users.users.${username} = {
+    shell = pkgs.fish;
+    home = "/Users/${username}";
+  };
+
   # セキュリティ設定
   security.pam.services.sudo_local.touchIdAuth = true; # Touch IDでsudoを有効化
 }

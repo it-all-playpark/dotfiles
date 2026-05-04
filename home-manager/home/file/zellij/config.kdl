@@ -4,6 +4,7 @@
 // テーマ・外観
 theme "default"
 default_layout "compact"
+default_shell "fish"
 pane_frames false
 ui {
     pane_frames {
