@@ -398,11 +398,12 @@
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "telegram@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true
+    "vercel@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {},
   "language": "ja",
+  "tui": "fullscreen",
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "tui": "fullscreen"
+  "voiceEnabled": true
 }
