@@ -68,7 +68,7 @@ in
       "google-drive"
       "google-japanese-ime"
       "ghostty"
-      "hhkb-keymap-tool"
+      "hhkb"
       "jump-desktop-connect"
       "monitorcontrol"
       "microsoft-excel"
