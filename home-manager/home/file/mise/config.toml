@@ -22,9 +22,9 @@ uv = "latest"
 "npm:@googleworkspace/cli" = "latest"
 "npm:@anthropic-ai/claude-code" = "latest"
 "npm:pnpm" = "latest"
+"npm:yarn" = "latest"
 rust = "latest"
 go = "latest"
-yarn = "latest"
 java = "21"
 
 [settings]
