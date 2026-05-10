@@ -9,6 +9,7 @@
     settings = {
       init.default-branch = "main";
       hub.protocol = "ssh";
+      pull.rebase = true;
     };
   };
 
