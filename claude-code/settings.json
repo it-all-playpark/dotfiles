@@ -341,6 +341,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
+            "timeout": 5,
+            "statusMessage": "出力内の秘匿情報マスク中..."
+          },
+          {
+            "type": "command",
             "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\""
           }
         ]
