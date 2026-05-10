@@ -26,11 +26,18 @@
 #     - JWT tokens (eyJ.eyJ.signature)
 #   Generic fallback (誤検知ありうるが backstop として):
 #     - 環境変数形式 <NAME_WITH_KEY|TOKEN|SECRET|PASSWORD|...>=<value 16+chars>
+#       (行頭 whitespace / インデント付きも対象)
+# 対象外 (Phase 2 候補):
+#   - 小文字 env 名 (password=..., apiKey: ...)
+#   - URL 埋め込み credential (postgres://user:secret@host)
+#   - YAML/JSON inline (apiKey: "...", "token": "...")
+#   - Read/Edit/Write tool 出力 (現在 Bash のみ対応)
 #
 # 出力:
-#   - マスク発生時: stdout に
+#   - マスク発生時 (Bash tool): stdout に
 #       {"hookSpecificOutput":{"hookEventName":"PostToolUse",
-#         "updatedToolOutput":{"type":"text","text":"<masked>"}}}
+#         "updatedToolOutput": <元 tool_response に stdout/stderr を上書きした object>}}
+#   - 他 tool (Read/Edit/Write/MCP 等): stdout 空で exit 0 (pass-through)
 #   - マスクなし: stdout 空で exit 0 (Claude はオリジナル出力を見る)
 #
 # 注意:
@@ -43,8 +50,12 @@
 set -euo pipefail
 
 INPUT=$(cat)
+[[ -z $INPUT ]] && exit 0
 
 # Debug: CLAUDE_HOOK_DEBUG=1 で入力 JSON を /tmp に保存
+# 注意: 本ログは append-only で size 制限なし。CLAUDE_HOOK_DEBUG=1 を export した
+# まま長期間運用すると蓄積するため、debug 完了後は env を unset し、ログファイル
+# を手動削除すること。
 if [[ ${CLAUDE_HOOK_DEBUG:-0} == 1 ]]; then
   {
     printf '=== %s tool=%s ===\n' "$(date -Iseconds 2>/dev/null || date)" "$(echo "$INPUT" | jq -r '.tool_name // "?"')"
@@ -107,7 +118,8 @@ mask_text() {
     s/\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/[REDACTED:JWT]/g;
 
     # Generic env-style fallback (specific 済みは (?!\[REDACTED:) で除外)
-    s/^((?:[A-Z][A-Z0-9_]*_)?(?:TOKEN|KEY|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL|BEARER)[A-Z0-9_]*)=(?!\[REDACTED:)([^\s\r\n]{16,})$/$1=[REDACTED:ENV_SECRET]/gm;
+    # 行頭 whitespace (インデント) も許容
+    s/(^|[\s])((?:[A-Z][A-Z0-9_]*_)?(?:TOKEN|KEY|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL|BEARER)[A-Z0-9_]*)=(?!\[REDACTED:)([^\s\r\n]{16,})($|[\s])/$1$2=[REDACTED:ENV_SECRET]$4/gm;
   '
 }
 
@@ -129,20 +141,13 @@ if [[ $TOOL_NAME == Bash ]]; then
     exit 0
   fi
 
-  jq -n \
+  echo "$INPUT" | jq \
     --arg stdout "$MASKED_STDOUT" \
-    --arg stderr "$MASKED_STDERR" \
-    --argjson interrupted "$(echo "$INPUT" | jq '.tool_response.interrupted // false')" \
-    --argjson isImage "$(echo "$INPUT" | jq '.tool_response.isImage // false')" '
+    --arg stderr "$MASKED_STDERR" '
       {
         hookSpecificOutput: {
           hookEventName: "PostToolUse",
-          updatedToolOutput: {
-            stdout: $stdout,
-            stderr: $stderr,
-            interrupted: $interrupted,
-            isImage: $isImage
-          }
+          updatedToolOutput: (.tool_response + {stdout: $stdout, stderr: $stderr})
         }
       }
     '
