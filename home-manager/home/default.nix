@@ -52,6 +52,7 @@ in
         stripe-cli
         tbls
         tldr
+        turso-cli
         vips
         zellij
         zoxide
