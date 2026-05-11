@@ -8,7 +8,6 @@ in
     enable = true;
     loginExtra = ''
       # PATH設定
-      export PATH="$HOME/.local/bin:$PATH"
       export PATH="$HOME/.nix-profile/bin:$PATH"
       ${shellCommon.getPathConfig.zshDarwin}
       ${shellCommon.getPathConfig.zshLinux}
