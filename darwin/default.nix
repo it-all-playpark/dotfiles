@@ -103,6 +103,15 @@ in
     trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
   };
 
+  # Linux builder（macOS 上で linux 用 derivation を build する VM）
+  # hermes-agent 用 Docker image (dockerTools.buildLayeredImage) は Linux 専用のため
+  # darwin から build するには linux-builder が必須。
+  # ephemeral = true により VM は必要時のみ起動しリソース消費を抑える。
+  nix.linux-builder = {
+    enable = true;
+    ephemeral = true;
+  };
+
   # シェルの有効化設定
   programs.fish.enable = true; # デフォルトシェルとしてfishを有効化
   programs.zsh.enable = false; # zshは無効化

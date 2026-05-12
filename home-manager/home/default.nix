@@ -7,6 +7,14 @@
 }:
 let
   packages = import ../../common/packages.nix { inherit pkgs; };
+  # CLI tool 一覧は lib/cli-packages.nix に集約 (mode=host で hostOnly 込みのフルセット)
+  # hermes-agent 用 container image (mode=container) と単一ソースを共有する。
+  cliPackages = import ../../lib/cli-packages.nix {
+    inherit pkgs;
+    mode = "host";
+    # 注: cliPackages の common には commonPackages と重複する coreutils/curl/git を含む。
+    # Nix store の dedup によりインストール上の重複は発生しない (behavior-preserving)。
+  };
 in
 {
   home = {
@@ -18,45 +26,8 @@ in
     ];
     stateVersion = "24.05"; # Please read the comment before changing.
 
-    # 共通パッケージを全プラットフォームでインストール
-    packages =
-      packages.commonPackages
-      ++ (with pkgs; [
-        act
-        bat
-        bun
-        python313Packages.deepl
-        eza
-        fastfetch
-        fd
-        ffmpeg
-        flyctl
-        fzf
-        gh
-        ghq
-        jq
-        lazygit
-        mariadb
-        marp-cli
-        mise
-        ollama
-        opentofu
-        postgresql_17
-        procs
-        rclone
-        rip2
-        ripgrep
-        ripgrep-all
-        sd
-        starship
-        stripe-cli
-        tbls
-        tldr
-        turso-cli
-        vips
-        zellij
-        zoxide
-      ]);
+    # 共通パッケージ + CLI tool 群 (host モード)
+    packages = packages.commonPackages ++ cliPackages;
 
     file = {
       ".myclirc".source = ./file/.myclirc;
