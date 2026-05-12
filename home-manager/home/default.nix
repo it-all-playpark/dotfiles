@@ -290,6 +290,44 @@ in
       mv "$tmp_config" "$CODEX_DIR/config.toml"
       chmod 600 "$CODEX_DIR/config.toml"
     '';
+
+    # Hermes-agent 設定を dotfiles/hermes/ からシンボリックリンクで参照
+    # - config.yaml と plugins/* は symlink (上書き不可ファイルは事前削除)
+    # - .env は初回のみ template から copy。既存があれば tokens 保護のため触らない
+    activation.setupHermes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      DOTFILES_HERMES="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/hermes"
+      HERMES_DIR="${config.home.homeDirectory}/.hermes"
+
+      if [ ! -d "$DOTFILES_HERMES" ]; then
+        echo "Warning: $DOTFILES_HERMES does not exist. Skipping hermes setup."
+        exit 0
+      fi
+
+      mkdir -p "$HERMES_DIR/plugins"
+
+      # config.yaml — symlink (上書き不可ファイルは事前削除)
+      if [ -f "$HERMES_DIR/config.yaml" ] && [ ! -L "$HERMES_DIR/config.yaml" ]; then
+        rm "$HERMES_DIR/config.yaml"
+      fi
+      ln -sf "$DOTFILES_HERMES/config.yaml" "$HERMES_DIR/config.yaml"
+
+      # plugins — 各 plugin ディレクトリを symlink
+      for plugin_dir in "$DOTFILES_HERMES/plugins/"*/; do
+        [ -d "$plugin_dir" ] || continue
+        plugin_name="$(basename "$plugin_dir")"
+        if [ -e "$HERMES_DIR/plugins/$plugin_name" ] && [ ! -L "$HERMES_DIR/plugins/$plugin_name" ]; then
+          rm -rf "$HERMES_DIR/plugins/$plugin_name"
+        fi
+        ln -sf "$plugin_dir" "$HERMES_DIR/plugins/$plugin_name"
+      done
+
+      # .env — 初回のみ copy。既存があれば触らない (tokens 保持のため)
+      if [ ! -f "$HERMES_DIR/.env" ]; then
+        cp "$DOTFILES_HERMES/.env.template" "$HERMES_DIR/.env"
+        chmod 600 "$HERMES_DIR/.env"
+        echo "hermes: created ~/.hermes/.env from template — fill in tokens before running"
+      fi
+    '';
   };
 
   # Ollama サーバーをログイン時に自動起動

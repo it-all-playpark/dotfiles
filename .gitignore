@@ -20,6 +20,11 @@ codex/config.local.toml
 codex/*.local.toml
 codex/**/*.local.toml
 
+# Hermes - sensitive runtime data
+# 正規ファイル: hermes/.env.template は tracked、実体 .env は commit しない
+hermes/.env
+hermes/**/__pycache__/
+
 # Sensitive authentication files (global)
 **/auth-profiles.json
 **/*.credentials.json
