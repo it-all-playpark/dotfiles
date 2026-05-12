@@ -49,14 +49,6 @@
         system:
         import nixpkgs {
           inherit system;
-          overlays = [
-            # direnv の checkPhase は macOS Nix サンドボックス内でハングするため無効化
-            (_final: prev: {
-              direnv = prev.direnv.overrideAttrs (_: {
-                doCheck = false;
-              });
-            })
-          ];
         }
       );
 
