@@ -121,6 +121,52 @@
         }
       ) { } usernames;
 
+      # hermes-agent 用 Docker image を含む packages 出力（各システム向け）
+      # linux-* システムのみ hermes-image を生成（dockerTools は Linux 専用）。
+      # darwin 上では nix.linux-builder 経由で aarch64-linux 用 image を build できる。
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgsFor.${system};
+          cliPackages = import ./lib/cli-packages.nix {
+            inherit pkgs;
+            mode = "container";
+          };
+        in
+        nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system) {
+          hermes-image = pkgs.dockerTools.buildLayeredImage {
+            name = "hermes-tools";
+            tag = "latest";
+            contents =
+              cliPackages
+              ++ (with pkgs; [
+                bashInteractive
+                cacert
+                dockerTools.fakeNss
+                findutils
+                gawk
+                gnugrep
+                gnused
+                gnutar
+                gzip
+                iana-etc
+                less
+                shadow
+              ]);
+            config = {
+              Cmd = [ "${pkgs.bashInteractive}/bin/bash" ];
+              WorkingDir = "/workspace";
+              Env = [
+                "PATH=/bin:/usr/bin"
+                "LANG=C.UTF-8"
+                "LC_ALL=C.UTF-8"
+                "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              ];
+            };
+          };
+        }
+      );
+
       # 一括アップデート用のスクリプトを定義（各システム向け）
       apps = forAllSystems (system: {
         update = {
@@ -216,6 +262,45 @@
               fi
 
               echo "All updates complete!"
+            ''
+          );
+        };
+
+        # hermes-agent 用 Docker image を build して docker load まで一括実行
+        # darwin host では nix.linux-builder 経由で aarch64-linux 用 image を build する
+        "hermes-image-load" = {
+          type = "app";
+          program = toString (
+            nixpkgsFor.${system}.writeShellScript "hermes-image-load" ''
+              set -e
+
+              # build 対象システムを決定
+              # - darwin host: aarch64-linux (linux-builder 経由)
+              # - linux host: 現在のシステム
+              if [[ "$(uname)" == "Darwin" ]]; then
+                TARGET_SYSTEM="aarch64-linux"
+              else
+                ARCH=$(uname -m)
+                if [[ "$ARCH" == "x86_64" ]]; then
+                  TARGET_SYSTEM="x86_64-linux"
+                elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
+                  TARGET_SYSTEM="aarch64-linux"
+                else
+                  echo "Unsupported architecture: $ARCH"
+                  exit 1
+                fi
+              fi
+
+              echo "Building hermes-image for $TARGET_SYSTEM..."
+              IMAGE_PATH=$(nix build --no-link --print-out-paths ".#packages.''${TARGET_SYSTEM}.hermes-image")
+
+              echo "Loading $IMAGE_PATH into docker..."
+              docker load < "$IMAGE_PATH"
+
+              echo "Done. Image available as: hermes-tools:latest"
+              echo ""
+              echo "Test with:"
+              echo "  docker run --rm hermes-tools:latest /bin/bash -c \"gh --version && git --version && vips --version\""
             ''
           );
         };
