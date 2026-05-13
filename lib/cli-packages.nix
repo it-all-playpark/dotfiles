@@ -40,6 +40,7 @@ let
     tldr
     turso-cli
     vips
+    which
     zellij
     zoxide
   ];
