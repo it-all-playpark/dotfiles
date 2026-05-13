@@ -161,6 +161,10 @@
                 "LANG=C.UTF-8"
                 "LC_ALL=C.UTF-8"
                 "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+                # gws は default で keyring (macOS Keychain) を使うため container では復号不可。
+                # gws auth export で生成した token.json を file backend 経由で読む。
+                "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file"
+                "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE=/root/.config/gws/token.json"
               ];
             };
           };
