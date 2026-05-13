@@ -59,6 +59,27 @@ hermes model
 # Model: moonshotai/kimi-k2.6 など
 ```
 
+### gws (Google Workspace CLI) 認証 (初回のみ)
+
+hermes は docker container 内で `gws` を実行するが、container では macOS Keychain が
+使えないため、host の keyring で復号した credentials を JSON ファイルに export して
+mount 経由で共有する。
+
+```bash
+# host 側で 1 回実行
+gws auth export --unmasked > ~/.config/gws/token.json
+chmod 600 ~/.config/gws/token.json
+```
+
+- `--unmasked` を忘れると値が `...` で省略保存され、container 側で `invalid_client` (401)
+- `~/.config/gws/` は `hermes/config.yaml` の `docker_volumes` で `/root/.config/gws:rw` に mount 済み
+- container 側 image (`hermes-tools:latest`) には以下の env が焼き込まれており、
+  上記 token.json を file backend 経由で自動参照する:
+  - `GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file`
+  - `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE=/root/.config/gws/token.json`
+- refresh_token は long-lived だが、Google 側 revoke / 90 日無使用で失効する。
+  失効時は host で `gws auth login` → 上記 export を再実行
+
 ### Slack manifest 生成
 
 ```bash
