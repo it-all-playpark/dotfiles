@@ -30,19 +30,34 @@ nix-darwin（システム設定）とhome-manager（ユーザー設定）をFlak
 ```text
 dotconfig/
 ├── README.md
-├── flake.nix         # nix-darwin / home-manager設定を統合したFlake定義
-├── flake.lock        # Flake依存関係のロックファイル
-├── treefmt.nix       # treefmt-nix フォーマッター設定
+├── flake.nix              # nix-darwin / home-manager 設定を統合した Flake 定義
+├── flake.lock             # Flake 依存関係のロックファイル
+├── treefmt.nix            # treefmt-nix フォーマッター設定
+├── setup.sh               # 環境セットアップ用スクリプト（Nix インストール & 更新）
 ├── darwin/
-│   └── default.nix   # nix-darwin（システム設定）の定義
+│   └── default.nix        # nix-darwin（システム設定）の定義
 ├── home-manager/
-│   ├── default.nix   # home-manager全体の設定
-│   ├── home/         # ユーザー固有のdotfiles設定（nvim, zellij, gitなど）
-│   └── programs/     # 各プログラム（fish, zsh, git, neovimなど）の設定
-├── scripts/
-│   └── setup-skills.sh  # Agent Skills セットアップスクリプト
-└── setup.sh          # 環境セットアップ用スクリプト（Nixインストール＆更新）
+│   ├── default.nix        # home-manager 全体の設定
+│   ├── home/              # ユーザー固有の dotfiles 設定（nvim, zellij, git など）
+│   └── programs/          # 各プログラム（fish, zsh, git, neovim など）の設定
+├── common/                # 全ユーザー共通の Nix モジュール（packages.nix など）
+├── lib/                   # Flake 内ヘルパー（cli-packages.nix など）
+├── claude-code/           # Claude Code 設定（settings.json / hooks / PRINCIPLES.md / RULES.md）
+├── codex/                 # Codex CLI 設定（config / prompts / policy / rules）
+├── hermes/                # hermes-agent 設定（config / .env template / path_guard plugin）
+└── scripts/
+    └── setup-skills.sh    # Agent Skills セットアップスクリプト
 ```
+
+## サブシステム
+
+各サブディレクトリは個別の README を持つ。詳細はそちらを参照。
+
+| ディレクトリ | 概要 | ドキュメント |
+|------------|------|------------|
+| `claude-code/` | Claude Code 用の `settings.json`（permissions / hooks）・guardrail hooks・`PRINCIPLES.md` / `RULES.md` | [claude-code/README.md](claude-code/README.md) |
+| `codex/` | Codex CLI の base config・prompts・policy・rules を dotfiles で管理し、`~/.codex/` へ展開 | [codex/README.md](codex/README.md) |
+| `hermes/` | hermes-agent の config / `.env` template / `path_guard` plugin。launchd agent で gateway を自動起動 | [hermes/README.md](hermes/README.md) |
 
 ## セットアップ手順
 
@@ -115,21 +130,10 @@ Skills の詳細は [it-all-playpark/skills](https://github.com/it-all-playpark/
 
 ## Codex 設定管理
 
-Codex の設定は `codex/` ディレクトリで管理します。
+Codex の設定は `codex/` ディレクトリで管理し、`nix run .#update` の Home Manager activation で `~/.codex/` へ展開されます。
+詳細（managed files / migration behavior / approval prompts チューニング等）は [codex/README.md](codex/README.md) を参照してください。
 
-- `codex/config.base.toml`: 全ユーザー共通の設定
-- `codex/config.local.toml.template`: ローカル専用設定のテンプレート
-- `codex/prompts/`, `codex/policy/`: 静的アセット
-- `codex/rules/default.rules`: 初期テンプレート（`~/.codex/rules/default.rules` へ初回コピー）
-
-`nix run .#update <username>` 実行時に Home Manager activation が以下を実施します。
-
-- `codex/prompts`, `codex/policy` を `~/.codex/` にシンボリックリンク
-- `codex/rules/default.rules` を `~/.codex/rules/default.rules` に初回コピー（以後はローカル運用）
-- `~/.codex/config.local.toml` がなければ既存 `config.toml` の `projects` / `mcp_servers` セクションを移行（バックアップ作成）またはテンプレートから生成
-- `~/.codex/config.toml` を `config.base.toml + config.local.toml` で再生成
-
-機密情報（MCPキー等）は `~/.codex/config.local.toml` にのみ記載してください。
+機密情報（MCP キー等）は `~/.codex/config.local.toml` にのみ記載してください。
 
 ## コード品質（Format / Lint）
 

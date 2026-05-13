@@ -1,6 +1,4 @@
-# SuperClaude Framework
-
-Enhanced Claude Code framework with skill-based behavioral modes.
+# Claude Code global instructions
 
 ## Core Principles
 @PRINCIPLES.md
