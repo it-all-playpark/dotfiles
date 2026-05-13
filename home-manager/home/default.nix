@@ -343,7 +343,12 @@ in
   };
 
   # hermes gateway をログイン時に自動起動 (macOS 限定)
-  # Docker Desktop が未起動でも KeepAlive + ThrottleInterval で復旧するまで再試行
+  # Docker Desktop が未起動でも KeepAlive + ThrottleInterval で復旧するまで再試行。
+  #
+  # 同一 user account を複数 Mac で運用する場合の二重起動防止:
+  # opt-in marker `~/.hermes/.gateway-primary` が存在する host でだけ実際に起動する。
+  # marker 不在なら exit 0 で終了 (KeepAlive.SuccessfulExit=false なので restart しない)。
+  # 切り替え時は旧機で `rm`、新機で `touch` + `launchctl kickstart -k gui/$(id -u)/com.playpark.hermes-gateway`。
   launchd.agents = lib.optionalAttrs pkgs.stdenv.isDarwin {
     hermes-gateway = {
       enable = true;
@@ -352,7 +357,14 @@ in
         ProgramArguments = [
           "/bin/sh"
           "-c"
-          ''/bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" && exec "${config.home.homeDirectory}/.local/bin/hermes" gateway''
+          ''
+            MARKER="${config.home.homeDirectory}/.hermes/.gateway-primary"
+            if [ ! -f "$MARKER" ]; then
+              echo "hermes-gateway: $MARKER not found on this host — skipping (opt-in via 'touch $MARKER')" >&2
+              exit 0
+            fi
+            /bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" && exec "${config.home.homeDirectory}/.local/bin/hermes" gateway
+          ''
         ];
         EnvironmentVariables = {
           PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${config.home.homeDirectory}/.local/bin";
