@@ -34,6 +34,7 @@ terminal:
   docker_volumes:
     - "/Users/naramotoyuuji/ghq:/workspace/repos:ro"
     - "/Users/naramotoyuuji/Documents/hermes-out:/workspace/out:rw"
+    - "/Users/naramotoyuuji/.config/gws:/root/.config/gws:rw"
 
 agent:
   disabled_toolsets: []

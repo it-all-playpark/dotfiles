@@ -27,6 +27,7 @@ let
     gh
     ghq
     git
+    gws
     jq
     lazygit
     mise
