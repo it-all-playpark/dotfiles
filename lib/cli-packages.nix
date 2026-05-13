@@ -27,6 +27,7 @@ let
     gh
     ghq
     git
+    gws
     jq
     lazygit
     mise
@@ -39,6 +40,7 @@ let
     tldr
     turso-cli
     vips
+    which
     zellij
     zoxide
   ];

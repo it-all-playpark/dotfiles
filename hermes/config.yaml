@@ -1,3 +1,8 @@
+model:
+  default: "moonshotai/kimi-k2.6"
+  provider: "openrouter"
+  base_url: "https://openrouter.ai/api/v1"
+
 approvals:
   mode: smart
   timeout: 60
@@ -29,6 +34,7 @@ terminal:
   docker_volumes:
     - "/Users/naramotoyuuji/ghq:/workspace/repos:ro"
     - "/Users/naramotoyuuji/Documents/hermes-out:/workspace/out:rw"
+    - "/Users/naramotoyuuji/.config/gws:/root/.config/gws:rw"
 
 agent:
   disabled_toolsets: []

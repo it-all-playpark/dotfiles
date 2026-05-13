@@ -312,12 +312,18 @@ in
       ln -sf "$DOTFILES_HERMES/config.yaml" "$HERMES_DIR/config.yaml"
 
       # plugins — 各 plugin ディレクトリを symlink
+      # NOTE: 末尾 / 付き plugin_dir + 既存 directory symlink に対する ln -sf は、
+      # BSD ln (macOS) で symlink を dereference してその中に link を作る挙動を取り、
+      # dotfiles/hermes/plugins/<name>/<name> という循環 symlink を量産する。
+      # 末尾 / を剥がし、既存 symlink を rm -f で必ず消してから ln することで回避。
       for plugin_dir in "$DOTFILES_HERMES/plugins/"*/; do
         [ -d "$plugin_dir" ] || continue
+        plugin_dir="''${plugin_dir%/}"
         plugin_name="$(basename "$plugin_dir")"
         if [ -e "$HERMES_DIR/plugins/$plugin_name" ] && [ ! -L "$HERMES_DIR/plugins/$plugin_name" ]; then
           rm -rf "$HERMES_DIR/plugins/$plugin_name"
         fi
+        rm -f "$HERMES_DIR/plugins/$plugin_name"
         ln -sf "$plugin_dir" "$HERMES_DIR/plugins/$plugin_name"
       done
 
