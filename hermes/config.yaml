@@ -1,3 +1,8 @@
+model:
+  default: "moonshotai/kimi-k2.6"
+  provider: "openrouter"
+  base_url: "https://openrouter.ai/api/v1"
+
 approvals:
   mode: smart
   timeout: 60
