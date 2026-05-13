@@ -110,6 +110,14 @@ in
   nix.linux-builder = {
     enable = true;
     ephemeral = true;
+    maxJobs = 4;
+    config = {
+      virtualisation.cores = 6;
+      virtualisation.darwin-builder = {
+        memorySize = 12288;
+        diskSize = 40960;
+      };
+    };
   };
 
   # シェルの有効化設定
