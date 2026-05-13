@@ -66,7 +66,8 @@ hermes は docker container 内で `gws` を実行するが、container では m
 mount 経由で共有する。
 
 ```bash
-# host 側で 1 回実行
+# host 側で 1 回実行 (gws auth login が未実行ならまずそちらを先に)
+mkdir -p ~/.config/gws
 gws auth export --unmasked > ~/.config/gws/token.json
 chmod 600 ~/.config/gws/token.json
 ```
