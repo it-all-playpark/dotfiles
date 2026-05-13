@@ -303,7 +303,7 @@ in
         exit 0
       fi
 
-      mkdir -p "$HERMES_DIR/plugins"
+      mkdir -p "$HERMES_DIR/plugins" "$HERMES_DIR/logs"
 
       # config.yaml — symlink (上書き不可ファイルは事前削除)
       if [ -f "$HERMES_DIR/config.yaml" ] && [ ! -L "$HERMES_DIR/config.yaml" ]; then
@@ -340,5 +340,35 @@ in
   # macOS: launchd agent, Linux: systemd user service
   services.ollama = {
     enable = true;
+  };
+
+  # hermes gateway をログイン時に自動起動 (macOS 限定)
+  # Docker Desktop が未起動でも KeepAlive + ThrottleInterval で復旧するまで再試行
+  launchd.agents = lib.optionalAttrs pkgs.stdenv.isDarwin {
+    hermes-gateway = {
+      enable = true;
+      config = {
+        Label = "com.playpark.hermes-gateway";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''/bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" && exec "${config.home.homeDirectory}/.local/bin/hermes" gateway''
+        ];
+        EnvironmentVariables = {
+          PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${config.home.homeDirectory}/.local/bin";
+          HOME = config.home.homeDirectory;
+        };
+        WorkingDirectory = "${config.home.homeDirectory}/.hermes";
+        RunAtLoad = true;
+        KeepAlive = {
+          Crashed = true;
+          SuccessfulExit = false;
+        };
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/.hermes/logs/gateway.out.log";
+        StandardErrorPath = "${config.home.homeDirectory}/.hermes/logs/gateway.err.log";
+        ThrottleInterval = 30;
+      };
+    };
   };
 }

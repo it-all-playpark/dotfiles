@@ -91,6 +91,27 @@ hermes slack manifest --write
 
 ### 起動
 
+ログイン時に **launchd agent (`com.playpark.hermes-gateway`)** が `hermes gateway`
+を background 起動する。`nix run .#update` で plist が `~/Library/LaunchAgents/`
+に展開され、即座に load される。
+
+```bash
+# 状態確認
+launchctl list | grep hermes-gateway
+
+# 停止/再開
+launchctl unload ~/Library/LaunchAgents/com.playpark.hermes-gateway.plist
+launchctl load   ~/Library/LaunchAgents/com.playpark.hermes-gateway.plist
+
+# ログ
+tail -f ~/.hermes/logs/gateway.{out,err}.log
+```
+
+KeepAlive (Crashed + 非0 exit) + `ThrottleInterval=30` を設定済みなので、
+Docker Desktop が遅れて起動するケースや一時的な network 断は自動で復旧する。
+
+foreground で debug したい場合は agent を unload してから:
+
 ```bash
 hermes gateway   # foreground
 ```
