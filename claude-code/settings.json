@@ -239,7 +239,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes.'"
+            "command": "echo",
+            "args": [
+              "Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes."
+            ]
           },
           {
             "type": "command",
@@ -405,7 +408,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'"
+            "command": "osascript",
+            "args": [
+              "-e",
+              "display notification \"Claude Code needs your attention\" with title \"Claude Code\""
+            ]
           }
         ]
       }
