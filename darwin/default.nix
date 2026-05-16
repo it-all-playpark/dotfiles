@@ -6,6 +6,7 @@ let
     xcodegen # project.yml から .xcodeproj を生成
     swiftlint # Swift Lint
     swiftformat # Swift Formatter
+    fastlane # iOS ビルド/署名/TestFlight・App Store 提出の自動化 (Ruby 同梱の hermetic closure)
   ];
 in
 {
