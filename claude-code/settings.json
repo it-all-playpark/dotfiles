@@ -436,7 +436,10 @@
           {
             "type": "command",
             "command": "bash",
-            "args": ["-c", "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"],
+            "args": [
+              "-c",
+              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
+            ],
             "timeout": 1
           }
         ]
@@ -454,5 +457,6 @@
   "language": "ja",
   "tui": "fullscreen",
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "agentPushNotifEnabled": true
 }
