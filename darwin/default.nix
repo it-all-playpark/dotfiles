@@ -58,6 +58,7 @@ in
     };
     casks = [
       # インストールするCaskアプリケーションのリスト
+      "antigravity"
       "blackhole-2ch"
       "box-drive"
       "box-tools"
