@@ -14,8 +14,8 @@
     g = ''cd "$(ghq list --full-path | fzf --layout=reverse --preview 'eza --icons --git --time-style relative -la {1}')"'';
     # git
     # ローカルブランチを選択してコピー
-    B = ''echo -n "$(git branch -av | fzf --layout=reverse --prompt "GIT BRANCH>"| sd "\*" "" |awk '{print $1}')" | pbcopy'';
-    S = ''git switch "$(git branch -av | fzf --layout=reverse --prompt "GIT BRANCH>" | sd "\*" "" |awk '{print $1}')"'';
+    B = ''echo -n "$(git branch -av --format='%(refname:short)' | fzf --layout=reverse --prompt "GIT BRANCH>" --preview 'git log --oneline -20 {}')" | pbcopy'';
+    S = ''git switch "$(git branch -av --format='%(refname:short)' | fzf --layout=reverse --prompt "GIT BRANCH>" --preview 'git log --oneline -20 {}')"'';
     # gh
     # githubブラウザページを開く
     ghb = "gh browse";
