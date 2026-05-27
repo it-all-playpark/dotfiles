@@ -78,8 +78,16 @@ echo "- docker_run_claude_version_succeeds"
 if [ "${SKIP_DOCKER}" = "true" ]; then
   skip "docker_run_claude_version_succeeds" "--skip-docker"
 else
-  claude_out="$(docker run --rm hermes-tools:latest claude --version 2>&1)"
-  claude_exit=$?
+  # NOTE: `set -e` 下では `var="$(cmd)"` の assignment 後の `$?` は assignment 自体の
+  # 終了コード (常に 0) を返してしまい、かつ cmd 失敗時は assignment 段階で
+  # script 全体が exit してしまう。これを避けるため `|| true` で exit を抑止しつつ、
+  # 出力末尾に exit code を埋め込んで一度の docker 実行で値と exit を取得する。
+  claude_run_result="$(
+    docker run --rm hermes-tools:latest claude --version 2>&1
+    printf '\n__EXIT__=%d' "$?" || true
+  )"
+  claude_exit="${claude_run_result##*__EXIT__=}"
+  claude_out="${claude_run_result%$'\n'__EXIT__=*}"
   if [ "${claude_exit}" -eq 0 ] && echo "${claude_out}" | grep -qE '[0-9]+\.[0-9]+'; then
     pass "docker_run_claude_version_succeeds"
   else

@@ -25,12 +25,24 @@ fail() {
 
 # ---------------------------------------------------------------------------
 # Helper: evaluate cli-packages.nix and return JSON list of package names
+#
+# flake の pinned nixpkgs を `builtins.getFlake` 経由で取得することで、
+# host の nix-channel 設定 (<nixpkgs>) に依存せず flake.lock と同じ nixpkgs で
+# 評価する。これにより CI / 開発環境で評価結果が一致する。
 # ---------------------------------------------------------------------------
 eval_pkg_names() {
   local mode="$1"
-  nix eval --json --impure --expr \
-    "map (p: p.pname or p.name) (import ${REPO_ROOT}/lib/cli-packages.nix { pkgs = (import <nixpkgs> {}); mode = \"${mode}\"; })" \
-    2>/dev/null
+  local system
+  system="$(nix eval --impure --raw --expr 'builtins.currentSystem')"
+  nix eval --json --impure --expr "
+    let
+      flake = builtins.getFlake \"${REPO_ROOT}\";
+      pkgs = flake.inputs.nixpkgs.legacyPackages.${system};
+    in
+      map (p: p.pname or p.name) (
+        import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; mode = \"${mode}\"; }
+      )
+  " 2>/dev/null
 }
 
 echo "=== cli-packages.nix unit tests ==="
