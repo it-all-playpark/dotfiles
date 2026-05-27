@@ -13,9 +13,10 @@
     # 選択したローカルリポジトリリストへの移動をgと定義
     g = ''cd "$(ghq list --full-path | fzf --layout=reverse --preview 'eza --icons --git --time-style relative -la {1}')"'';
     # git
-    # ローカルブランチを選択してコピー
-    B = ''echo -n "$(git branch -av | fzf --layout=reverse --prompt "GIT BRANCH>"| sd "\*" "" |awk '{print $1}')" | pbcopy'';
-    S = ''git switch "$(git branch -av | fzf --layout=reverse --prompt "GIT BRANCH>" | sd "\*" "" |awk '{print $1}')"'';
+    # ローカル/リモートブランチをfzf選択してコピー（マーカー: * current, + worktree-checkout）
+    B = ''echo -n "$(git branch -av --format='%(symref)|%(HEAD)|%(worktreepath)|%(refname:short)' | awk -F'|' '$1=="" {m=" "; if($2=="*")m="*"; else if($3!="")m="+"; printf "%s %s\n", m, $4}' | fzf --layout=reverse --prompt 'GIT BRANCH>' | awk '{print $NF}')" | pbcopy'';
+    # 同じマーカー一覧から switch
+    S = ''git switch "$(git branch -av --format='%(symref)|%(HEAD)|%(worktreepath)|%(refname:short)' | awk -F'|' '$1=="" {m=" "; if($2=="*")m="*"; else if($3!="")m="+"; printf "%s %s\n", m, $4}' | fzf --layout=reverse --prompt 'GIT BRANCH>' | awk '{print $NF}')"'';
     # gh
     # githubブラウザページを開く
     ghb = "gh browse";
@@ -25,10 +26,10 @@
     ld = "lazydocker";
     # yazi
     y = "yazi";
-    # git worktree移動（fzfで選択、ブランチ名表示）
-    w = ''cd "$(git worktree list --porcelain | awk 'BEGIN{RS=""} {p=""; b=""; det=0; bare=0; for(i=1;i<=NF;i++){if($i=="worktree")p=$(i+1); else if($i=="branch"){b=$(i+1); sub("refs/heads/","",b)} else if($i=="detached")det=1; else if($i=="bare")bare=1} label=b?b:(det?"(detached)":(bare?"(bare)":"?")); print label, p}' | fzf --layout=reverse --prompt 'WORKTREE>' --with-nth=1 --preview 'git -C {2} log --oneline -20' | awk '{print $2}')"'';
-    # merge済みworktree一括削除（PR未作成・MERGED対象、OPEN除外）
-    wrm = ''bash -c 'git worktree prune; git worktree list --porcelain | awk '"'"'BEGIN{RS=""} {p=""; b=""; for(i=1;i<=NF;i++){if($i=="worktree")p=$(i+1); else if($i=="branch"){b=$(i+1); sub("refs/heads/","",b)}} if(b) print p, b}'"'"' | tail -n +2 | while read p b; do state=$(gh pr view "$b" --json state -q .state 2>/dev/null); if [ "$state" = "MERGED" ] || [ -z "$state" ]; then git worktree remove "$p" && echo "Removed: $b (''${state:-no PR})"; fi; done' '';
+    # git worktree移動（fzfで選択、マーカー: * current worktree）
+    w = ''cd "$(git worktree list --porcelain | awk -v cur="$(git rev-parse --show-toplevel 2>/dev/null)" 'BEGIN{RS=""} {p=""; b=""; det=0; bare=0; for(i=1;i<=NF;i++){if($i=="worktree")p=$(i+1); else if($i=="branch"){b=$(i+1); sub("refs/heads/","",b)} else if($i=="detached")det=1; else if($i=="bare")bare=1} label=b?b:(det?"(detached)":(bare?"(bare)":"?")); mark=(p==cur)?"*":" "; print mark, label, p}' | fzf --layout=reverse --prompt 'WORKTREE>' --with-nth=1,2 --preview 'git -C {3} log --oneline -20' | awk '{print $3}')"'';
+    # merge済みworktree一括削除（PR未作成・MERGED対象、OPEN除外、current/main worktreeは保護）
+    wrm = ''bash -c 'git worktree prune; cur=$(git rev-parse --show-toplevel 2>/dev/null); main=$(git worktree list --porcelain | awk "/^worktree / {print \$2; exit}"); git worktree list --porcelain | awk '"'"'BEGIN{RS=""} {p=""; b=""; for(i=1;i<=NF;i++){if($i=="worktree")p=$(i+1); else if($i=="branch"){b=$(i+1); sub("refs/heads/","",b)}} if(b) print p, b}'"'"' | while read p b; do [ "$p" = "$cur" ] && { echo "Skip (current): $b"; continue; }; [ "$p" = "$main" ] && { echo "Skip (main): $b"; continue; }; state=$(gh pr view "$b" --json state -q .state 2>/dev/null); if [ "$state" = "MERGED" ] || [ -z "$state" ]; then git worktree remove "$p" && echo "Removed: $b (''${state:-no PR})"; fi; done' '';
     # マージ済み・リモート削除済みローカルブランチ一括削除（確認あり）
     brm = ''bash -c 'git fetch --prune; cur=$(git symbolic-ref --short HEAD 2>/dev/null || echo "__none__"); b=$({ git branch --merged main --format="%(refname:short)" | awk -v c="$cur" "!/^(main|master)\$/ && \$0 != c"; git branch --format="%(refname:short) %(upstream:track)" | awk -v c="$cur" "\$2 == \"[gone]\" && \$1 != c {print \$1}"; } | sort -u); [ -z "$b" ] && echo "削除対象なし" && exit 0; echo "$b"; read -p "削除OK? (y/N): " a; [ "$a" = y ] && echo "$b" | xargs git branch -D' '';
     # ローカルブランチをfzf選択して削除（protected除外・未マージ警告）
