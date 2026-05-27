@@ -48,8 +48,15 @@ nix run .#update
 | `SLACK_APP_TOKEN` (xapp-) | Slack App → Basic Information → App-Level Tokens (`connections:write`) |
 | `SLACK_ALLOWED_USERS` | Slack profile → Copy member ID |
 | `SLACK_HOME_CHANNEL` | 専用 channel ID |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` で発行 (下記参照) |
 
 `chmod 600 ~/.hermes/.env` は activation で実施済み。
+
+> **既存 `~/.hermes/.env` を持つユーザ向け追記手順** (activation は既存 `.env` を上書きしない):
+>
+> ```bash
+> echo 'CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat-...' >> ~/.hermes/.env
+> ```
 
 ### model 切替
 
@@ -143,6 +150,66 @@ hermes built-in approvals が見落とす deny を補強する。
 `pre_tool_call` フックで `tool_name` / `args.command|path|file_path|paths` を走査し、
 マッチしたら `{"action": "block", ...}` を返す。
 
+## Claude Code in container (subscription)
+
+### 概要
+
+`hermes-tools:latest` image に Node.js v24 + `@anthropic-ai/claude-code` が同梱されている (#61)。
+`CLAUDE_CODE_OAUTH_TOKEN` env を container に forward することで、**Claude Pro/Max subscription 枠**
+内で `claude --bg` + `claude agents` 経路を使い、ghq 配下 repo の project skill を実行できる。
+
+> **subscription 経路について**: `claude --bg` + `claude agents` は 2026-06-15 以降も subscription 内。
+> API billing になるのは Agent SDK (TypeScript/Python library) と `claude -p` のみ。
+
+### container 専用 OAuth token の発行 (初回のみ)
+
+host の `~/.claude/.credentials.json` を bind mount する方法は rotation 競合リスクがあるため非推奨。
+`claude setup-token` で **container 専用の長寿命 OAuth token** を別途発行すること。
+
+```bash
+# host 上で実行
+claude setup-token
+# → ブラウザが開き OAuth flow → token (sk-ant-oat-...) が表示される
+# → ~/.hermes/.env の CLAUDE_CODE_OAUTH_TOKEN= に貼り付け
+```
+
+### image の build と動作確認
+
+```bash
+# image build (darwin host では nix.linux-builder 経由で aarch64-linux image を build)
+nix run .#hermes-image-load
+
+# 動作確認
+docker run --rm hermes-tools:latest claude --version
+docker run --rm hermes-tools:latest node --version  # v24.x が返ること
+
+# token 認証確認
+docker run --rm \
+  -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+  hermes-tools:latest \
+  claude --version
+```
+
+### smoke test の実行
+
+```bash
+# docker/build が必要なためローカル手動実行のみ (CI 対象外)
+bash tests/hermes-image-smoke.sh            # すべてのテスト
+bash tests/hermes-image-smoke.sh --skip-build   # nix build をスキップ
+bash tests/hermes-image-smoke.sh --skip-docker  # docker run をスキップ
+```
+
+### Troubleshooting
+
+| 症状 | 原因 | 対策 |
+|------|------|------|
+| `claude: not authenticated` | `CLAUDE_CODE_OAUTH_TOKEN` が空または未設定 | `.env` に token を投入し hermes を再起動 |
+| `nix build: 'aarch64-linux' required` | darwin host で linux-builder 未設定 | [README #55 の手順](../README.md) を参照 |
+| `claude --version` が失敗 | image が古い (`claude-code` 未同梱) | `nix run .#hermes-image-load` で再 build |
+
+> **follow-up**: Phase 3 (workspace/worktree 構成)・Phase 4 (`claude --bg` container 跨ぎ検証)・
+> Phase 5 (hermes plugin 化) は別 issue に切り出し予定。
+
 ## Rollback
 
 ```bash
@@ -159,3 +226,5 @@ rm -rf ~/.hermes/{config.yaml,plugins/path_guard}
 - [Security guide](https://hermes-agent.nousresearch.com/docs/user-guide/security)
 - 前段 issue: [#55](https://github.com/it-all-playpark/dotfiles/issues/55) — hermes-tools docker image
 - 親 issue: [#57](https://github.com/it-all-playpark/dotfiles/issues/57)
+- [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
+- [Claude Code authentication](https://code.claude.com/docs/en/authentication)

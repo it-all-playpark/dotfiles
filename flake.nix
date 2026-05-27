@@ -132,6 +132,11 @@
             inherit pkgs;
             mode = "container";
           };
+          # @anthropic-ai/claude-code derivation
+          # 案A: pkgs.claude-code (nixpkgs に存在する場合、推奨)
+          # 案B: pkgs.buildNpmPackage fallback (lib/hermes-claude-code-pkg.nix 内で定義)
+          # 案C (禁止): extraCommands 内 npm install -g は hermetic ではないため不可
+          claudeCodePkg = import ./lib/hermes-claude-code-pkg.nix { inherit pkgs; };
         in
         nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasSuffix "-linux" system) {
           hermes-image = pkgs.dockerTools.buildLayeredImage {
@@ -139,6 +144,7 @@
             tag = "latest";
             contents =
               cliPackages
+              ++ [ claudeCodePkg ]
               ++ (with pkgs; [
                 bashInteractive
                 cacert
@@ -153,6 +159,13 @@
                 less
                 shadow
               ]);
+            # claude が起動時に ~/.claude/ への書き込みを試みる場合に備え、
+            # /root を作成して writable にする。
+            # fakeNss は /etc/passwd の root entry のみ作るため /root 自体は別途保証が必要。
+            extraCommands = ''
+              mkdir -p root
+              chmod 700 root
+            '';
             config = {
               Cmd = [ "${pkgs.bashInteractive}/bin/bash" ];
               WorkingDir = "/workspace";
@@ -160,6 +173,7 @@
                 "PATH=/bin:/usr/bin"
                 "LANG=C.UTF-8"
                 "LC_ALL=C.UTF-8"
+                "HOME=/root"
                 "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
                 # gws は default で keyring (macOS Keychain) を使うため container では復号不可。
                 # gws auth export で生成した token.json を file backend 経由で読む。
