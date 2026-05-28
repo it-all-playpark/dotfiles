@@ -45,10 +45,20 @@
 
       # 各システム用のnixpkgsインスタンスを生成
       # claude-code は mise で管理（home-manager/home/file/mise/config.toml）
+      # ただし hermes-image (container) では pkgs.claude-code を同梱するため、
+      # nixpkgs 上で unfree license の claude-code を allowUnfreePredicate で許可する。
       nixpkgsFor = forAllSystems (
         system:
         import nixpkgs {
           inherit system;
+          config = {
+            # 全体 allowUnfree を開かず、対象 package のみ name で絞って許可。
+            allowUnfreePredicate =
+              pkg:
+              builtins.elem (nixpkgs.lib.getName pkg) [
+                "claude-code"
+              ];
+          };
           overlays = [
             # direnv の checkPhase は macOS Nix サンドボックス内でハングするため無効化
             (_final: prev: {
