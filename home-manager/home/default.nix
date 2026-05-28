@@ -327,6 +327,13 @@ in
       fi
       ln -sf "$DOTFILES_HERMES/config.yaml" "$HERMES_DIR/config.yaml"
 
+      # hermes-wrapper.sh — symlink。~/.hermes/.env を load してから real hermes を exec する。
+      # launchd agent と手動起動の双方で同じ env 注入経路を提供する。
+      if [ -f "$HERMES_DIR/hermes-wrapper.sh" ] && [ ! -L "$HERMES_DIR/hermes-wrapper.sh" ]; then
+        rm "$HERMES_DIR/hermes-wrapper.sh"
+      fi
+      ln -sf "$DOTFILES_HERMES/hermes-wrapper.sh" "$HERMES_DIR/hermes-wrapper.sh"
+
       # plugins — 各 plugin ディレクトリを symlink
       # NOTE: 末尾 / 付き plugin_dir + 既存 directory symlink に対する ln -sf は、
       # BSD ln (macOS) で symlink を dereference してその中に link を作る挙動を取り、
@@ -379,7 +386,9 @@ in
               echo "hermes-gateway: $MARKER not found on this host — skipping (opt-in via 'touch $MARKER')" >&2
               exit 0
             fi
-            /bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" && exec "${config.home.homeDirectory}/.local/bin/hermes" gateway
+            /bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" \
+              && /bin/wait4path "${config.home.homeDirectory}/.hermes/hermes-wrapper.sh" \
+              && exec "${config.home.homeDirectory}/.hermes/hermes-wrapper.sh" gateway
           ''
         ];
         EnvironmentVariables = {
