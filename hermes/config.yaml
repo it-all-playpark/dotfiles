@@ -36,6 +36,16 @@ terminal:
     - "/Users/naramotoyuuji/ghq:/workspace/repos:ro"
     - "/Users/naramotoyuuji/Documents/hermes-out:/workspace/out:rw"
     - "/Users/naramotoyuuji/.config/gws:/root/.config/gws:rw"
+    # host の claude-code/ 配下を /root/.claude/ に部分 mount し
+    # container 内 `claude` の permissions / hooks を host と統一する。
+    # ~/.claude/projects, jobs, memory, skills, plugins, .credentials.json は
+    # container 側 ephemeral に任せるため mount しない (rotation 競合回避)。
+    - "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/container.settings.json:/root/.claude/settings.json:ro"
+    - "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks:/root/.claude/hooks:ro"
+    - "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/CLAUDE.md:/root/.claude/CLAUDE.md:ro"
+    - "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/PRINCIPLES.md:/root/.claude/PRINCIPLES.md:ro"
+    - "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/RULES.md:/root/.claude/RULES.md:ro"
+    - "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/skill-config.json:/root/.claude/skill-config.json:ro"
 
 agent:
   disabled_toolsets: []
