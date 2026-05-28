@@ -27,6 +27,11 @@ terminal:
   docker_image: "hermes-tools:latest"   # #55 で build
   container_persistent: false
   container_memory: 4096
+  # 単一コマンドのタイムアウト (default 180s)。/sales sync など Gmail API +
+  # 大量 pipeline.yml 読み込みで重い skill が 180s を超えるため 600s に延長。
+  timeout: 600
+  # container 自体の寿命 (default 300s)。timeout より長く取る必要があるので合わせて延長。
+  lifetime_seconds: 1800
   docker_forward_env:
     - "GIT_AUTHOR_NAME"
     - "GIT_AUTHOR_EMAIL"
