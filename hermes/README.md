@@ -140,6 +140,27 @@ tail -f ~/.hermes/logs/gateway.{out,err}.log
 KeepAlive (Crashed + 非0 exit) + `ThrottleInterval=30` を設定済みなので、
 Docker Desktop が遅れて起動するケースや一時的な network 断は自動で復旧する。
 
+### config.yaml 変更時の reload
+
+hermes daemon は `~/.hermes/config.yaml` を **起動時のみ load** する
+(セッションごとに reload しない)。`docker_volumes` / `docker_forward_env` 等を
+変更したら kickstart で再起動が必要:
+
+```bash
+launchctl kickstart -k "gui/$(id -u)/com.playpark.hermes-gateway"
+```
+
+config が反映されているかは、hermes が起動した container を直接覗くのが確実:
+
+```bash
+# 起動中 container の mount 一覧
+CID=$(docker ps -q --filter ancestor=hermes-tools:latest | head -1)
+docker inspect "$CID" --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} ({{.Mode}}){{println}}{{end}}'
+```
+
+restart 忘れの典型症状は「config.yaml に書いた mount が container 内に
+見当たらない」「新しい env var が container に渡らない」など。
+
 foreground で debug したい場合は agent を unload してから:
 
 ```bash
