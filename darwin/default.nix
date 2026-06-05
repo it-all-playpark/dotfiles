@@ -54,7 +54,8 @@ in
       # Homebrew有効化時の挙動設定
       autoUpdate = true; # brewの自動更新を有効化
       upgrade = true; # 古いバージョンがあれば自動でアップグレード
-      cleanup = "uninstall"; # casksにないものをアンインストール
+      cleanup = "uninstall"; # Brewfileにないものをアンインストール
+      extraFlags = [ "--force-cleanup" ]; # cleanup実行時の確認を明示的に許可
     };
     casks = [
       # インストールするCaskアプリケーションのリスト
@@ -92,6 +93,8 @@ in
     ];
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
+      "1Password for Safari" = 1569813296;
+      LINE = 539883307;
       Xcode = 497799835;
     };
   };
