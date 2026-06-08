@@ -266,7 +266,13 @@
       ]
     },
     "excludedCommands": [
-      "gh:*"
+      "gh:*",
+      "~/.claude/skills/*",
+      "$SKILLS_DIR/*",
+      "bash ~/.claude/skills/*",
+      "bash $SKILLS_DIR/*",
+      "python3 ~/.claude/skills/*",
+      "python3 $SKILLS_DIR/*"
     ]
   },
   "enableAllProjectMcpServers": false,
