@@ -226,6 +226,49 @@
       "~/ghq/github.com/Cistree-dev"
     ]
   },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "codeload.github.com",
+        "*.githubusercontent.com",
+        "registry.npmjs.org",
+        "*.npmjs.org",
+        "cache.nixos.org",
+        "channels.nixos.org",
+        "releases.nixos.org",
+        "tarballs.nixos.org",
+        "*.cachix.org",
+        "crates.io",
+        "index.crates.io",
+        "static.crates.io",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "nodejs.org",
+        "static.rust-lang.org",
+        "sh.rustup.rs",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "go.dev",
+        "storage.googleapis.com"
+      ]
+    },
+    "filesystem": {
+      "denyRead": [
+        "~/.aws/**",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "~/.config/gh/**"
+      ]
+    },
+    "excludedCommands": [
+      "gh:*"
+    ]
+  },
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [],
   "hooks": {
