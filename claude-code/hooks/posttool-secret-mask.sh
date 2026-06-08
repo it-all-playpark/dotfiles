@@ -117,9 +117,19 @@ mask_text() {
     # JWT
     s/\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/[REDACTED:JWT]/g;
 
+    # URL 埋め込み credential (scheme://[user]:PASSWORD@host) — postgres/redis/mongodb 等
+    # user 部空 (redis://:pass@) も許容。password 部のみ redact。
+    s{\b([a-zA-Z][a-zA-Z0-9+.\-]*://)([^:/@\s]*):([^@/\s]+)@}{${1}${2}:[REDACTED:URL_CRED]\@}g;
+
     # Generic env-style fallback (specific 済みは (?!\[REDACTED:) で除外)
-    # 行頭 whitespace (インデント) も許容
-    s/(^|[\s])((?:[A-Z][A-Z0-9_]*_)?(?:TOKEN|KEY|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL|BEARER)[A-Z0-9_]*)=(?!\[REDACTED:)([^\s\r\n]{16,})($|[\s])/$1$2=[REDACTED:ENV_SECRET]$4/gm;
+    # keyword は underscore 区切りに依存しない (PGPASSWORD 等も捕捉)。行頭 whitespace 許容。
+    s/(^|[\s])([A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|PASSPHRASE|CREDENTIAL|BEARER|SALT)[A-Z0-9_]*)=(?!\[REDACTED:)([^\s\r\n]{16,})($|[\s])/$1$2=[REDACTED:ENV_SECRET]$4/gm;
+
+    # 小文字/camelCase env 名 (apikey=, password=, access_token= 等; = 区切り・16+ 非空白値)
+    s/(^|[\s])([A-Za-z0-9_]*(?i:token|key|secret|password|passphrase|credential|bearer|salt)[A-Za-z0-9_]*)=(?!\[REDACTED:)([^\s\r\n]{16,})($|[\s])/$1$2=[REDACTED:ENV_SECRET]$4/gm;
+
+    # JSON/quoted inline ("apiKey":"value" 形式; keyword 名 + 12+ 値)
+    s/("(?:[A-Za-z0-9_]*(?i:token|key|secret|password|credential|bearer|salt)[A-Za-z0-9_]*)"\s*:\s*")(?!\[REDACTED:)[^"\r\n]{12,}"/${1}[REDACTED:JSON_SECRET]"/g;
   '
 }
 
