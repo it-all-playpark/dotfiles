@@ -267,6 +267,7 @@
     },
     "excludedCommands": [
       "gh:*",
+      "git:*",
       "~/.claude/skills/*",
       "$SKILLS_DIR/*",
       "bash ~/.claude/skills/*",
