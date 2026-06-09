@@ -266,7 +266,8 @@
       ]
     },
     "excludedCommands": [
-      "gh:*"
+      "gh:*",
+      "git:*"
     ]
   },
   "enableAllProjectMcpServers": false,
