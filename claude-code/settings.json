@@ -24,7 +24,9 @@
       "mcp__plugin_telegram_telegram__reply",
       "mcp__plugin_telegram_telegram__react",
       "mcp__plugin_telegram_telegram__edit_message",
-      "mcp__plugin_telegram_telegram__download_attachment"
+      "mcp__plugin_telegram_telegram__download_attachment",
+      "Bash(zernio post:*)",
+      "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio:*)"
     ],
     "deny": [
       "Bash(gh repo delete:*)",
@@ -254,7 +256,9 @@
         "proxy.golang.org",
         "sum.golang.org",
         "go.dev",
-        "storage.googleapis.com"
+        "storage.googleapis.com",
+        "zernio.com",
+        "*.amazonaws.com"
       ]
     },
     "filesystem": {
@@ -273,7 +277,9 @@
       "bash ~/.claude/skills/*",
       "bash $SKILLS_DIR/*",
       "python3 ~/.claude/skills/*",
-      "python3 $SKILLS_DIR/*"
+      "python3 $SKILLS_DIR/*",
+      "codex:*",
+      "zernio:*"
     ]
   },
   "enableAllProjectMcpServers": false,
