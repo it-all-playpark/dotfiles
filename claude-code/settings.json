@@ -228,60 +228,6 @@
       "~/ghq/github.com/Cistree-dev"
     ]
   },
-  "sandbox": {
-    "enabled": true,
-    "failIfUnavailable": true,
-    "allowUnsandboxedCommands": false,
-    "network": {
-      "allowedDomains": [
-        "github.com",
-        "api.github.com",
-        "codeload.github.com",
-        "*.githubusercontent.com",
-        "registry.npmjs.org",
-        "*.npmjs.org",
-        "cache.nixos.org",
-        "channels.nixos.org",
-        "releases.nixos.org",
-        "tarballs.nixos.org",
-        "*.cachix.org",
-        "crates.io",
-        "index.crates.io",
-        "static.crates.io",
-        "pypi.org",
-        "files.pythonhosted.org",
-        "nodejs.org",
-        "static.rust-lang.org",
-        "sh.rustup.rs",
-        "proxy.golang.org",
-        "sum.golang.org",
-        "go.dev",
-        "storage.googleapis.com",
-        "zernio.com",
-        "*.amazonaws.com"
-      ]
-    },
-    "filesystem": {
-      "denyRead": [
-        "~/.aws/**",
-        "~/.ssh/**",
-        "~/.gnupg/**",
-        "~/.config/gh/**"
-      ]
-    },
-    "excludedCommands": [
-      "gh:*",
-      "git:*",
-      "~/.claude/skills/*",
-      "$SKILLS_DIR/*",
-      "bash ~/.claude/skills/*",
-      "bash $SKILLS_DIR/*",
-      "python3 ~/.claude/skills/*",
-      "python3 $SKILLS_DIR/*",
-      "codex:*",
-      "zernio:*"
-    ]
-  },
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [],
   "hooks": {
@@ -508,9 +454,78 @@
   },
   "extraKnownMarketplaces": {},
   "language": "ja",
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "codeload.github.com",
+        "*.githubusercontent.com",
+        "registry.npmjs.org",
+        "*.npmjs.org",
+        "cache.nixos.org",
+        "channels.nixos.org",
+        "releases.nixos.org",
+        "tarballs.nixos.org",
+        "*.cachix.org",
+        "crates.io",
+        "index.crates.io",
+        "static.crates.io",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "nodejs.org",
+        "static.rust-lang.org",
+        "sh.rustup.rs",
+        "proxy.golang.org",
+        "sum.golang.org",
+        "go.dev",
+        "storage.googleapis.com",
+        "zernio.com",
+        "*.amazonaws.com",
+        "*.googleapis.com",
+        "accounts.google.com",
+        "trends.google.com",
+        "fonts.gstatic.com",
+        "qiita.com",
+        "zenn.dev",
+        "api.slack.com"
+      ]
+    },
+    "filesystem": {
+      "denyRead": [
+        "~/.aws/**",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "~/.config/gh/**"
+      ],
+      "allowWrite": [
+        "~/.claude/journal",
+        "~/.claude/logs",
+        "~/.claude/memory",
+        "~/.claude/jobs",
+        "~/Documents/meetings"
+      ]
+    },
+    "excludedCommands": [
+      "gh:*",
+      "git:*",
+      "~/.claude/skills/*",
+      "bash ~/.claude/skills/*",
+      "python3 ~/.claude/skills/*",
+      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "codex:*",
+      "zernio:*"
+    ]
+  },
   "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": true,
-  "skipWorkflowUsageWarning": true
+  "model": "claude-fable-5[1m]"
 }
