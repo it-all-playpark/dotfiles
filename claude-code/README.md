@@ -56,6 +56,7 @@ nix run .#update
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
 | `PostToolUse` 系 | `posttool-secret-mask.sh` | 出力中の secret をマスク |
+| `Stop` | `stop-devflow-telemetry.sh` | dev-flow telemetry の journal flush（失敗時 `~/.claude/logs/stop-devflow-telemetry.log`） |
 
 テストファイル（`*.test.sh`）は symlink 対象外。
 
