@@ -24,13 +24,13 @@ set -euo pipefail
 cat >/dev/null 2>&1 || true
 
 # Escape hatch
-if [[ "${CLAUDE_DEVFLOW_TELEMETRY_HOOK:-1}" == "0" ]]; then
+if [[ ${CLAUDE_DEVFLOW_TELEMETRY_HOOK:-1} == "0" ]]; then
   exit 0
 fi
 
 PENDING_DIR="${CLAUDE_JOURNAL_DIR:-${HOME}/.claude/journal}/pending"
 
-if [[ ! -d "$PENDING_DIR" ]]; then
+if [[ ! -d $PENDING_DIR ]]; then
   exit 0
 fi
 
@@ -40,7 +40,7 @@ LOG_FILE="${HOME}/.claude/logs/stop-devflow-telemetry.log"
 # Process each *.json in pending dir
 for f in "${PENDING_DIR}"/*.json; do
   # No files matched (glob literal returned)
-  [[ -e "$f" ]] || continue
+  [[ -e $f ]] || continue
 
   claimed="${f}.claimed.$$"
 
@@ -83,7 +83,7 @@ for f in "${PENDING_DIR}"/*.json; do
     mkdir -p "${PENDING_DIR}/malformed"
     mv "$claimed" "${PENDING_DIR}/malformed/$(basename "$f")"
     mkdir -p "$(dirname "$LOG_FILE")"
-    printf '%s malformed-json %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >> "$LOG_FILE"
+    printf '%s malformed-json %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
     continue
   fi
 
@@ -92,11 +92,11 @@ for f in "${PENDING_DIR}"/*.json; do
   merge_tier=$(echo "$parsed" | jq -r '.merge_tier // empty')
 
   # Required key check
-  if [[ -z "$skill" || -z "$outcome" || -z "$merge_tier" ]]; then
+  if [[ -z $skill || -z $outcome || -z $merge_tier ]]; then
     mkdir -p "${PENDING_DIR}/malformed"
     mv "$claimed" "${PENDING_DIR}/malformed/$(basename "$f")"
     mkdir -p "$(dirname "$LOG_FILE")"
-    printf '%s missing-required-key %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >> "$LOG_FILE"
+    printf '%s missing-required-key %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
     continue
   fi
 
@@ -113,13 +113,13 @@ for f in "${PENDING_DIR}"/*.json; do
 
   # --- Resolve journal.sh ---
   journal_sh=""
-  if [[ -n "$journal_sh_field" && -x "$journal_sh_field" ]]; then
+  if [[ -n $journal_sh_field && -x $journal_sh_field ]]; then
     journal_sh="$journal_sh_field"
-  elif [[ -x "$FALLBACK_JOURNAL" ]]; then
+  elif [[ -x $FALLBACK_JOURNAL ]]; then
     journal_sh="$FALLBACK_JOURNAL"
   else
     mkdir -p "$(dirname "$LOG_FILE")"
-    printf '%s no-journal-sh %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >> "$LOG_FILE"
+    printf '%s no-journal-sh %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
     mv "$claimed" "$f"
     continue
   fi
@@ -138,10 +138,10 @@ for f in "${PENDING_DIR}"/*.json; do
   )
 
   # Optional fields: only append if non-empty and not null
-  if [[ -n "$eval_verdict" && "$eval_verdict" != "null" ]]; then
+  if [[ -n $eval_verdict && $eval_verdict != "null" ]]; then
     cmd_args+=(--eval-verdict "$eval_verdict")
   fi
-  if [[ -n "$iterate_status" && "$iterate_status" != "null" ]]; then
+  if [[ -n $iterate_status && $iterate_status != "null" ]]; then
     cmd_args+=(--iterate-status "$iterate_status")
   fi
 
@@ -157,7 +157,7 @@ for f in "${PENDING_DIR}"/*.json; do
     printf '%s %s journal-failed: %s\n' \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       "$(basename "$f")" \
-      "$(echo "$journal_stderr" | head -1 | tr '\n' ' ')" >> "$LOG_FILE"
+      "$(echo "$journal_stderr" | head -1 | tr '\n' ' ')" >>"$LOG_FILE"
   fi
 done
 

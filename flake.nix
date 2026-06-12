@@ -73,8 +73,7 @@
             (_final: prev: {
               ollama = prev.ollama.overrideAttrs (old: {
                 preBuild =
-                  builtins.replaceStrings [ "cmake -B build" ]
-                    [ "cmake -B build -DOLLAMA_MLX_BACKENDS=\"\"" ]
+                  builtins.replaceStrings [ "cmake -B build" ] [ "cmake -B build -DOLLAMA_MLX_BACKENDS=\"\"" ]
                     old.preBuild;
               });
             })

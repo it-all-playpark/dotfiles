@@ -14,8 +14,17 @@ PASS=0
 FAIL=0
 FAILURES=()
 
-pass() { local name="$1"; PASS=$((PASS + 1)); printf "  \033[32mPASS\033[0m %s\n" "$name"; }
-fail() { local name="$1" msg="$2"; FAIL=$((FAIL + 1)); FAILURES+=("$name: $msg"); printf "  \033[31mFAIL\033[0m %s (%s)\n" "$name" "$msg"; }
+pass() {
+  local name="$1"
+  PASS=$((PASS + 1))
+  printf "  \033[32mPASS\033[0m %s\n" "$name"
+}
+fail() {
+  local name="$1" msg="$2"
+  FAIL=$((FAIL + 1))
+  FAILURES+=("$name: $msg")
+  printf "  \033[31mFAIL\033[0m %s (%s)\n" "$name" "$msg"
+}
 
 # --------------------------------------------------------------------------
 # Setup / teardown helpers
@@ -47,7 +56,7 @@ make_handoff() {
       eval_iter: 1
     }
   }')
-  echo "$base" | jq "$extra" > "${dir}/${fname}"
+  echo "$base" | jq "$extra" >"${dir}/${fname}"
 }
 
 # --------------------------------------------------------------------------
@@ -134,7 +143,7 @@ run_hook() {
 # --------------------------------------------------------------------------
 make_stub_journal() {
   local stub_path="$1" capture_file="$2" exit_code="${3:-0}"
-  cat > "$stub_path" <<STUB_EOF
+  cat >"$stub_path" <<STUB_EOF
 #!/usr/bin/env bash
 # Stub journal.sh for testing
 echo "\$*" >> "${capture_file}"
@@ -170,7 +179,7 @@ STUB_EOF
         plan_iter: 1,
         eval_iter: 1
       }
-    }' > "${tmpd}/journal/pending/handoff.json"
+    }' >"${tmpd}/journal/pending/handoff.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
@@ -181,20 +190,20 @@ STUB_EOF
   fi
 
   # Check capture file exists and has content
-  if [[ ! -f "$capture" ]]; then
+  if [[ ! -f $capture ]]; then
     fail "happy_path_stub_called" "capture file not created (stub not called)"
   else
     captured=$(cat "$capture")
     # Expected args: log dev-flow success --issue 203 --merge-tier REVIEW ...
     if echo "$captured" | grep -q "log dev-flow success" &&
-       echo "$captured" | grep -q -- "--issue 203" &&
-       echo "$captured" | grep -q -- "--merge-tier REVIEW" &&
-       echo "$captured" | grep -q -- "--gate-policy llm-major-advisory" &&
-       echo "$captured" | grep -q -- "--danger-hits" &&
-       echo "$captured" | grep -q -- "--shape standard" &&
-       echo "$captured" | grep -q -- "--shape-refloored false" &&
-       echo "$captured" | grep -q -- "--plan-iter 1" &&
-       echo "$captured" | grep -q -- "--eval-iter 1"; then
+      echo "$captured" | grep -q -- "--issue 203" &&
+      echo "$captured" | grep -q -- "--merge-tier REVIEW" &&
+      echo "$captured" | grep -q -- "--gate-policy llm-major-advisory" &&
+      echo "$captured" | grep -q -- "--danger-hits" &&
+      echo "$captured" | grep -q -- "--shape standard" &&
+      echo "$captured" | grep -q -- "--shape-refloored false" &&
+      echo "$captured" | grep -q -- "--plan-iter 1" &&
+      echo "$captured" | grep -q -- "--eval-iter 1"; then
       pass "happy_path_stub_called_with_correct_args"
     else
       fail "happy_path_stub_called_with_correct_args" "args mismatch. got: ${captured}"
@@ -250,7 +259,7 @@ STUB_EOF
         eval_verdict: "PASS",
         iterate_status: "converged"
       }
-    }' > "${tmpd}/journal/pending/handoff.json"
+    }' >"${tmpd}/journal/pending/handoff.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
@@ -260,7 +269,7 @@ STUB_EOF
     fail "optional_fields_exits_0" "expected exit 0, got ${RUN_EXIT}. output: ${RUN_OUT}"
   fi
 
-  if [[ -f "$capture" ]]; then
+  if [[ -f $capture ]]; then
     captured=$(cat "$capture")
     if echo "$captured" | grep -q -- "--eval-verdict PASS"; then
       pass "optional_eval_verdict_present"
@@ -310,11 +319,11 @@ STUB_EOF
         plan_iter: 5,
         eval_iter: 4
       }
-    }' > "${tmpd}/journal/pending/handoff.json"
+    }' >"${tmpd}/journal/pending/handoff.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
-  if [[ -f "$capture" ]]; then
+  if [[ -f $capture ]]; then
     captured=$(cat "$capture")
     if ! echo "$captured" | grep -q -- "--eval-verdict"; then
       pass "no_eval_verdict_when_absent"
@@ -359,7 +368,7 @@ STUB_EOF
         plan_iter: 1,
         eval_iter: 1
       }
-    }' > "${tmpd}/journal/pending/handoff.json"
+    }' >"${tmpd}/journal/pending/handoff.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
@@ -379,10 +388,10 @@ STUB_EOF
 
   # Log file should be written
   logfile="${tmpd}/.claude/logs/stop-devflow-telemetry.log"
-  if [[ -f "$logfile" ]]; then
+  if [[ -f $logfile ]]; then
     pass "failure_path_log_written"
     # Check log has content (timestamp + something)
-    if [[ -s "$logfile" ]]; then
+    if [[ -s $logfile ]]; then
       pass "failure_path_log_nonempty"
     else
       fail "failure_path_log_nonempty" "log file is empty"
@@ -401,7 +410,7 @@ STUB_EOF
   tmpd=$(make_tmpdir)
   mkdir -p "${tmpd}/journal/pending"
 
-  echo "{ not valid json }" > "${tmpd}/journal/pending/bad.json"
+  echo "{ not valid json }" >"${tmpd}/journal/pending/bad.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
@@ -437,7 +446,7 @@ STUB_EOF
 
   # Valid JSON but missing required key
   echo '{"skill":"dev-flow","outcome":"success","issue":1,"journal_sh":"/bin/true","telemetry":{}}' \
-    > "${tmpd}/journal/pending/nokey.json"
+    >"${tmpd}/journal/pending/nokey.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
@@ -482,11 +491,11 @@ STUB_EOF
         plan_iter: 1,
         eval_iter: 1
       }
-    }' > "${tmpd}/journal/pending/handoff.json"
+    }' >"${tmpd}/journal/pending/handoff.json"
 
   stdout_out=$(env "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}" bash "$HOOK" </dev/null 2>/dev/null || true)
 
-  if [[ -z "$stdout_out" ]]; then
+  if [[ -z $stdout_out ]]; then
     pass "no_stdout_output"
   else
     fail "no_stdout_output" "hook should not write to stdout, got: ${stdout_out}"
