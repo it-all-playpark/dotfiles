@@ -12,3 +12,5 @@ keybind = global:alt+space=toggle_quick_terminal
 # Alt+Arrow をデフォルトの単語移動（ESC b/f）から解放し、zellij に渡す
 keybind = alt+right=unbind
 keybind = alt+left=unbind
+# Alt+d を zellij の Detach に渡す（fish の単語削除をオーバーライド）
+keybind = alt+d=unbind
