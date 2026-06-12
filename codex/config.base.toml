@@ -5,10 +5,10 @@ model = "gpt-5.5"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 
-# Reduce approval friction for normal project work:
-# - run inside workspace sandbox
-# - only ask when a command must leave sandbox and fails there
-approval_policy = "on-failure"
+# Reduce approval friction for normal project work while keeping the workspace
+# sandbox enabled. Failures are returned to the agent instead of prompting for
+# unsandboxed escalation.
+approval_policy = "never"
 sandbox_mode = "workspace-write"
 
 [sandbox_workspace_write]

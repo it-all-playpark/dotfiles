@@ -30,9 +30,12 @@ On first activation:
   - `approval_policy`
   - `sandbox_mode`
   - `sandbox_workspace_write.network_access`
+  - `~/.codex/rules/default.rules` entries with `decision = "prompt"`
 - In this dotfiles baseline, these values are set for low-friction project work:
-  - `approval_policy = "on-failure"`
+  - `approval_policy = "never"`
   - `sandbox_mode = "workspace-write"`
   - `sandbox_workspace_write.network_access = true`
+- High-risk commands aligned with `claude-code/settings.json` deny/guard policy are mapped to `decision = "forbidden"` instead of `decision = "prompt"` so they are rejected without asking.
+- Avoid `sandbox_mode = "danger-full-access"` as a shared default. Use it only per-invocation when an external sandbox already exists.
 - Prefix rules are literal prefix matches. `["git", "push"]` does not match `git -C <path> push ...`.
 - `~/.codex/rules/default.rules` is local-only and copied only once. If you already have a local rules file, updates in `dotfiles/codex/rules/default.rules` will not overwrite it automatically.
