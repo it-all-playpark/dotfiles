@@ -138,5 +138,8 @@ in
   # セキュリティ設定
   security.pam.services.sudo_local.touchIdAuth = true; # Touch IDでsudoを有効化
   security.pam.services.sudo_local.reattach = true; # tmuxなどでTouch IDを動作させるためのpam_reattachを有効化
+
+  # Tailscale VPN（CLIのみ、インターネット越しSSH用）
+  services.tailscale.enable = true;
 }
 
