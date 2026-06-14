@@ -365,6 +365,15 @@ in
     enable = true;
   };
 
+  # Syncthing をログイン時に自動起動
+  # macOS: launchd agent, Linux: systemd user service
+  # MacBook ↔ Mac Studio 間でスクショ等を双方向同期する。回線が切れても復帰時に差分を
+  # 自動同期するため、トンネル区間を含む移動中でもファイル受け渡しが途切れない。
+  # 初回のみ各マシンの Web UI (http://127.0.0.1:8384) でデバイス相互承認 + 共有フォルダ設定が必要。
+  services.syncthing = {
+    enable = true;
+  };
+
   # hermes gateway をログイン時に自動起動 (macOS 限定)
   # Docker Desktop が未起動でも KeepAlive + ThrottleInterval で復旧するまで再試行。
   #
