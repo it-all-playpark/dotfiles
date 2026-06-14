@@ -500,18 +500,18 @@
       ]
     },
     "filesystem": {
-      "denyRead": [
-        "~/.aws/**",
-        "~/.ssh/**",
-        "~/.gnupg/**",
-        "~/.config/gh/**"
-      ],
       "allowWrite": [
         "~/.claude/journal",
         "~/.claude/logs",
         "~/.claude/memory",
         "~/.claude/jobs",
         "~/Documents/meetings"
+      ],
+      "denyRead": [
+        "~/.aws/**",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "~/.config/gh/**"
       ]
     },
     "excludedCommands": [
@@ -531,6 +531,5 @@
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "model": "claude-fable-5[1m]"
+  "voiceEnabled": true
 }
