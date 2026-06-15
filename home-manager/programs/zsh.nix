@@ -7,13 +7,14 @@ in
   programs.zsh = {
     enable = true;
     loginExtra = ''
-      # PATH設定
-      export PATH="$HOME/.nix-profile/bin:$PATH"
       ${shellCommon.getPathConfig.zshDarwin}
       ${shellCommon.getPathConfig.zshLinux}
     '';
     envExtra = ''
       unsetopt GLOBAL_RCS
+
+      # SSH remote commands such as mosh-server run under non-interactive zsh.
+      export PATH="$HOME/.nix-profile/bin:/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:$PATH"
     '';
     initContent = ''
       # terraformをopenTofuで代用
