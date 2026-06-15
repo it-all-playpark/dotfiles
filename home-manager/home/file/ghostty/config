@@ -6,8 +6,8 @@ background-blur-radius = 20
 macos-option-as-alt = true
 
 # Quick Terminal
-quick-terminal-screen = main
-keybind = global:alt+space=toggle_quick_terminal
+# quick-terminal-screen = main
+# keybind = global:alt+space=toggle_quick_terminal
 
 # Alt+Arrow をデフォルトの単語移動（ESC b/f）から解放し、zellij に渡す
 keybind = alt+right=unbind
