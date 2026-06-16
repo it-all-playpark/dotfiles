@@ -17,10 +17,9 @@ ui {
 mouse_mode true
 
 // コピーモード: vi キーバインド
-// クリップボードは OSC52 経由（端末=ghostty に転送）。
-// copy_command "pbcopy" はそのホストに pbcopy が在る前提で、mosh 越しの
-// リモートや pbcopy 不在ホストでは効かない。OSC52 ならホスト非依存で動く。
-copy_clipboard "system"
+// クリップボードは pbcopy 経由。OSC52(copy_clipboard "system")は zellij 0.44.3 +
+// mosh 1.4.0 環境では実際のコピーが効かなかったため pbcopy に戻している。
+copy_command "pbcopy"
 scrollback_editor "nvim"
 
 // セッション名を表示
