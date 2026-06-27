@@ -1,5 +1,8 @@
 {
-  "fallbackModel": ["claude-opus-4-7", "claude-sonnet-4-6"],
+  "fallbackModel": [
+    "claude-opus-4-7",
+    "claude-sonnet-4-6"
+  ],
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "API_TIMEOUT_MS": "900000"
@@ -507,7 +510,9 @@
         "~/.claude/logs",
         "~/.claude/memory",
         "~/.claude/jobs",
-        "~/Documents/meetings"
+        "~/Documents/meetings",
+        "~/ghq/**/.claude/scheduled_tasks.json",
+        "~/ghq/**/.claude/scheduled_tasks.lock"
       ],
       "denyRead": [
         "~/.aws/**",
