@@ -66,6 +66,14 @@
                 doCheck = false;
               });
             })
+            # mise の checkPhase は Nix サンドボックスが setuid bit 付与を許可しないため
+            # oci::layer::tests::preserve_metadata_dir_layer_keeps_special_permission_bits が失敗する。
+            # nixpkgs 側でこのテストが skip されたら削除可。
+            (_final: prev: {
+              mise = prev.mise.overrideAttrs (_: {
+                doCheck = false;
+              });
+            })
             # ollama 0.30.5 は macOS arm64 で MLX backend がデフォルト有効になり、
             # Nix サンドボックスに存在しない Xcode の Metal toolchain を要求してビルドに失敗する。
             # nixpkgs master (0.30.6) と同じく -DOLLAMA_MLX_BACKENDS="" で無効化する。
