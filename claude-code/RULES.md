@@ -20,6 +20,13 @@ Conflict: Safety > Scope > Quality > Speed
 - **No Partial Features**: Start = Finish. No TODO, no mocks, no stubs
 - **Scope Discipline**: Build ONLY what's asked. MVP first, no speculative features
 
+## Orchestration & Compute Budget
+- **Right-Sized Model**: Workflow/subagent の各ステージは作業の重さでモデルを選ぶ
+  - 軽量・機械的（web search, grep集約, mechanical edit）→ `model: haiku, effort: low`
+  - 重い判断のみ（verify/judge/synthesize）→ opus + 上位 effort
+- **Inherit ≠ Default-Heavy**: `agent()` は明示しない限りセッションモデル（opus xhigh）を継承する。軽ステージに指定をサボると全部 opus xhigh になる
+- **No Over-Orchestration**: trivial な単発作業は Workflow 化せず直接ツールを叩く。ultracode でも例外でない
+
 ## Organization
 - Follow existing project conventions for naming and directory structure
 - Reports/analyses → `claudedocs/`、Tests → `tests/`、Scripts → `scripts/`
