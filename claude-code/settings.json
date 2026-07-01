@@ -1,7 +1,7 @@
 {
   "fallbackModel": [
     "claude-opus-4-7",
-    "claude-sonnet-4-6"
+    "claude-sonnet-5"
   ],
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
