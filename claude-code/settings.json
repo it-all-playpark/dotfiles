@@ -1,8 +1,4 @@
 {
-  "fallbackModel": [
-    "claude-opus-4-7",
-    "claude-sonnet-5"
-  ],
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "API_TIMEOUT_MS": "900000"
@@ -233,6 +229,10 @@
       "~/ghq/github.com/Cistree-dev"
     ]
   },
+  "fallbackModel": [
+    "claude-opus-4-8",
+    "claude-sonnet-5"
+  ],
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [],
   "hooks": {
@@ -541,5 +541,6 @@
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": true,
+  "model": "claude-fable-5[1m]"
 }
