@@ -257,7 +257,8 @@ STUB_EOF
         plan_iter: 2,
         eval_iter: 3,
         eval_verdict: "PASS",
-        iterate_status: "converged"
+        iterate_status: "converged",
+        eval_staleness: "iterate_fixed"
       }
     }' >"${tmpd}/journal/pending/handoff.json"
 
@@ -285,6 +286,11 @@ STUB_EOF
       pass "optional_shape_refloored_true"
     else
       fail "optional_shape_refloored_true" "--shape-refloored true not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--eval-staleness iterate_fixed"; then
+      pass "optional_eval_staleness_present"
+    else
+      fail "optional_eval_staleness_present" "--eval-staleness iterate_fixed not found. got: ${captured}"
     fi
   else
     fail "optional_fields_stub_called" "capture file not created"
@@ -334,6 +340,11 @@ STUB_EOF
       pass "no_iterate_status_when_absent"
     else
       fail "no_iterate_status_when_absent" "--iterate-status should not appear"
+    fi
+    if ! echo "$captured" | grep -q -- "--eval-staleness"; then
+      pass "no_eval_staleness_when_absent"
+    else
+      fail "no_eval_staleness_when_absent" "--eval-staleness should not appear"
     fi
   else
     fail "no_optional_fields_stub_called" "capture file not created"

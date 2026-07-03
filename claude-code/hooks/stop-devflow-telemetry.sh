@@ -63,6 +63,7 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_iter=""
   eval_verdict=""
   iterate_status=""
+  eval_staleness=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -77,7 +78,8 @@ for f in "${PENDING_DIR}"/*.json; do
     plan_iter: .telemetry.plan_iter,
     eval_iter: .telemetry.eval_iter,
     eval_verdict: .telemetry.eval_verdict,
-    iterate_status: .telemetry.iterate_status
+    iterate_status: .telemetry.iterate_status,
+    eval_staleness: .telemetry.eval_staleness
   }' "$claimed" 2>/dev/null); then
     # JSON parse error
     mkdir -p "${PENDING_DIR}/malformed"
@@ -110,6 +112,7 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_iter=$(echo "$parsed" | jq -r '.eval_iter // empty')
   eval_verdict=$(echo "$parsed" | jq -r '.eval_verdict // empty')
   iterate_status=$(echo "$parsed" | jq -r '.iterate_status // empty')
+  eval_staleness=$(echo "$parsed" | jq -r '.eval_staleness // empty')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -143,6 +146,9 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $iterate_status && $iterate_status != "null" ]]; then
     cmd_args+=(--iterate-status "$iterate_status")
+  fi
+  if [[ -n $eval_staleness && $eval_staleness != "null" ]]; then
+    cmd_args+=(--eval-staleness "$eval_staleness")
   fi
 
   # --- Execute journal.sh ---
