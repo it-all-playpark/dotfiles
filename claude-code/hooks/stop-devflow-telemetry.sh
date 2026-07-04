@@ -64,12 +64,16 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_verdict=""
   iterate_status=""
   eval_staleness=""
+  repo=""
+  pr_number=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
     outcome: .outcome,
     issue: .issue,
     journal_sh: .journal_sh,
+    repo: .repo,
+    pr_number: .pr_number,
     merge_tier: .telemetry.merge_tier,
     gate_policy: .telemetry.gate_policy,
     danger_hits: (.telemetry.danger_hits // []),
@@ -113,6 +117,8 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_verdict=$(echo "$parsed" | jq -r '.eval_verdict // empty')
   iterate_status=$(echo "$parsed" | jq -r '.iterate_status // empty')
   eval_staleness=$(echo "$parsed" | jq -r '.eval_staleness // empty')
+  repo=$(echo "$parsed" | jq -r '.repo // empty')
+  pr_number=$(echo "$parsed" | jq -r '.pr_number // empty')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -149,6 +155,12 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $eval_staleness && $eval_staleness != "null" ]]; then
     cmd_args+=(--eval-staleness "$eval_staleness")
+  fi
+  if [[ -n $repo && $repo != "null" ]]; then
+    cmd_args+=(--repo "$repo")
+  fi
+  if [[ -n $pr_number && $pr_number != "null" ]]; then
+    cmd_args+=(--pr-number "$pr_number")
   fi
 
   # --- Execute journal.sh ---
