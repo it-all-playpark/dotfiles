@@ -248,6 +248,8 @@ STUB_EOF
       outcome: "success",
       issue: 42,
       journal_sh: $js,
+      repo: "acme/skills",
+      pr_number: 123,
       telemetry: {
         merge_tier: "AUTO",
         gate_policy: "llm-autonomous",
@@ -291,6 +293,16 @@ STUB_EOF
       pass "optional_eval_staleness_present"
     else
       fail "optional_eval_staleness_present" "--eval-staleness iterate_fixed not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--repo acme/skills"; then
+      pass "optional_repo_present"
+    else
+      fail "optional_repo_present" "--repo acme/skills not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--pr-number 123"; then
+      pass "optional_pr_number_present"
+    else
+      fail "optional_pr_number_present" "--pr-number 123 not found. got: ${captured}"
     fi
   else
     fail "optional_fields_stub_called" "capture file not created"
@@ -345,6 +357,16 @@ STUB_EOF
       pass "no_eval_staleness_when_absent"
     else
       fail "no_eval_staleness_when_absent" "--eval-staleness should not appear"
+    fi
+    if ! echo "$captured" | grep -q -- "--repo"; then
+      pass "no_repo_when_absent"
+    else
+      fail "no_repo_when_absent" "--repo should not appear"
+    fi
+    if ! echo "$captured" | grep -q -- "--pr-number"; then
+      pass "no_pr_number_when_absent"
+    else
+      fail "no_pr_number_when_absent" "--pr-number should not appear"
     fi
   else
     fail "no_optional_fields_stub_called" "capture file not created"
