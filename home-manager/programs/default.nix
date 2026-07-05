@@ -8,5 +8,6 @@
     ./git.nix
     ./yazi.nix
     ./neovim.nix
+    ./cca.nix
   ];
 }
