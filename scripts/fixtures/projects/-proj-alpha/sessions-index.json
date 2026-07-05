@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "entries": [
-    {"sessionId": "a1", "fileMtime": 1000, "summary": "Old work", "gitBranch": "main", "projectPath": "/home/u/alpha", "isSidechain": false},
-    {"sessionId": "a2", "fileMtime": 3000, "summary": "Recent work", "gitBranch": "feat/x", "projectPath": "/home/u/alpha", "isSidechain": false},
-    {"sessionId": "a3", "fileMtime": 5000, "summary": "Sidechain noise", "gitBranch": "feat/x", "projectPath": "/home/u/alpha", "isSidechain": true}
-  ]
-}
