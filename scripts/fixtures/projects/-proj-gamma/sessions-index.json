@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "entries": [
+    {"sessionId": "g1", "fileMtime": 9000, "summary": "All sidechain", "gitBranch": "main", "projectPath": "/home/u/gamma", "isSidechain": true}
+  ]
+}

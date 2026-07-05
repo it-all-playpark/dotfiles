@@ -16,13 +16,15 @@ cca_discover() {
   local f
   for f in "$dir"/*/sessions-index.json; do
     [ -f "$f" ] || continue
+    # 壊れた/部分書き込み中の index(ライブ更新レース)は jq エラーを漏らさず skip。
+    # fileMtime 欠損は // 0 で "null" 文字列化を防ぎ、後段の算術($((mtime_ms/1000)))破綻を回避。
     jq -r '
       [.entries[] | select(.isSidechain == false)]
       | select(length > 0)
       | max_by(.fileMtime)
-      | [.projectPath, .summary, .gitBranch, (.fileMtime | tostring)]
+      | [.projectPath, .summary, .gitBranch, (.fileMtime // 0 | tostring)]
       | @tsv
-    ' "$f"
+    ' "$f" 2>/dev/null || continue
   done
 }
 

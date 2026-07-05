@@ -25,7 +25,7 @@ assert_eq "reltime 200000=2d" "2d" "$(cca_reltime 200000)"
 # --- cca_discover ---
 # glob はアルファベット順: proj-alpha → proj-beta
 # alpha は最新の非 sidechain(a2, mtime 3000)を採用。a3(sidechain)は無視。
-# beta は branch 空。
+# beta は branch 空。gamma は全 entry が sidechain なので1行も出さない(select(length>0)パス)。
 disc_expected=$'/home/u/alpha\tRecent work\tfeat/x\t3000
 /home/u/beta\tBeta task\t\t2000'
 disc_actual="$(CCA_PROJECTS_DIR="$HERE/fixtures/projects" cca_discover)"
