@@ -11,6 +11,21 @@ cca_reltime() {
   fi
 }
 
+cca_discover() {
+  local dir="${CCA_PROJECTS_DIR:-$HOME/.claude/projects}"
+  local f
+  for f in "$dir"/*/sessions-index.json; do
+    [ -f "$f" ] || continue
+    jq -r '
+      [.entries[] | select(.isSidechain == false)]
+      | select(length > 0)
+      | max_by(.fileMtime)
+      | [.projectPath, .summary, .gitBranch, (.fileMtime | tostring)]
+      | @tsv
+    ' "$f"
+  done
+}
+
 cca_main() {
   echo "cca: not implemented yet" >&2
   return 1
