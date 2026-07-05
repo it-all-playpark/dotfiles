@@ -112,12 +112,12 @@ cca_attach() {
   [ -n "$sess" ] || { echo "cca: attach 先の session がありません" >&2; return 1; }
   # zellij 内からの session 切替は、対話 zsh の job control 文脈でないと
   # `zellij action switch-session` がフリーズして切り替わらない(実測: fish/bash/非対話/
-  # background/exec/stdinリダイレクト いずれも不可。対話 zsh のみ成功)。
-  # そこで切替は `zsh -ic` 経由で exec する(位置引数 $1 で session 名を安全に渡す)。
-  # zellij 外は通常の attach。
+  # background/exec/stdinリダイレクト いずれも不可。対話 zsh のみ成功)。job control は `-i` で
+  # 有効になり rc は不要だったため `-ifc`(対話・rc読まず高速)経由で exec する。
+  # 位置引数 $1 で session 名を安全に渡す。zellij 外は通常の attach。
   if [ -n "${ZELLIJ:-}" ]; then
     # shellcheck disable=SC2016  # $1 は zsh 側で展開させる(意図的にシングルクォート)
-    exec zsh -ic 'zellij action switch-session "$1"' cca "$sess"
+    exec zsh -ifc 'zellij action switch-session "$1"' cca "$sess"
   fi
   exec zellij attach "$sess"
 }
