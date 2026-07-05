@@ -1,8 +1,10 @@
 # `cca` — foreground Claude セッション・スイッチャー 設計
 
 - 日付: 2026-07-05
-- ステータス: 設計承認済み（実装未着手）
+- ステータス: 実装済み（v1）
 - 置き場所: dotfiles repo（個人環境ツール）
+
+> **改訂 (2026-07-05, live-pivot):** 当初 v1 は `sessions-index.json` を live のデータ源とする設計だったが、実装後の実機検証で**この前提が誤り**と判明した。`sessions-index.json` は履歴であり、稼働中セッションは載らない/遅延書き込みのため、index 起点では live 作業を取りこぼす(稼働中プロジェクトに index が無い/古い)。そこで **「生きてる claude プロセス(pgrep+lsof の cwd)を背骨にし、鮮度は transcript `.jsonl` の実ファイル mtime、branch は git から直接取る」** live-pivot 設計に変更した。以下は改訂後の内容。§3〜§5・§10 が該当。
 
 ## 1. 目的 / 解決する痛み
 
@@ -33,67 +35,54 @@
 
 | データ源 | 取得できるもの | 役割 |
 |---|---|---|
-| `~/.claude/projects/*/sessions-index.json` | `projectPath`(=cwd), `summary`, `gitBranch`, `fileMtime`, `modified`, `messageCount`, `isSidechain` | 何が / どこで / どのブランチ / 最終いつ。構造化済みなのでパースのみ |
-| `ps` + `lsof`（cwd 取得） | 実在する `claude` プロセスの cwd 集合 | 「今生きてる」セッションに絞り、過去ログを捨てる |
-| `zellij list-sessions` | zellij session 名（と作成時刻） | attach 先の実体 |
+| `pgrep -x claude` + `lsof -d cwd` | 実在する `claude` プロセスの cwd 集合 | **背骨。**「今生きてる」セッション = 一覧に出す対象そのもの |
+| `~/.claude/projects/<enc(cwd)>/ *.jsonl` の実ファイル mtime | そのプロジェクトの transcript が最後に追記された実時刻 | 鮮度(🟢 active / 💤 idle + 相対時刻)。live 更新される真実 |
+| `git -C <cwd> branch --show-current` | 現在の branch | 表示。index でなく git 直で正確 |
+| `zellij list-sessions` | zellij session 名 | attach 先の実体 |
 
-`sessions-index.json` の実データ形（確認済み）:
-
-```json
-{
-  "version": 1,
-  "entries": [
-    {
-      "sessionId": "6336cecd-...",
-      "fullPath": ".../<sessionId>.jsonl",
-      "fileMtime": 1769501587617,
-      "summary": "Claude Code nix-darwin Setup Guide",
-      "messageCount": 18,
-      "modified": "2026-01-27T07:46:32.421Z",
-      "gitBranch": "",
-      "projectPath": "/Users/naramotoyuuji/.clawdbot",
-      "isSidechain": false
-    }
-  ]
-}
-```
-
-> 注: `sessions-index.json` は各プロジェクトの**履歴全件**を持つ。「今開いているか」は index だけでは判定できないため、`ps`/`lsof` の生存集合と intersect して現存セッションに絞る。`isSidechain: true` はサブエージェントの sidechain なので前景一覧からは除外する。
+> **なぜ `sessions-index.json` を使わないか(実機検証で判明):** index は各プロジェクトの**履歴**であり、稼働中セッションは載らない/遅延書き込みされる。実際、稼働中の second-brain / jikka-scan / yeg は index が**存在せず**、skills は index があるが最新エントリが**150日前**だった。index 起点だと live 作業を取りこぼす。対して transcript `.jsonl` の実ファイル mtime は追記のたび更新される=リアルタイムの真実なので、こちらを鮮度源にする。
+>
+> cwd → transcript ディレクトリのエンコード規則: パス区切り `/` と `.` を `-` に置換(先頭 `/` も `-` に)。例 `/Users/x/ghq/github.com/a/skills` → `-Users-x-ghq-github-com-a-skills`。
 
 ## 4. アーキテクチャ / データフロー
 
 ```
 cca
   │
-  ├─ 1. discover : ~/.claude/projects/*/sessions-index.json を glob → jq でパース
-  │        各 project につき最新の非 sidechain entry を取り、
-  │        TSV [cwd, summary, gitBranch, fileMtime] を出力
+  ├─ 1. live      : pgrep -x claude → 各 PID の cwd を lsof で取得(sort -u)
+  │         → 生きてる cwd の集合。これが一覧の対象そのもの
   │
-  ├─ 2. live     : ps で claude プロセス列挙 → 各 PID の cwd を lsof で取得
-  │        → 生きてる cwd の集合。1 の結果を intersect して過去ログを除外
+  ├─ 2. enumerate : 各 live cwd について
+  │         branch = git -C cwd branch --show-current
+  │         mtime  = enc(cwd) の transcript dir 内、最新 .jsonl の実 mtime
+  │         → TSV [cwd, branch, mtime_epoch]
   │
-  ├─ 3. render   : 生きてる行だけを整形して fzf に流す
-  │        "shift-bud       feature/issue-929   🟢 2m ago   Shift assignment bug"
-  │        "corporate-site  main                💤 40m ago  Blog automation adoption"
-  │        （🟢=直近 active / 💤=idle。fileMtime の鮮度だけで機械判定）
+  ├─ 3. render    : cwd\tbranch\tmtime → 表示整形して fzf に流す
+  │         "second-brain  main                          🟢 3s"
+  │         "jikka-scan    feature/report-partners-page  💤 41m"
+  │         （🟢=直近 active / 💤=idle。.jsonl 実 mtime の鮮度で機械判定）
   │
-  └─ 4. attach   : 選んだ行の cwd → zellij session を逆引き → attach / switch
+  └─ 4. attach    : 選んだ行の cwd → zellij session を逆引き → attach / switch
            一意に決まらなければ zellij list-sessions を fzf に出して最終確認
 ```
 
-`cca_discover | filter-by(cca_live) | cca_pick | cca_attach` とパイプで繋ぐ。
+`cca_live | cca_enumerate | cca_render | cca_pick` → 選択行の `cut -f1`(cwd) → `cca_join` → `cca_attach`。
 
 ## 5. コンポーネント境界（単体テスト可能な単位）
 
 | 関数 | 役割 | 入力 → 出力 | 依存 |
 |---|---|---|---|
-| `cca_discover` | index 収集・整形 | glob → TSV(cwd, summary, branch, mtime) | jq |
-| `cca_live` | 生存判定 | — → 生きてる cwd の集合 | ps, lsof |
-| `cca_join` | cwd → zellij session 逆引き | cwd → session 名 | zellij |
+| `cca_reltime` | 秒 → 相対時刻文字列 | 秒 → `3s`/`41m`/`4h`/`2d` | — (純) |
+| `cca_encode_dir` | cwd → transcript dir 名 | cwd → `-Users-...` | — (純) |
+| `cca_newest_mtime` | dir 内最新 .jsonl の epoch | dir → epoch or 0 | ls, stat(GNU/BSD両対応) |
+| `cca_live` | 生存判定 | — → 生きてる cwd 集合 | pgrep, lsof |
+| `cca_enumerate` | live cwd を情報付き TSV に | stdin cwd → cwd\tbranch\tmtime | git, (encode/newest_mtime) |
+| `cca_render` | 表示整形・鮮度判定 | TSV → 表示 TSV | — (純, CCA_NOW注入可) |
+| `cca_join` | cwd → zellij session 逆引き | cwd + stdin session名 → session名 | grep |
 | `cca_pick` | fzf UI | TSV → 選択行 | fzf |
 | `cca_attach` | 移動（副作用） | session 名 → attach/switch | zellij |
 
-各関数は疎結合。純粋関数部（discover / join のロジック）は fixture でテストでき、副作用部（live / attach）は分離する。
+純関数部（reltime / encode_dir / newest_mtime / render）は fixture でユニットテスト、副作用部（live / enumerate / attach）は手動確認。v1 では summary 列は出さない(index を使わないため。必要になれば git log や transcript から後付け)。
 
 ## 6. 唯一の技術リスク: `cca_join`（cwd → zellij session 逆引き）
 
@@ -124,13 +113,15 @@ v1 の割り切り:
 
 ## 9. テスト戦略
 
-- `cca_discover` / `cca_join`: fixture の `sessions-index.json` とモック `zellij list-sessions` 出力に対するユニットテスト（純ロジック）
-- `cca_live` / `cca_attach`: 副作用系のため手動確認
+- `cca_reltime` / `cca_encode_dir` / `cca_newest_mtime` / `cca_render` / `cca_join`: `scripts/cca_test.sh` でユニットテスト（純/準純ロジック。newest_mtime は一時ディレクトリで検証）
+- `cca_live` / `cca_enumerate` / `cca_attach`: 副作用系のため手動確認（実 live cwd を enumerate→render に流す統合確認を含む）
 - `writeShellApplication` の shellcheck を CI 相当のチェックとして活用
 
 ## 10. 受け入れ基準（v1 完了の定義）
 
-1. `cca` を叩くと、生きている前景 Claude セッションのみが fzf に一覧表示される（過去ログ・sidechain は出ない）。
-2. 各行に project 名 / gitBranch / 最終活動時刻（active/idle 色分け）/ summary が出る。
+1. `cca` を叩くと、**今生きている全 claude プロセス**の cwd がプロジェクトとして fzf に一覧表示される（過去ログは出ない）。
+2. 各行に project 名 / gitBranch / 最終活動時刻（`.jsonl` 実 mtime による active🟢 / idle💤 色分け + 相対時刻）が出る。
 3. 行を選ぶと該当 zellij session に attach（または切替）できる。規約マッチが外れた場合は fzf フォールバックで手動確定できる。
 4. mosh 先でも同じ `cca` が同じ挙動で動く（Nix 配布後）。
+
+**実機検証済み(2026-07-05):** 4つの live プロジェクト(second-brain 🟢3s / skills 💤4h / jikka-scan 💤41m branch=feature/report-partners-page / yeg 💤56m)が正しい鮮度・branch で列挙されることを確認。

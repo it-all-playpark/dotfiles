@@ -1,5 +1,7 @@
 # cca Session Switcher Implementation Plan
 
+> **⚠️ 改訂あり (2026-07-05, live-pivot):** 本計画は当初 `sessions-index.json` 起点(Task 2 `cca_discover` / Task 5 `cca_filter_live`)で書かれたが、実機検証で index が live を映さないと判明し、**「live プロセス起点 + transcript `.jsonl` 実 mtime + git branch」** に再設計した。`cca_discover`/`cca_filter_live` は廃止され `cca_encode_dir`/`cca_newest_mtime`/`cca_enumerate` に置換。最新の正しい設計は spec (`docs/specs/2026-07-05-cca-session-switcher-design.md`) の改訂版と実装 `scripts/cca` を参照。以下 Task 2/3/5/6 のデータ源記述は歴史的経緯として残す。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 生きている前景 Claude セッションを一覧し、fzf で選んで該当 zellij session に一発で attach する bash CLI `cca` を作る。

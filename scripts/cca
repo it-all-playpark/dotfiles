@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # cca — foreground Claude セッション・スイッチャー
+#
+# 設計: 「生きてる claude プロセス」を背骨にする(live-pivot)。
+#   sessions-index.json は履歴であって live を映さない(稼働中セッションは載らない/遅延書き込み)ため使わない。
+#   鮮度は transcript .jsonl の実ファイル mtime(リアルタイム追記)から、branch は git から直接取る。
 set -euo pipefail
 
 cca_reltime() {
@@ -11,47 +15,21 @@ cca_reltime() {
   fi
 }
 
-cca_discover() {
-  local dir="${CCA_PROJECTS_DIR:-$HOME/.claude/projects}"
-  local f
-  for f in "$dir"/*/sessions-index.json; do
-    [ -f "$f" ] || continue
-    # 壊れた/部分書き込み中の index(ライブ更新レース)は jq エラーを漏らさず skip。
-    # fileMtime 欠損は // 0 で "null" 文字列化を防ぎ、後段の算術($((mtime_ms/1000)))破綻を回避。
-    jq -r '
-      [.entries[] | select(.isSidechain == false)]
-      | select(length > 0)
-      | max_by(.fileMtime)
-      | [.projectPath, .summary, .gitBranch, (.fileMtime // 0 | tostring)]
-      | @tsv
-    ' "$f" 2>/dev/null || continue
-  done
+# cwd → ~/.claude/projects 配下のエンコード済みディレクトリ名。
+# Claude Code の規則: パス区切り '/' と '.' を '-' に置換(先頭 / も '-' になる)。
+cca_encode_dir() {
+  printf '%s' "$1" | sed 's#[./]#-#g'
 }
 
-cca_render() {
-  local now="${CCA_NOW:-$(date +%s)}"
-  local win="${CCA_ACTIVE_WINDOW:-300}"
-  local line cwd summary branch mtime_ms mtime age icon rel proj
-  # raw 行読み + \x1f センチネル分割。IFS=$'\t' read は空フィールド(\t\t)を潰すため回避。
-  # `|| [ -n "$line" ]` は末尾改行なし入力の最終行救済。
-  while IFS= read -r line || [ -n "$line" ]; do
-    [ -n "$line" ] || continue
-    IFS=$'\x1f' read -r cwd summary branch mtime_ms <<< "${line//$'\t'/$'\x1f'}"
-    mtime=$(( mtime_ms / 1000 ))
-    age=$(( now - mtime ))
-    if [ "$age" -lt 0 ]; then age=0; fi
-    if [ "$age" -lt "$win" ]; then icon="🟢"; else icon="💤"; fi
-    rel="$(cca_reltime "$age")"
-    proj="$(basename "$cwd")"
-    printf '%s\t%s\t%s\t%s %s\t%s\n' "$cwd" "$proj" "${branch:-–}" "$icon" "$rel" "$summary"
-  done
-}
-
-# stdin から session名(1行1個)を読み、cwd の basename と完全一致する行を返す
-cca_join() {
-  local cwd="$1" base
-  base="$(basename "$cwd")"
-  grep -Fx -- "$base" || true
+# projectディレクトリ内で最新の .jsonl の実 mtime(epoch秒)。無ければ 0。
+# stat は GNU(-c %Y)優先、macOS BSD(-f %m)にフォールバック。
+cca_newest_mtime() {
+  local dir="$1" newest
+  # .jsonl 名はセッション UUID で安全。ls -t は GNU/BSD 両対応(find -printf は macOS 非互換)。
+  # shellcheck disable=SC2012
+  newest="$(ls -t "$dir"/*.jsonl 2>/dev/null | head -1)"
+  [ -n "$newest" ] || { echo 0; return; }
+  stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest" 2>/dev/null || echo 0
 }
 
 # 生きてる claude プロセスの cwd を1行1個で出す
@@ -62,23 +40,49 @@ cca_live() {
   done | sort -u
 }
 
-# 先頭列が cwd の TSV を stdin で受け、live 集合に含まれる行だけ通す
-cca_filter_live() {
-  local live line cwd
-  live="$(cca_live)"
-  [ -n "$live" ] || return 0
-  while IFS= read -r line; do
-    cwd="${line%%$'\t'*}"
-    if printf '%s\n' "$live" | grep -Fxq -- "$cwd"; then
-      printf '%s\n' "$line"
-    fi
+# stdin: live な cwd(1行1個)。各 cwd を cwd\tbranch\tmtime_epoch の TSV にする。
+#   branch = git から直接(index に頼らない)。detached/非repo は空。
+#   mtime  = その cwd の transcript ディレクトリ内、最新 .jsonl の実 mtime。
+cca_enumerate() {
+  local projroot="${CCA_PROJECTS_DIR:-$HOME/.claude/projects}"
+  local cwd branch mtime
+  while IFS= read -r cwd || [ -n "$cwd" ]; do
+    [ -n "$cwd" ] || continue
+    branch="$(git -C "$cwd" branch --show-current 2>/dev/null || true)"
+    mtime="$(cca_newest_mtime "$projroot/$(cca_encode_dir "$cwd")")"
+    printf '%s\t%s\t%s\n' "$cwd" "$branch" "$mtime"
   done
+}
+
+# stdin: cwd\tbranch\tmtime_epoch → cwd\tproj\tbranch\t"icon reltime"(表示用)。
+#   先頭列 cwd は fzf で隠して選択後に cut -f1 で復元する。
+#   \x1f センチネル分割: IFS=$'\t' read は空 branch(\t\t)を潰すため回避。
+cca_render() {
+  local now="${CCA_NOW:-$(date +%s)}"
+  local win="${CCA_ACTIVE_WINDOW:-300}"
+  local line cwd branch mtime age icon rel proj
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    IFS=$'\x1f' read -r cwd branch mtime <<< "${line//$'\t'/$'\x1f'}"
+    age=$(( now - mtime ))
+    if [ "$age" -lt 0 ]; then age=0; fi
+    if [ "$age" -lt "$win" ]; then icon="🟢"; else icon="💤"; fi
+    rel="$(cca_reltime "$age")"
+    proj="$(basename "$cwd")"
+    printf '%s\t%s\t%s\t%s %s\n' "$cwd" "$proj" "${branch:-–}" "$icon" "$rel"
+  done
+}
+
+# stdin から session名(1行1個)を読み、cwd の basename と完全一致する行を返す
+cca_join() {
+  local cwd="$1" base
+  base="$(basename "$cwd")"
+  grep -Fx -- "$base" || true
 }
 
 cca_pick() {
   fzf --delimiter='\t' --with-nth=2.. \
-      --layout=reverse --prompt 'CLAUDE SESSION> ' \
-      --preview 'printf "%s" {5}' --preview-window=up,3,wrap
+      --layout=reverse --prompt 'CLAUDE SESSION> '
 }
 
 cca_attach() {
@@ -98,7 +102,7 @@ cca_attach() {
 
 cca_main() {
   local sel cwd sessions sess
-  sel="$(cca_discover | cca_filter_live | cca_render | cca_pick || true)"
+  sel="$(cca_live | cca_enumerate | cca_render | cca_pick || true)"
   [ -n "$sel" ] || return 0
   cwd="$(printf '%s' "$sel" | cut -f1)"
   sessions="$(zellij list-sessions --no-formatting 2>/dev/null | awk '{print $1}')"
