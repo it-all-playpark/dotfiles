@@ -42,4 +42,9 @@ render_expected=$'/home/u/alpha\talpha\tfeat/x\t🟢 0s\tRecent work
 render_actual="$(printf '%s' "$render_in" | CCA_NOW=3000 CCA_ACTIVE_WINDOW=300 cca_render)"
 assert_eq "render icon/reltime/branch-fallback" "$render_expected" "$render_actual"
 
+# --- cca_join ---
+sessions=$'alpha\nshift-bud\ncorporate-site'
+assert_eq "join match by basename" "alpha" "$(printf '%s' "$sessions" | cca_join /home/u/alpha)"
+assert_eq "join no match returns empty" "" "$(printf '%s' "$sessions" | cca_join /home/u/unknown)"
+
 exit "$FAIL"

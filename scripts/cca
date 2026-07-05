@@ -45,6 +45,13 @@ cca_render() {
   done
 }
 
+# stdin から session名(1行1個)を読み、cwd の basename と完全一致する行を返す
+cca_join() {
+  local cwd="$1" base
+  base="$(basename "$cwd")"
+  grep -Fx -- "$base" || true
+}
+
 cca_main() {
   echo "cca: not implemented yet" >&2
   return 1
