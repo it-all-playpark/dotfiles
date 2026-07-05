@@ -41,16 +41,22 @@ rm -rf "$mt_tmp"
 # 入力は cwd\tbranch\tmtime_epoch(秒)。CCA_NOW=3000 基準。
 # 行1: mtime 3000, age 0 <300 → 🟢 0s, branch feat/x
 # 行2: mtime 1000, age 2000 → 33m, >300 → 💤, branch 空 → –
+# 行3: mtime 0(transcript無し)→ 鮮度不明 "–"、巨大 age を出さない
 render_in=$'/home/u/alpha\tfeat/x\t3000
-/home/u/beta\t\t1000'
+/home/u/beta\t\t1000
+/home/u/home\t\t0'
 render_expected=$'/home/u/alpha\talpha\tfeat/x\t🟢 0s
-/home/u/beta\tbeta\t–\t💤 33m'
+/home/u/beta\tbeta\t–\t💤 33m
+/home/u/home\thome\t–\t–'
 render_actual="$(printf '%s' "$render_in" | CCA_NOW=3000 CCA_ACTIVE_WINDOW=300 cca_render)"
-assert_eq "render icon/reltime/branch-fallback" "$render_expected" "$render_actual"
+assert_eq "render icon/reltime/branch-fallback/no-mtime" "$render_expected" "$render_actual"
 
 # --- cca_join ---
-sessions=$'alpha\nshift-bud\ncorporate-site'
-assert_eq "join match by basename" "alpha" "$(printf '%s' "$sessions" | cca_join /home/u/alpha)"
+# session 名は '_' で付けられることがある(second_brain)が cwd basename は '-'(second-brain)。
+# 両側正規化して一致させ、元の session 名を返す。
+sessions=$'alpha\nshift-bud\ncorporate-site\nsecond_brain'
+assert_eq "join exact basename" "alpha" "$(printf '%s' "$sessions" | cca_join /home/u/alpha)"
+assert_eq "join normalizes _ vs -" "second_brain" "$(printf '%s' "$sessions" | cca_join /home/u/second-brain)"
 assert_eq "join no match returns empty" "" "$(printf '%s' "$sessions" | cca_join /home/u/unknown)"
 
 exit "$FAIL"

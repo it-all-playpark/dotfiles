@@ -64,20 +64,34 @@ cca_render() {
   while IFS= read -r line || [ -n "$line" ]; do
     [ -n "$line" ] || continue
     IFS=$'\x1f' read -r cwd branch mtime <<< "${line//$'\t'/$'\x1f'}"
+    proj="$(basename "$cwd")"
+    mtime="${mtime:-0}"
+    if [ "$mtime" -le 0 ]; then
+      # transcript .jsonl が無い(例: ~ 直下で起動した claude)→ 鮮度不明。0=1970 で巨大 age を出さない。
+      printf '%s\t%s\t%s\t%s\n' "$cwd" "$proj" "${branch:-–}" "–"
+      continue
+    fi
     age=$(( now - mtime ))
     if [ "$age" -lt 0 ]; then age=0; fi
     if [ "$age" -lt "$win" ]; then icon="🟢"; else icon="💤"; fi
     rel="$(cca_reltime "$age")"
-    proj="$(basename "$cwd")"
     printf '%s\t%s\t%s\t%s %s\n' "$cwd" "$proj" "${branch:-–}" "$icon" "$rel"
   done
 }
 
-# stdin から session名(1行1個)を読み、cwd の basename と完全一致する行を返す
+# stdin から session名(1行1個)を読み、cwd の basename と一致する session名を返す。
+# zellij session 名は '-' を '_' に変えて付けられることがある(例: second_brain ↔ second-brain)ため、
+# 比較時に両側とも '_' → '-' に正規化してから突き合わせる。一致した「元の」session名を返す。
 cca_join() {
-  local cwd="$1" base
-  base="$(basename "$cwd")"
-  grep -Fx -- "$base" || true
+  local cwd="$1" base s
+  base="$(basename "$cwd" | tr '_' '-')"
+  while IFS= read -r s || [ -n "$s" ]; do
+    [ -n "$s" ] || continue
+    if [ "$(printf '%s' "$s" | tr '_' '-')" = "$base" ]; then
+      printf '%s\n' "$s"
+      return 0
+    fi
+  done
 }
 
 cca_pick() {
