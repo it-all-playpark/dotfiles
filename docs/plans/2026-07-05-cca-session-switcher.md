@@ -241,12 +241,17 @@ Expected: FAIL(`cca_render: command not found`)
 cca_render() {
   local now="${CCA_NOW:-$(date +%s)}"
   local win="${CCA_ACTIVE_WINDOW:-300}"
-  local cwd summary branch mtime_ms mtime age icon rel proj
-  while IFS=$'\t' read -r cwd summary branch mtime_ms; do
-    [ -n "$cwd" ] || continue
+  local line cwd summary branch mtime_ms mtime age icon rel proj
+  # raw 行読み + \x1f センチネル分割。
+  # 理由: `IFS=$'\t' read` はタブを IFS-whitespace として扱い、空フィールド
+  #       (`\t\t`, 例: gitBranch 空)を潰してフィールドがズレる。\x1f は非空白なので
+  #       連続しても空フィールドを保持する。`|| [ -n "$line" ]` は末尾改行なし入力の最終行救済。
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    IFS=$'\x1f' read -r cwd summary branch mtime_ms <<< "${line//$'\t'/$'\x1f'}"
     mtime=$(( mtime_ms / 1000 ))
     age=$(( now - mtime ))
-    [ "$age" -lt 0 ] && age=0
+    if [ "$age" -lt 0 ]; then age=0; fi
     if [ "$age" -lt "$win" ]; then icon="🟢"; else icon="💤"; fi
     rel="$(cca_reltime "$age")"
     proj="$(basename "$cwd")"
