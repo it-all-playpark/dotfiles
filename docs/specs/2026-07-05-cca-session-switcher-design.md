@@ -94,6 +94,10 @@ v1 の割り切り:
 
 **検証ポイント**: プロトタイプで「規約マッチがどれだけ当たるか」を実測する。当たらないケースが多ければ v2 で起動ラッパによる `session→cwd` マッピング記録を検討（ただし zero-install 方針に反するので最後の手段）。
 
+> **実機で解消済み(2026-07-06):** 当初 basename 完全一致だと、zellij session 名が `-` を `_` にして付けられる運用(例 `second_brain` ↔ dir `second-brain`)で毎回外れフォールバックしていた。`cca_join` で両側を `_`→`-` 正規化して一致させることで、second-brain / jikka-scan / corporate-site / skills / yeg など実プロジェクトは別リスト無しで直接 attach できることを確認。規約リスクは実運用上ほぼ解消。
+>
+> なお **ホーム直下(`$HOME`)で起動した非プロジェクト claude は `cca_enumerate` で一覧から除外**する（対応する zellij session が無くフォールバック専用になりノイズのため）。
+
 ## 7. attach の挙動（zellij 制約への対応）
 
 - zellij は2つの session に同時 attach できない。呼び出し元が既に別 session に attach 中の場合、`zellij` の session 切替（detach → attach、または利用可能なら session-switch アクション）を使う。

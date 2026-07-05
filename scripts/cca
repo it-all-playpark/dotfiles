@@ -48,6 +48,8 @@ cca_enumerate() {
   local cwd branch mtime
   while IFS= read -r cwd || [ -n "$cwd" ]; do
     [ -n "$cwd" ] || continue
+    # ホーム直下(~)で起動した非プロジェクト claude は一覧から除外(対応する zellij session も無い)
+    if [ "$cwd" = "$HOME" ]; then continue; fi
     branch="$(git -C "$cwd" branch --show-current 2>/dev/null || true)"
     mtime="$(cca_newest_mtime "$projroot/$(cca_encode_dir "$cwd")")"
     printf '%s\t%s\t%s\n' "$cwd" "$branch" "$mtime"
