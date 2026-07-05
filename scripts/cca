@@ -73,9 +73,38 @@ cca_filter_live() {
   done
 }
 
-cca_main() {
-  echo "cca: not implemented yet" >&2
+cca_pick() {
+  fzf --delimiter='\t' --with-nth=2.. \
+      --layout=reverse --prompt 'CLAUDE SESSION> ' \
+      --preview 'printf "%s" {5}' --preview-window=up,3,wrap
+}
+
+cca_attach() {
+  local sess="$1"
+  [ -n "$sess" ] || { echo "cca: attach 先の session がありません" >&2; return 1; }
+  if [ -z "${ZELLIJ:-}" ]; then
+    exec zellij attach "$sess"
+  fi
+  # zellij 内から: switch-session が使えれば使う。無ければ手順を案内。
+  if zellij action switch-session "$sess" 2>/dev/null; then
+    return 0
+  fi
+  echo "cca: この zellij では内側からの切替不可。" >&2
+  echo "     detach(既定 Ctrl-o d)後に: zellij attach $sess" >&2
   return 1
+}
+
+cca_main() {
+  local sel cwd sessions sess
+  sel="$(cca_discover | cca_filter_live | cca_render | cca_pick || true)"
+  [ -n "$sel" ] || return 0
+  cwd="$(printf '%s' "$sel" | cut -f1)"
+  sessions="$(zellij list-sessions --no-formatting 2>/dev/null | awk '{print $1}')"
+  sess="$(printf '%s' "$sessions" | cca_join "$cwd")"
+  if [ -z "$sess" ]; then
+    sess="$(printf '%s' "$sessions" | fzf --layout=reverse --prompt 'ZELLIJ SESSION> ' || true)"
+  fi
+  cca_attach "$sess"
 }
 
 # sourced（テスト）時は main を実行しない
