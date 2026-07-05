@@ -110,16 +110,15 @@ cca_pick() {
 cca_attach() {
   local sess="$1"
   [ -n "$sess" ] || { echo "cca: attach 先の session がありません" >&2; return 1; }
-  if [ -z "${ZELLIJ:-}" ]; then
-    exec zellij attach "$sess"
+  # どちらも exec で端末をコマンドに明け渡す(重要):
+  #  - zellij 内: switch-session で現在の client を対象 session に切り替える。
+  #    stderr を /dev/null 等にリダイレクトすると非対話判定になり client 切替が no-op(exit 0 で戻るだけ)
+  #    になるため、リダイレクトせず exec でそのまま端末を渡す。
+  #  - zellij 外: 通常の attach。
+  if [ -n "${ZELLIJ:-}" ]; then
+    exec zellij action switch-session "$sess"
   fi
-  # zellij 内から: switch-session が使えれば使う。無ければ手順を案内。
-  if zellij action switch-session "$sess" 2>/dev/null; then
-    return 0
-  fi
-  echo "cca: この zellij では内側からの切替不可。" >&2
-  echo "     detach(既定 Ctrl-o d)後に: zellij attach $sess" >&2
-  return 1
+  exec zellij attach "$sess"
 }
 
 cca_main() {
