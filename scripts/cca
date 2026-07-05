@@ -52,6 +52,27 @@ cca_join() {
   grep -Fx -- "$base" || true
 }
 
+# 生きてる claude プロセスの cwd を1行1個で出す
+cca_live() {
+  local pid
+  for pid in $(pgrep -x claude 2>/dev/null || true); do
+    lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p'
+  done | sort -u
+}
+
+# 先頭列が cwd の TSV を stdin で受け、live 集合に含まれる行だけ通す
+cca_filter_live() {
+  local live line cwd
+  live="$(cca_live)"
+  [ -n "$live" ] || return 0
+  while IFS= read -r line; do
+    cwd="${line%%$'\t'*}"
+    if printf '%s\n' "$live" | grep -Fxq -- "$cwd"; then
+      printf '%s\n' "$line"
+    fi
+  done
+}
+
 cca_main() {
   echo "cca: not implemented yet" >&2
   return 1
