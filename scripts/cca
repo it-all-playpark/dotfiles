@@ -26,6 +26,25 @@ cca_discover() {
   done
 }
 
+cca_render() {
+  local now="${CCA_NOW:-$(date +%s)}"
+  local win="${CCA_ACTIVE_WINDOW:-300}"
+  local line cwd summary branch mtime_ms mtime age icon rel proj
+  # raw 行読み + \x1f センチネル分割。IFS=$'\t' read は空フィールド(\t\t)を潰すため回避。
+  # `|| [ -n "$line" ]` は末尾改行なし入力の最終行救済。
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    IFS=$'\x1f' read -r cwd summary branch mtime_ms <<< "${line//$'\t'/$'\x1f'}"
+    mtime=$(( mtime_ms / 1000 ))
+    age=$(( now - mtime ))
+    if [ "$age" -lt 0 ]; then age=0; fi
+    if [ "$age" -lt "$win" ]; then icon="🟢"; else icon="💤"; fi
+    rel="$(cca_reltime "$age")"
+    proj="$(basename "$cwd")"
+    printf '%s\t%s\t%s\t%s %s\t%s\n' "$cwd" "$proj" "${branch:-–}" "$icon" "$rel" "$summary"
+  done
+}
+
 cca_main() {
   echo "cca: not implemented yet" >&2
   return 1

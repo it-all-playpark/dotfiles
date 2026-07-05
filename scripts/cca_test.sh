@@ -31,4 +31,15 @@ disc_expected=$'/home/u/alpha\tRecent work\tfeat/x\t3000
 disc_actual="$(CCA_PROJECTS_DIR="$HERE/fixtures/projects" cca_discover)"
 assert_eq "discover latest-non-sidechain per project" "$disc_expected" "$disc_actual"
 
+# --- cca_render ---
+# CCA_NOW=3000s 基準。fileMtime は ms なので /1000。
+# 行1: mtime 3000000ms=3000s, age 0 <300 → 🟢, rel 0s, branch feat/x
+# 行2: mtime 1000000ms=1000s, age 2000 → 33m, >300 → 💤, branch 空 → –
+render_in=$'/home/u/alpha\tRecent work\tfeat/x\t3000000
+/home/u/beta\tOld\t\t1000000'
+render_expected=$'/home/u/alpha\talpha\tfeat/x\t🟢 0s\tRecent work
+/home/u/beta\tbeta\t–\t💤 33m\tOld'
+render_actual="$(printf '%s' "$render_in" | CCA_NOW=3000 CCA_ACTIVE_WINDOW=300 cca_render)"
+assert_eq "render icon/reltime/branch-fallback" "$render_expected" "$render_actual"
+
 exit "$FAIL"
