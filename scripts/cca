@@ -32,10 +32,16 @@ cca_newest_mtime() {
   stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest" 2>/dev/null || echo 0
 }
 
-# 生きてる claude プロセスの cwd を1行1個で出す
+# 前景(対話)claude セッションの cwd を1行1個で出す。
+# 制御端末を持つプロセスだけを対象にし、端末なし(tty=??/?)のバックグラウンド claude
+# ——サブエージェント/routine/常駐 daemon 等——は除外する(spec: v1 は前景セッションのみ)。
 cca_live() {
-  local pid
+  local pid tty
   for pid in $(pgrep -x claude 2>/dev/null || true); do
+    tty="$(ps -o tty= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$tty" in
+      '' | '?' | '??' | 'none') continue ;;  # 制御端末なし = バックグラウンド → 除外
+    esac
     lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p'
   done | sort -u
 }

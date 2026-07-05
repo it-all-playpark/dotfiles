@@ -35,7 +35,7 @@
 
 | データ源 | 取得できるもの | 役割 |
 |---|---|---|
-| `pgrep -x claude` + `lsof -d cwd` | 実在する `claude` プロセスの cwd 集合 | **背骨。**「今生きてる」セッション = 一覧に出す対象そのもの |
+| `pgrep -x claude` + `ps -o tty=` + `lsof -d cwd` | **制御端末を持つ**(=前景/対話)`claude` の cwd 集合 | **背骨。**一覧に出す対象そのもの。端末なし(tty=`??`)の背景 claude(サブエージェント/routine/常駐 daemon)は除外 |
 | `~/.claude/projects/<enc(cwd)>/ *.jsonl` の実ファイル mtime | そのプロジェクトの transcript が最後に追記された実時刻 | 鮮度(🟢 active / 💤 idle + 相対時刻)。live 更新される真実 |
 | `git -C <cwd> branch --show-current` | 現在の branch | 表示。index でなく git 直で正確 |
 | `zellij list-sessions` | zellij session 名 | attach 先の実体 |
