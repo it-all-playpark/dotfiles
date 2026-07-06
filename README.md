@@ -100,6 +100,74 @@ nix run .#update
 
 flake.nix内のアップデートスクリプトが、home-managerとnix-darwinの両方の設定を切り替えます。
 
+## 1Password Service Account による GH_TOKEN 注入（bg claude agents 向け）
+
+`bg` で spawn される claude agents の sandbox からは credential dir（`~/.config/gh` 等）が deny されるため `gh` 認証が失敗します。これを回避するため、1Password Service Account (SA) を使い env 経由で `GH_TOKEN` を注入します。
+
+### 1. Service Account の作成
+
+1Password で対象 vault への read 権限を持つ Service Account を作成し、SA トークン（`ops_...` 形式）を発行します。
+
+- [1Password Service Accounts](https://developer.1password.com/docs/service-accounts/) のドキュメントに従い作成
+- 対象 vault に対して read 権限を付与
+- 発行された SA トークンを控える（この後 Keychain に格納するので画面には残さない）
+
+### 2. Keychain への格納
+
+SA トークンは macOS Keychain の `claude-op-sa` という service 名で保存します。
+
+```bash
+security add-generic-password -s claude-op-sa -a "$USER" -w
+```
+
+**128 文字切れの罠**: `security add-generic-password -w` はプロンプト（GUI ダイアログや一部の入力経路）経由で値を渡すと 128 文字で切れることがあります。SA トークンは 128 文字を超えることが多いため、必ず以下のいずれかの方法で値を直接渡してください。
+
+```bash
+# pbpaste でクリップボードの値を shell 側から直接渡す（プロンプトへの貼り付けは避ける）
+security add-generic-password -s claude-op-sa -a "$USER" -w "$(pbpaste)"
+```
+
+既に短く切れた値で登録してしまった場合は、一度削除してから入れ直してください。
+
+```bash
+security delete-generic-password -s claude-op-sa
+security add-generic-password -s claude-op-sa -a "$USER" -w "$(pbpaste)"
+```
+
+### 3. env-file の作成
+
+テンプレートをコピーし、`op://` 参照の vault/item 名を実際のものに置き換えます。
+
+```bash
+cp ~/.config/op/claude.env.example ~/.config/op/claude.env
+```
+
+```
+GH_TOKEN=op://<vault>/<item>/token
+```
+
+の `<vault>` と `<item>` を、作成した実 vault/item 名に置換してください。
+
+リポジトリ単位で値を上書きしたい場合は、リポジトリ直下に `.op.env`（`.gitignore` 済み）を配置します。同名キーは repo 側が global (`~/.config/op/claude.env`) を後勝ちで上書きします。
+
+### 4. 疎通確認
+
+SA トークンが有効か確認します（token 平文が端末に表示されるため、確認時のみ実行し、シェル履歴への残留に注意してください）。
+
+```bash
+OP_SERVICE_ACCOUNT_TOKEN=$(security find-generic-password -s claude-op-sa -a "$USER" -w) op vault list
+```
+
+env-file が意図通り解決できるか確認します（同様に平文が出力されるため取り扱い注意）。
+
+```bash
+op run --env-file ~/.config/op/claude.env -- printenv GH_TOKEN
+```
+
+### 仕組み
+
+fish の `claude` 関数が `op run` で `op://` 参照を解決した env を組み立て、`env -u OP_SERVICE_ACCOUNT_TOKEN` で SA トークン自体を除去してから `claude` を起動します。credential dir に対する sandbox の deny 設定はそのまま維持され、env チャネルのみで最小限の secret（`GH_TOKEN` 等）が渡されます。
+
 ## Agent Skills
 
 本リポジトリは [Agent Skills](https://agentskills.io) をサポートしており、複数のAIエージェントツール間でスキルを共有できます。
