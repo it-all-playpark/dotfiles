@@ -67,6 +67,8 @@ in
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
+      ".config/fish/functions/claude.fish".source = ./file/fish/functions/claude.fish;
+      ".config/op/claude.env.example".source = ./file/op/claude.env.example;
       ".config/nvim" = {
         source = ./file/nvim;
         recursive = true;
