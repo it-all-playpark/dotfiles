@@ -25,6 +25,10 @@ codex/**/*.local.toml
 **/*.credentials.json
 **/oauth-tokens.json
 
+# 1Password op run env overrides (repo-local, contains real vault/item refs)
+.op.env
+**/.op.env
+
 # Nix
 result
 result-*
