@@ -141,4 +141,5 @@ in
 
   # Tailscale VPN（CLIのみ、インターネット越しSSH用）
   services.tailscale.enable = true;
+  documentation.enable = false;
 }
