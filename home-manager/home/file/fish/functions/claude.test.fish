@@ -229,8 +229,61 @@ function test_interactive
     set -l stdout_content (cat $all_stdout)
     assert_not_contains "$stdout_content" FAKE-SA-TOKEN "interactive: SA token value never printed to stdout/stderr"
 
+    assert_eq (set -q GH_TOKEN; echo $status) 1 "interactive: GH_TOKEN not left exported in caller shell after claude exits"
+
     cd $orig_pwd
-    set -e GH_TOKEN
+    set -e GH_TOKEN 2>/dev/null
+    functions -e __claude_wrapper_is_interactive
+    rm -rf $tmp
+end
+
+# ---------------------------------------------------------------------------
+# Test 4: interactive launch when a declared key was already set in the caller
+# shell -> the wrapper must restore the prior value after claude exits, not
+# just unset it (secrets should not persist, but pre-existing state must not
+# be clobbered either).
+# ---------------------------------------------------------------------------
+function test_interactive_restores_prior_value
+    function __claude_wrapper_is_interactive
+        return 0
+    end
+
+    set -l tmp (mktemp -d)
+    set -l fakebin $tmp/bin
+    make_fakebin $fakebin
+    mkdir -p $tmp/.config/op
+    echo "GH_TOKEN=fake-gh" >$tmp/.config/op/claude.env
+
+    set -l fake_token (printf 'FAKE-SA-TOKEN-%.0s0' (seq 200))
+
+    set -lx HOME $tmp
+    set -lx PATH $fakebin $PATH
+    set -lx FAKE_SA_TOKEN $fake_token
+    set -lx FAKE_CLAUDE_ENV_DUMP $tmp/env_dump.txt
+    set -lx FAKE_CLAUDE_ARGS_DUMP $tmp/args_dump.txt
+
+    source $func_file
+
+    set -gx GH_TOKEN pre-existing-value
+
+    set -l all_stdout $tmp/all_stdout.txt
+    set -l orig_pwd $PWD
+    cd $tmp
+    claude qux >$all_stdout 2>&1
+    set -l claude_status $status
+    cd $orig_pwd
+
+    assert_eq $claude_status 0 "restore: wrapper exits 0"
+
+    set -l env_dump ""
+    if test -f $tmp/env_dump.txt
+        set env_dump (cat $tmp/env_dump.txt)
+    end
+    assert_contains "$env_dump" "GH_TOKEN=fake-gh" "restore: claude still sees the resolved GH_TOKEN during its run"
+
+    assert_eq "$GH_TOKEN" "pre-existing-value" "restore: caller shell's pre-existing GH_TOKEN value restored after claude exits"
+
+    set -e GH_TOKEN 2>/dev/null
     functions -e __claude_wrapper_is_interactive
     rm -rf $tmp
 end
@@ -238,6 +291,7 @@ end
 test_with_sa_token
 test_without_sa_token
 test_interactive
+test_interactive_restores_prior_value
 
 if test $failures -eq 0
     echo "All tests passed."

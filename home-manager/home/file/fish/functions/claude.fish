@@ -49,6 +49,22 @@ function claude --description 'claude wrapped with 1Password service-account sec
             end
         end
 
+        # Snapshot each declared key's prior state so it can be restored once
+        # claude exits. Without this, the resolved secrets would stay exported
+        # for the rest of this login shell's lifetime and leak into every
+        # subsequent child process, not just this claude invocation.
+        set -l saved_was_set
+        set -l saved_values
+        for k in $keys
+            if set -q $k
+                set -a saved_was_set 1
+                set -a saved_values $$k
+            else
+                set -a saved_was_set 0
+                set -a saved_values ''
+            end
+        end
+
         # Resolve op:// references once (outside any sandbox) and export only the
         # declared keys. The SA token is dropped via `env -u` and is never a key,
         # so it is never exported into this shell.
@@ -60,7 +76,20 @@ function claude --description 'claude wrapped with 1Password service-account sec
         end
 
         command claude $argv
-        return $status
+        set -l exit_status $status
+
+        # Restore the parent shell's prior environment so the resolved secrets
+        # do not outlive this claude invocation.
+        for i in (seq (count $keys))
+            set -l k $keys[$i]
+            if test "$saved_was_set[$i]" = 1
+                set -gx $k $saved_values[$i]
+            else
+                set -e $k
+            end
+        end
+
+        return $exit_status
     end
 
     # Non-interactive launch (bg agent / piped): keep op run so its secret masking
