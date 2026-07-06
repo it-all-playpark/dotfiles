@@ -43,6 +43,7 @@ in
 
   # プライマリユーザーの設定（システムデフォルト設定の適用対象）
   system.primaryUser = username;
+  system.tools.darwin-uninstaller.enable = false;
 
   # Nixビルドユーザーグループの設定（GID不一致エラー対応）
   ids.gids.nixbld = 350;
