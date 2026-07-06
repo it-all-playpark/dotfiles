@@ -229,6 +229,7 @@
       "~/ghq/github.com/Cistree-dev"
     ]
   },
+  "model": "opus[1m]",
   "fallbackModel": [
     "claude-opus-4-8",
     "claude-sonnet-5"
@@ -464,9 +465,6 @@
   },
   "extraKnownMarketplaces": {},
   "language": "ja",
-  "worktree": {
-    "bgIsolation": "none"
-  },
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
@@ -544,6 +542,5 @@
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true,
-  "model": "claude-fable-5[1m]"
+  "voiceEnabled": true
 }
