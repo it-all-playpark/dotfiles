@@ -52,7 +52,7 @@ function make_fakebin --argument-names dir
         '  elif [[ "$a" == --env-file=* ]]; then' \
         '    env_files+=("${a#--env-file=}")' \
         '  fi' \
-        'done' \
+        done \
         'for f in "${env_files[@]}"; do' \
         '  if [ -f "$f" ]; then' \
         '    while IFS="=" read -r k v; do' \
@@ -60,9 +60,8 @@ function make_fakebin --argument-names dir
         '      export "$k=$v"' \
         '    done < "$f"' \
         '  fi' \
-        'done' \
-        'exec "${rest[@]}"' \
-        > $dir/op
+        done \
+        'exec "${rest[@]}"' >$dir/op
     chmod +x $dir/op
 
     # fake `security`: emits $FAKE_SA_TOKEN (may be empty) regardless of args.
@@ -70,17 +69,15 @@ function make_fakebin --argument-names dir
         '#!/usr/bin/env bash' \
         'if [ -n "$FAKE_SA_TOKEN" ]; then' \
         '  printf "%s" "$FAKE_SA_TOKEN"' \
-        'fi' \
-        'exit 0' \
-        > $dir/security
+        fi \
+        'exit 0' >$dir/security
     chmod +x $dir/security
 
     # fake `claude`: dumps its environment and argv for inspection.
     printf '%s\n' \
         '#!/usr/bin/env bash' \
         'env > "$FAKE_CLAUDE_ENV_DUMP"' \
-        'printf "%s\n" "$@" > "$FAKE_CLAUDE_ARGS_DUMP"' \
-        > $dir/claude
+        'printf "%s\n" "$@" > "$FAKE_CLAUDE_ARGS_DUMP"' >$dir/claude
     chmod +x $dir/claude
 end
 
@@ -89,6 +86,10 @@ end
 # strips OP_SERVICE_ACCOUNT_TOKEN, and passes argv through to real claude.
 # ---------------------------------------------------------------------------
 function test_with_sa_token
+    # Force the default (isatty) probe so this exercises the non-interactive path
+    # regardless of any override left by an earlier test.
+    functions -e __claude_wrapper_is_interactive
+
     set -l tmp (mktemp -d)
     set -l fakebin $tmp/bin
     make_fakebin $fakebin
@@ -124,10 +125,10 @@ function test_with_sa_token
     if test -f $tmp/args_dump.txt
         set args_dump (cat $tmp/args_dump.txt)
     end
-    assert_contains "$args_dump" "foo" "with-token: argv passed through to real claude"
+    assert_contains "$args_dump" foo "with-token: argv passed through to real claude"
 
     set -l stdout_content (cat $all_stdout)
-    assert_not_contains "$stdout_content" "FAKE-SA-TOKEN" "with-token: SA token value never printed to stdout/stderr"
+    assert_not_contains "$stdout_content" FAKE-SA-TOKEN "with-token: SA token value never printed to stdout/stderr"
 
     cd $orig_pwd
     rm -rf $tmp
@@ -138,6 +139,8 @@ end
 # `command claude $argv` without ever invoking op run.
 # ---------------------------------------------------------------------------
 function test_without_sa_token
+    functions -e __claude_wrapper_is_interactive
+
     set -l tmp (mktemp -d)
     set -l fakebin $tmp/bin
     make_fakebin $fakebin
@@ -164,17 +167,77 @@ function test_without_sa_token
     if test -f $tmp/args_dump.txt
         set args_dump (cat $tmp/args_dump.txt)
     end
-    assert_contains "$args_dump" "bar" "without-token: falls back to plain command claude with argv passthrough"
+    assert_contains "$args_dump" bar "without-token: falls back to plain command claude with argv passthrough"
 
     set -l stdout_content (cat $all_stdout)
-    assert_not_contains "$stdout_content" "FAKE-SA-TOKEN" "without-token: no SA token value ever printed"
+    assert_not_contains "$stdout_content" FAKE-SA-TOKEN "without-token: no SA token value ever printed"
 
     cd $orig_pwd
     rm -rf $tmp
 end
 
+# ---------------------------------------------------------------------------
+# Test 3: interactive launch (stdin+stdout TTY) -> wrapper does NOT wrap claude
+# in `op run` (which would strip its TTY). Instead it resolves op:// references,
+# exports only the declared secrets into the shell, and execs the real claude
+# with argv passthrough. GH_TOKEN is injected, SA token is never exported/printed.
+# ---------------------------------------------------------------------------
+function test_interactive
+    # Override the TTY probe to force the interactive branch (the test harness
+    # itself runs with stdout redirected, so isatty would otherwise be false).
+    function __claude_wrapper_is_interactive
+        return 0
+    end
+
+    set -l tmp (mktemp -d)
+    set -l fakebin $tmp/bin
+    make_fakebin $fakebin
+    mkdir -p $tmp/.config/op
+    echo "GH_TOKEN=fake-gh" >$tmp/.config/op/claude.env
+
+    set -l fake_token (printf 'FAKE-SA-TOKEN-%.0s0' (seq 200))
+
+    set -lx HOME $tmp
+    set -lx PATH $fakebin $PATH
+    set -lx FAKE_SA_TOKEN $fake_token
+    set -lx FAKE_CLAUDE_ENV_DUMP $tmp/env_dump.txt
+    set -lx FAKE_CLAUDE_ARGS_DUMP $tmp/args_dump.txt
+
+    source $func_file
+
+    set -l all_stdout $tmp/all_stdout.txt
+    set -l orig_pwd $PWD
+    cd $tmp
+    claude baz >$all_stdout 2>&1
+    set -l claude_status $status
+
+    assert_eq $claude_status 0 "interactive: wrapper exits 0"
+
+    set -l env_dump ""
+    if test -f $tmp/env_dump.txt
+        set env_dump (cat $tmp/env_dump.txt)
+    end
+    assert_contains "$env_dump" "GH_TOKEN=fake-gh" "interactive: GH_TOKEN exported into shell then inherited by claude"
+    assert_not_contains "$env_dump" "OP_SERVICE_ACCOUNT_TOKEN=" "interactive: SA token never exported to claude env"
+
+    set -l args_dump ""
+    if test -f $tmp/args_dump.txt
+        set args_dump (cat $tmp/args_dump.txt)
+    end
+    assert_contains "$args_dump" baz "interactive: argv passed through to real claude"
+
+    set -l stdout_content (cat $all_stdout)
+    assert_not_contains "$stdout_content" FAKE-SA-TOKEN "interactive: SA token value never printed to stdout/stderr"
+
+    cd $orig_pwd
+    set -e GH_TOKEN
+    functions -e __claude_wrapper_is_interactive
+    rm -rf $tmp
+end
+
 test_with_sa_token
 test_without_sa_token
+test_interactive
 
 if test $failures -eq 0
     echo "All tests passed."
