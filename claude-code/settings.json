@@ -469,6 +469,7 @@
     "enabled": true,
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
     "network": {
       "allowedDomains": [
         "github.com",
@@ -534,11 +535,16 @@
       "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "bash $HOME/.claude/skills/*",
+      "python3 $HOME/.claude/skills/*",
+      "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
+      "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
       "codex:*",
       "zernio:*"
     ]
   },
   "tui": "fullscreen",
+  "askUserQuestionTimeout": "10m",
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
