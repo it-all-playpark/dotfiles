@@ -1,19 +1,21 @@
 # =================================================================
 # Shared baseline execpolicy rules for dotfiles.
-# Source: claude-code/settings.json permissions.deny
+# Source: claude-code/settings.json deny/guard policy
 # =================================================================
 # Keep this file stable and repository-agnostic.
 # One-off approvals should stay in the local runtime copy under ~/.codex/rules/.
 #
 # decision="forbidden" : Auto-reject (dangerous, no valid agent use case)
-# decision="prompt"    : Require user confirmation before executing
+# decision="prompt"    : Require user confirmation before executing.
+#                         Avoid prompt rules in this baseline where possible;
+#                         prefer forbidden for Claude deny-list equivalents.
 #
 # NOTES:
 # - File read restrictions (Read(.env), Read(.ssh/) etc.) are not
 #   expressible in prefix_rule format and are omitted.
 # - MCP-specific rules (mcp__gh__*) are omitted (Codex doesn't use MCP).
-# - Bare "git push" uses "prompt" instead of "forbidden" because
-#   prefix_rule would block ALL git push operations (too broad).
+# - Bare "git push" is not listed because prefix_rule would block ALL git push
+#   operations (too broad). Protected branch/force pushes remain forbidden.
 # - Root-path glob patterns (mv /*, cp /*, rsync /*) cannot be
 #   faithfully translated to prefix_rule literal matching.
 # =================================================================
@@ -135,61 +137,62 @@ prefix_rule(pattern=["security", "find-internet-password"], decision="forbidden"
 prefix_rule(pattern=["security", "dump-keychain"], decision="forbidden")
 
 # =================================================================
-# Require confirmation (prompt)
+# Auto-reject high-risk operations
 # =================================================================
 
 # NOTE:
-# - We intentionally do NOT prompt on plain "git push" here.
+# - We intentionally do NOT list plain "git push" here.
 # - Baseline allows non-force push, while protected branches remain forbidden above.
-# - Approval frequency is mainly controlled by config.toml:
-#   approval_policy + sandbox_mode + sandbox_workspace_write.network_access.
+# - Confirmation frequency is mainly controlled by config.toml:
+#   approval_policy + sandbox_mode + sandbox_workspace_write.network_access,
+#   plus any local prompt/allow rules added under ~/.codex/rules/.
 
-# ------- GitHub CLI: Destructive Operations (prompt) -------
-prefix_rule(pattern=["gh", "repo", "delete"], decision="prompt")
-prefix_rule(pattern=["gh", "repo", "rename"], decision="prompt")
-prefix_rule(pattern=["gh", "repo", "transfer"], decision="prompt")
-prefix_rule(pattern=["gh", "repo", "edit"], decision="prompt")
-prefix_rule(pattern=["gh", "repo", "fork"], decision="prompt")
-prefix_rule(pattern=["gh", "release", "delete"], decision="prompt")
-prefix_rule(pattern=["gh", "pr", "merge"], decision="prompt")
-prefix_rule(pattern=["gh", "secret", "set"], decision="prompt")
-prefix_rule(pattern=["gh", "secret", "remove"], decision="prompt")
-prefix_rule(pattern=["gh", "auth", "token"], decision="prompt")
+# ------- GitHub CLI: Destructive Operations (forbidden) -------
+prefix_rule(pattern=["gh", "repo", "delete"], decision="forbidden")
+prefix_rule(pattern=["gh", "repo", "rename"], decision="forbidden")
+prefix_rule(pattern=["gh", "repo", "transfer"], decision="forbidden")
+prefix_rule(pattern=["gh", "repo", "edit"], decision="forbidden")
+prefix_rule(pattern=["gh", "repo", "fork"], decision="forbidden")
+prefix_rule(pattern=["gh", "release", "delete"], decision="forbidden")
+prefix_rule(pattern=["gh", "pr", "merge"], decision="forbidden")
+prefix_rule(pattern=["gh", "secret", "set"], decision="forbidden")
+prefix_rule(pattern=["gh", "secret", "remove"], decision="forbidden")
+prefix_rule(pattern=["gh", "auth", "token"], decision="forbidden")
 
-# ------- GitHub API: Mutating Methods (prompt) -------
-prefix_rule(pattern=["gh", "api", "--method", "DELETE"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "--method", "POST"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "--method", "PUT"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "--method", "PATCH"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "-X", "DELETE"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "-X", "POST"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "-X", "PUT"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "-X", "PATCH"], decision="prompt")
-prefix_rule(pattern=["gh", "api", "graphql"], decision="prompt")
+# ------- GitHub API: Mutating Methods (forbidden) -------
+prefix_rule(pattern=["gh", "api", "--method", "DELETE"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "--method", "POST"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "--method", "PUT"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "--method", "PATCH"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "-X", "DELETE"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "-X", "POST"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "-X", "PUT"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "-X", "PATCH"], decision="forbidden")
+prefix_rule(pattern=["gh", "api", "graphql"], decision="forbidden")
 
-# ------- Network Operations (prompt) -------
-prefix_rule(pattern=["curl"], decision="prompt")
-prefix_rule(pattern=["wget"], decision="prompt")
-prefix_rule(pattern=["ssh"], decision="prompt")
-prefix_rule(pattern=["nc"], decision="prompt")
-prefix_rule(pattern=["netcat"], decision="prompt")
-prefix_rule(pattern=["ncat"], decision="prompt")
-prefix_rule(pattern=["telnet"], decision="prompt")
-prefix_rule(pattern=["ftp"], decision="prompt")
-prefix_rule(pattern=["sftp"], decision="prompt")
-prefix_rule(pattern=["scp"], decision="prompt")
+# ------- Network Operations (forbidden) -------
+prefix_rule(pattern=["curl"], decision="forbidden")
+prefix_rule(pattern=["wget"], decision="forbidden")
+prefix_rule(pattern=["ssh"], decision="forbidden")
+prefix_rule(pattern=["nc"], decision="forbidden")
+prefix_rule(pattern=["netcat"], decision="forbidden")
+prefix_rule(pattern=["ncat"], decision="forbidden")
+prefix_rule(pattern=["telnet"], decision="forbidden")
+prefix_rule(pattern=["ftp"], decision="forbidden")
+prefix_rule(pattern=["sftp"], decision="forbidden")
+prefix_rule(pattern=["scp"], decision="forbidden")
 
-# ------- Package Management (prompt) -------
-prefix_rule(pattern=["brew"], decision="prompt")
-prefix_rule(pattern=["nix-env", "-i"], decision="prompt")
-prefix_rule(pattern=["nix", "profile", "install"], decision="prompt")
-prefix_rule(pattern=["nix-store", "--delete"], decision="prompt")
-prefix_rule(pattern=["nix-collect-garbage", "-d"], decision="prompt")
-prefix_rule(pattern=["apt-get"], decision="prompt")
-prefix_rule(pattern=["yum"], decision="prompt")
-prefix_rule(pattern=["pip", "install"], decision="prompt")
-prefix_rule(pattern=["pip3", "install"], decision="prompt")
-prefix_rule(pattern=["pipx", "install"], decision="prompt")
-prefix_rule(pattern=["npm", "publish"], decision="prompt")
-prefix_rule(pattern=["pnpm", "publish"], decision="prompt")
-prefix_rule(pattern=["cargo", "publish"], decision="prompt")
+# ------- Package Management (forbidden) -------
+prefix_rule(pattern=["brew"], decision="forbidden")
+prefix_rule(pattern=["nix-env", "-i"], decision="forbidden")
+prefix_rule(pattern=["nix", "profile", "install"], decision="forbidden")
+prefix_rule(pattern=["nix-store", "--delete"], decision="forbidden")
+prefix_rule(pattern=["nix-collect-garbage", "-d"], decision="forbidden")
+prefix_rule(pattern=["apt-get"], decision="forbidden")
+prefix_rule(pattern=["yum"], decision="forbidden")
+prefix_rule(pattern=["pip", "install"], decision="forbidden")
+prefix_rule(pattern=["pip3", "install"], decision="forbidden")
+prefix_rule(pattern=["pipx", "install"], decision="forbidden")
+prefix_rule(pattern=["npm", "publish"], decision="forbidden")
+prefix_rule(pattern=["pnpm", "publish"], decision="forbidden")
+prefix_rule(pattern=["cargo", "publish"], decision="forbidden")

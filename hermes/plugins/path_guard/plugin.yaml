@@ -1,0 +1,3 @@
+name: path_guard
+version: 1.0.0
+description: Block sensitive host path access + interpreter/runner bypass not covered by hermes built-in approvals

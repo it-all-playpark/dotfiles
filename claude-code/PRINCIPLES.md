@@ -13,6 +13,7 @@
 - Consider ripple effects and long-term trade-offs
 - Base decisions on measurements, not assumptions
 - Classify risks by reversibility and impact
+- **Right-Sized Compute**: Match model/effort tier to task weight — heavy models for hard reasoning, cheap models (haiku/low) for mechanical/search work
 
 ## Quality Quadrants
 - **Functional**: Correctness, reliability

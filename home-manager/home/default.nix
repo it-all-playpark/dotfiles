@@ -7,11 +7,16 @@
 }:
 let
   packages = import ../../common/packages.nix { inherit pkgs; };
+  # CLI tool 一覧は lib/cli-packages.nix に集約 (mode=host で hostOnly 込みのフルセット)
+  # hermes-agent 用 container image (mode=container) と単一ソースを共有する。
+  cliPackages = import ../../lib/cli-packages.nix {
+    inherit pkgs;
+    mode = "host";
+    # 注: cliPackages の common には commonPackages と重複する coreutils/curl/git を含む。
+    # Nix store の dedup によりインストール上の重複は発生しない (behavior-preserving)。
+  };
 in
 {
-  # claude-code のみ unfree を許可
-  nixpkgs.config.allowUnfreePredicate = pkg: builtins.elem (pkgs.lib.getName pkg) [ "claude-code" ];
-
   home = {
     username = username;
     homeDirectory = pkgs.lib.strings.concatStringsSep "" [
@@ -21,45 +26,8 @@ in
     ];
     stateVersion = "24.05"; # Please read the comment before changing.
 
-    # 共通パッケージを全プラットフォームでインストール
-    packages =
-      packages.commonPackages
-      ++ (with pkgs; [
-        act
-        bat
-        bun
-        claude-code
-        python313Packages.deepl
-        eza
-        fastfetch
-        fd
-        ffmpeg
-        flyctl
-        fzf
-        gh
-        ghq
-        jq
-        lazygit
-        mariadb
-        marp-cli
-        mise
-        ollama
-        opentofu
-        postgresql_17
-        procs
-        rclone
-        rip2
-        ripgrep
-        ripgrep-all
-        sd
-        starship
-        stripe-cli
-        tbls
-        tldr
-        vips
-        zellij
-        zoxide
-      ]);
+    # 共通パッケージ + CLI tool 群 (host モード)
+    packages = packages.commonPackages ++ cliPackages;
 
     file = {
       ".myclirc".source = ./file/.myclirc;
@@ -67,8 +35,6 @@ in
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
-      ".config/fish/functions/claude.fish".source = ./file/fish/functions/claude.fish;
-      ".config/op/claude.env.example".source = ./file/op/claude.env.example;
       ".config/nvim" = {
         source = ./file/nvim;
         recursive = true;
@@ -100,7 +66,7 @@ in
     };
 
     # Claude Code 設定を dotfiles/claude-code/ からシンボリックリンクで参照
-    # Nixのread-only制約を回避し、直接編集可能にする
+    # claude-code バイナリ自体は mise で管理（home-manager/home/file/mise/config.toml）
     activation.setupClaudeCode = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       DOTFILES_CLAUDE="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/claude-code"
       CLAUDE_DIR="${config.home.homeDirectory}/.claude"
@@ -116,6 +82,22 @@ in
 
       # skills ディレクトリは setup-skills.sh で管理（setup.sh から呼び出される）
       # ここでは触れない - 既存の symlink を保持するため
+
+      # ~/.claude/agents → skills repo の .claude/agents
+      # dev-kickoff-worker 等の subagent 定義。任意 repo で dev-flow を実行するには
+      # user-global (~/.claude/agents) で解決させる必要があるため home-manager で symlink。
+      # skills 本体は setup-skills.sh 管理だが、agents は cwd 非依存解決が必須なのでここで貼る。
+      SKILLS_AGENTS="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/skills/.claude/agents"
+      CLAUDE_AGENTS="$CLAUDE_DIR/agents"
+      if [ -d "$SKILLS_AGENTS" ]; then
+        if [ -L "$CLAUDE_AGENTS" ] || [ ! -e "$CLAUDE_AGENTS" ]; then
+          ln -sfn "$SKILLS_AGENTS" "$CLAUDE_AGENTS"
+        else
+          echo "Warning: $CLAUDE_AGENTS exists and is not a symlink. Skipping (manual review needed)."
+        fi
+      else
+        echo "Warning: $SKILLS_AGENTS does not exist. Skipping agents symlink."
+      fi
 
       # settings.json へのシンボリックリンク
       # 既存ファイルがシンボリックリンクでない場合は削除
@@ -158,9 +140,13 @@ in
       # hooks ディレクトリ内のスクリプトへのシンボリックリンク
       if [ -d "$DOTFILES_CLAUDE/hooks" ]; then
         mkdir -p "$CLAUDE_DIR/hooks"
-        for f in "$DOTFILES_CLAUDE"/hooks/*.py; do
+        for f in "$DOTFILES_CLAUDE"/hooks/*.py "$DOTFILES_CLAUDE"/hooks/*.sh; do
           if [ -f "$f" ]; then
-            target="$CLAUDE_DIR/hooks/$(basename "$f")"
+            base="$(basename "$f")"
+            case "$base" in
+              *.test.sh) continue ;;
+            esac
+            target="$CLAUDE_DIR/hooks/$base"
             if [ -f "$target" ] && [ ! -L "$target" ]; then
               rm "$target"
             fi
@@ -320,11 +306,115 @@ in
       mv "$tmp_config" "$CODEX_DIR/config.toml"
       chmod 600 "$CODEX_DIR/config.toml"
     '';
+
+    # Hermes-agent 設定を dotfiles/hermes/ からシンボリックリンクで参照
+    # - config.yaml と plugins/* は symlink (上書き不可ファイルは事前削除)
+    # - .env は初回のみ template から copy。既存があれば tokens 保護のため触らない
+    activation.setupHermes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      DOTFILES_HERMES="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/hermes"
+      HERMES_DIR="${config.home.homeDirectory}/.hermes"
+
+      if [ ! -d "$DOTFILES_HERMES" ]; then
+        echo "Warning: $DOTFILES_HERMES does not exist. Skipping hermes setup."
+        exit 0
+      fi
+
+      mkdir -p "$HERMES_DIR/plugins" "$HERMES_DIR/logs"
+
+      # config.yaml — symlink (上書き不可ファイルは事前削除)
+      if [ -f "$HERMES_DIR/config.yaml" ] && [ ! -L "$HERMES_DIR/config.yaml" ]; then
+        rm "$HERMES_DIR/config.yaml"
+      fi
+      ln -sf "$DOTFILES_HERMES/config.yaml" "$HERMES_DIR/config.yaml"
+
+      # hermes-wrapper.sh — symlink。~/.hermes/.env を load してから real hermes を exec する。
+      # launchd agent と手動起動の双方で同じ env 注入経路を提供する。
+      if [ -f "$HERMES_DIR/hermes-wrapper.sh" ] && [ ! -L "$HERMES_DIR/hermes-wrapper.sh" ]; then
+        rm "$HERMES_DIR/hermes-wrapper.sh"
+      fi
+      ln -sf "$DOTFILES_HERMES/hermes-wrapper.sh" "$HERMES_DIR/hermes-wrapper.sh"
+
+      # plugins — 各 plugin ディレクトリを symlink
+      # NOTE: 末尾 / 付き plugin_dir + 既存 directory symlink に対する ln -sf は、
+      # BSD ln (macOS) で symlink を dereference してその中に link を作る挙動を取り、
+      # dotfiles/hermes/plugins/<name>/<name> という循環 symlink を量産する。
+      # 末尾 / を剥がし、既存 symlink を rm -f で必ず消してから ln することで回避。
+      for plugin_dir in "$DOTFILES_HERMES/plugins/"*/; do
+        [ -d "$plugin_dir" ] || continue
+        plugin_dir="''${plugin_dir%/}"
+        plugin_name="$(basename "$plugin_dir")"
+        if [ -e "$HERMES_DIR/plugins/$plugin_name" ] && [ ! -L "$HERMES_DIR/plugins/$plugin_name" ]; then
+          rm -rf "$HERMES_DIR/plugins/$plugin_name"
+        fi
+        rm -f "$HERMES_DIR/plugins/$plugin_name"
+        ln -sf "$plugin_dir" "$HERMES_DIR/plugins/$plugin_name"
+      done
+
+      # .env — 初回のみ copy。既存があれば触らない (tokens 保持のため)
+      if [ ! -f "$HERMES_DIR/.env" ]; then
+        cp "$DOTFILES_HERMES/.env.template" "$HERMES_DIR/.env"
+        chmod 600 "$HERMES_DIR/.env"
+        echo "hermes: created ~/.hermes/.env from template — fill in tokens before running"
+      fi
+    '';
   };
 
   # Ollama サーバーをログイン時に自動起動
   # macOS: launchd agent, Linux: systemd user service
   services.ollama = {
     enable = true;
+  };
+
+  # Syncthing をログイン時に自動起動
+  # macOS: launchd agent, Linux: systemd user service
+  # MacBook ↔ Mac Studio 間でスクショ等を双方向同期する。回線が切れても復帰時に差分を
+  # 自動同期するため、トンネル区間を含む移動中でもファイル受け渡しが途切れない。
+  # 初回のみ各マシンの Web UI (http://127.0.0.1:8384) でデバイス相互承認 + 共有フォルダ設定が必要。
+  services.syncthing = {
+    enable = true;
+  };
+
+  # hermes gateway をログイン時に自動起動 (macOS 限定)
+  # Docker Desktop が未起動でも KeepAlive + ThrottleInterval で復旧するまで再試行。
+  #
+  # 同一 user account を複数 Mac で運用する場合の二重起動防止:
+  # opt-in marker `~/.hermes/.gateway-primary` が存在する host でだけ実際に起動する。
+  # marker 不在なら exit 0 で終了 (KeepAlive.SuccessfulExit=false なので restart しない)。
+  # 切り替え時は旧機で `rm`、新機で `touch` + `launchctl kickstart -k gui/$(id -u)/com.playpark.hermes-gateway`。
+  launchd.agents = lib.optionalAttrs pkgs.stdenv.isDarwin {
+    hermes-gateway = {
+      enable = true;
+      config = {
+        Label = "com.playpark.hermes-gateway";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''
+            MARKER="${config.home.homeDirectory}/.hermes/.gateway-primary"
+            if [ ! -f "$MARKER" ]; then
+              echo "hermes-gateway: $MARKER not found on this host — skipping (opt-in via 'touch $MARKER')" >&2
+              exit 0
+            fi
+            /bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" \
+              && /bin/wait4path "${config.home.homeDirectory}/.hermes/hermes-wrapper.sh" \
+              && exec "${config.home.homeDirectory}/.hermes/hermes-wrapper.sh" gateway
+          ''
+        ];
+        EnvironmentVariables = {
+          PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${config.home.homeDirectory}/.local/bin";
+          HOME = config.home.homeDirectory;
+        };
+        WorkingDirectory = "${config.home.homeDirectory}/.hermes";
+        RunAtLoad = true;
+        KeepAlive = {
+          Crashed = true;
+          SuccessfulExit = false;
+        };
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/.hermes/logs/gateway.out.log";
+        StandardErrorPath = "${config.home.homeDirectory}/.hermes/logs/gateway.err.log";
+        ThrottleInterval = 30;
+      };
+    };
   };
 }

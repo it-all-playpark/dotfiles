@@ -4,6 +4,7 @@
 // テーマ・外観
 theme "default"
 default_layout "compact"
+default_shell "fish"
 pane_frames false
 ui {
     pane_frames {
@@ -16,6 +17,8 @@ ui {
 mouse_mode true
 
 // コピーモード: vi キーバインド
+// クリップボードは pbcopy 経由。OSC52(copy_clipboard "system")は zellij 0.44.3 +
+// mosh 1.4.0 環境では実際のコピーが効かなかったため pbcopy に戻している。
 copy_command "pbcopy"
 scrollback_editor "nvim"
 
@@ -70,6 +73,13 @@ keybinds clear-defaults=true {
 
         // セッション操作
         bind "Ctrl a" { SwitchToMode "Tmux"; }
+        bind "Alt d" { Detach; }
+        bind "Alt w" {
+            LaunchOrFocusPlugin "zellij:session-manager" {
+                floating true
+                move_to_focused_tab true
+            }
+        }
     }
 
     // === スクロール / コピーモード（大西配列） ===

@@ -1,7 +1,6 @@
 {
   "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "API_TIMEOUT_MS": "900000"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "attribution": {
     "commit": "",
@@ -25,9 +24,7 @@
       "mcp__plugin_telegram_telegram__reply",
       "mcp__plugin_telegram_telegram__react",
       "mcp__plugin_telegram_telegram__edit_message",
-      "mcp__plugin_telegram_telegram__download_attachment",
-      "Bash(zernio post:*)",
-      "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio:*)"
+      "mcp__plugin_telegram_telegram__download_attachment"
     ],
     "deny": [
       "Bash(gh repo delete:*)",
@@ -89,12 +86,14 @@
       "Bash(git push origin --delete development)",
       "Bash(git push origin --delete main)",
       "Bash(git push origin --delete master)",
+      "Bash(git reset --hard:*)",
       "Bash(git clean -f:*)",
       "Bash(git clean -fd:*)",
       "Bash(git clean -fx:*)",
       "Bash(git clean -xf:*)",
       "Bash(git checkout -- .:*)",
       "Bash(git restore .:*)",
+      "Bash(git branch -D:*)",
       "Bash(sudo:*)",
       "Bash(rm -rf:*)",
       "Bash(rm -fr:*)",
@@ -109,6 +108,8 @@
       "Bash(/bin/rm -r:*)",
       "Bash(find / -delete:*)",
       "Bash(find / -exec rm -rf {} \\;:*)",
+      "Bash(chmod -R:*)",
+      "Bash(chown -R:*)",
       "Bash(chgrp -R:*)",
       "Bash(curl:*)",
       "Bash(wget:*)",
@@ -224,62 +225,14 @@
     "defaultMode": "auto",
     "disableBypassPermissionsMode": "disable",
     "additionalDirectories": [
-      "~/ghq/github.com/playpark-llc",
-      "~/ghq/github.com/it-all-playpark",
-      "~/ghq/github.com/Cistree-dev"
+      "/workspace/repos/github.com/playpark-llc",
+      "/workspace/repos/github.com/it-all-playpark",
+      "/workspace/repos/github.com/Cistree-dev"
     ]
   },
-  "model": "opus[1m]",
-  "fallbackModel": [
-    "claude-opus-4-8",
-    "claude-sonnet-5"
-  ],
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [],
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo",
-            "args": [
-              "Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes."
-            ]
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "SCRIPT=\"$HOME/.claude/skills/claude-zombie-kill/scripts/zombie-kill.sh\"; [[ -x \"$SCRIPT\" ]] && bash \"$SCRIPT\" --force --min-hours 48"
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "PreCompact": [
       {
         "matcher": "",
@@ -294,16 +247,6 @@
       }
     ],
     "PreToolUse": [
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" track-skill",
-            "timeout": 3
-          }
-        ]
-      },
       {
         "matcher": "Write",
         "hooks": [
@@ -373,22 +316,6 @@
             "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
             "timeout": 5,
             "statusMessage": "出力内の秘匿情報マスク中..."
-          },
-          {
-            "type": "command",
-            "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\""
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" hook-capture",
-            "timeout": 5
           }
         ]
       }
@@ -406,21 +333,6 @@
         ]
       }
     ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "osascript",
-            "args": [
-              "-e",
-              "display notification \"Claude Code needs your attention\" with title \"Claude Code\""
-            ]
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "matcher": "",
@@ -429,11 +341,6 @@
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/stop-devflow-telemetry.sh\"",
-            "timeout": 15
           }
         ]
       }
@@ -455,92 +362,10 @@
       }
     ]
   },
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true
-  },
+  "enabledPlugins": {},
   "extraKnownMarketplaces": {},
   "language": "ja",
-  "sandbox": {
-    "enabled": true,
-    "failIfUnavailable": true,
-    "allowUnsandboxedCommands": false,
-    "network": {
-      "allowedDomains": [
-        "github.com",
-        "api.github.com",
-        "codeload.github.com",
-        "*.githubusercontent.com",
-        "registry.npmjs.org",
-        "*.npmjs.org",
-        "cache.nixos.org",
-        "channels.nixos.org",
-        "releases.nixos.org",
-        "tarballs.nixos.org",
-        "*.cachix.org",
-        "crates.io",
-        "index.crates.io",
-        "static.crates.io",
-        "pypi.org",
-        "files.pythonhosted.org",
-        "nodejs.org",
-        "static.rust-lang.org",
-        "sh.rustup.rs",
-        "proxy.golang.org",
-        "sum.golang.org",
-        "go.dev",
-        "storage.googleapis.com",
-        "zernio.com",
-        "*.amazonaws.com",
-        "*.googleapis.com",
-        "accounts.google.com",
-        "trends.google.com",
-        "fonts.gstatic.com",
-        "qiita.com",
-        "zenn.dev",
-        "api.slack.com"
-      ]
-    },
-    "filesystem": {
-      "allowWrite": [
-        "~/.claude/journal",
-        "~/.claude/logs",
-        "~/.claude/memory",
-        "~/.claude/jobs",
-        "~/Documents/meetings",
-        "~/ghq/**/.claude/scheduled_tasks.json",
-        "~/ghq/**/.claude/scheduled_tasks.lock"
-      ],
-      "denyRead": [
-        "~/.aws/**",
-        "~/.ssh/**",
-        "~/.gnupg/**",
-        "~/.config/gh/**"
-      ]
-    },
-    "excludedCommands": [
-      "gh:*",
-      "git:*",
-      "~/.claude/skills/*",
-      "bash ~/.claude/skills/*",
-      "python3 ~/.claude/skills/*",
-      "/Users/naramotoyuuji/.claude/skills/*",
-      "bash /Users/naramotoyuuji/.claude/skills/*",
-      "python3 /Users/naramotoyuuji/.claude/skills/*",
-      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "codex:*",
-      "zernio:*"
-    ]
-  },
-  "tui": "fullscreen",
-  "skipWorkflowUsageWarning": true,
-  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "voiceEnabled": false,
+  "agentPushNotifEnabled": false
 }

@@ -7,10 +7,6 @@
     "branch": "main",
     "commit": "171c54b58076c7454c40da4dfba1aab21171c143"
   },
-  "avante.nvim": {
-    "branch": "main",
-    "commit": "d75094b81579e2b36dc8fa9fc21bd499dea37590"
-  },
   "blink-cmp-copilot": {
     "branch": "main",
     "commit": "439cff78780c033aa23cf061d7315314b347e3c1"

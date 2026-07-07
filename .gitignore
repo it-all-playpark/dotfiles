@@ -1,5 +1,6 @@
 # Claude Code - sensitive and runtime data
 .claude/
+.antigravitycli/
 claude-code/.credentials.json
 claude-code/history.jsonl
 claude-code/cache/
@@ -7,7 +8,7 @@ claude-code/logs/
 claude-code/file-history/
 claude-code/debug/
 claude-code/backups/
-claude-code/agents/
+# claude-code/agents/ は dotfiles 管理対象（symlink 元）
 claude-code/.superclaude-metadata.json
 
 # Skills - sensitive and generated files
@@ -20,14 +21,15 @@ codex/config.local.toml
 codex/*.local.toml
 codex/**/*.local.toml
 
+# Hermes - sensitive runtime data
+# 正規ファイル: hermes/.env.template は tracked、実体 .env は commit しない
+hermes/.env
+hermes/**/__pycache__/
+
 # Sensitive authentication files (global)
 **/auth-profiles.json
 **/*.credentials.json
 **/oauth-tokens.json
-
-# 1Password op run env overrides (repo-local, contains real vault/item refs)
-.op.env
-**/.op.env
 
 # Nix
 result
