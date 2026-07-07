@@ -535,6 +535,10 @@
       "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "bash $HOME/.claude/skills/*",
+      "python3 $HOME/.claude/skills/*",
+      "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
+      "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
       "codex:*",
       "zernio:*"
     ]
