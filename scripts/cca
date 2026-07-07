@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# cca — foreground Claude セッション・スイッチャー
+#
+# 設計: 「生きてる claude プロセス」を背骨にする(live-pivot)。
+#   sessions-index.json は履歴であって live を映さない(稼働中セッションは載らない/遅延書き込み)ため使わない。
+#   鮮度は transcript .jsonl の実ファイル mtime(リアルタイム追記)から、branch は git から直接取る。
+set -euo pipefail
+
+cca_reltime() {
+  local s="$1"
+  if   [ "$s" -lt 60 ];    then echo "${s}s"
+  elif [ "$s" -lt 3600 ];  then echo "$((s/60))m"
+  elif [ "$s" -lt 86400 ]; then echo "$((s/3600))h"
+  else                          echo "$((s/86400))d"
+  fi
+}
+
+# cwd → ~/.claude/projects 配下のエンコード済みディレクトリ名。
+# Claude Code の規則: パス区切り '/' と '.' を '-' に置換(先頭 / も '-' になる)。
+cca_encode_dir() {
+  printf '%s' "$1" | sed 's#[./]#-#g'
+}
+
+# projectディレクトリ内で最新の .jsonl の実 mtime(epoch秒)。無ければ 0。
+# stat は GNU(-c %Y)優先、macOS BSD(-f %m)にフォールバック。
+cca_newest_mtime() {
+  local dir="$1" newest
+  # .jsonl 名はセッション UUID で安全。ls -t は GNU/BSD 両対応(find -printf は macOS 非互換)。
+  # shellcheck disable=SC2012
+  newest="$(ls -t "$dir"/*.jsonl 2>/dev/null | head -1)"
+  [ -n "$newest" ] || { echo 0; return; }
+  stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest" 2>/dev/null || echo 0
+}
+
+# 前景(対話)claude セッションの cwd を1行1個で出す。
+# 制御端末を持つプロセスだけを対象にし、端末なし(tty=??/?)のバックグラウンド claude
+# ——サブエージェント/routine/常駐 daemon 等——は除外する(spec: v1 は前景セッションのみ)。
+cca_live() {
+  local pid tty
+  for pid in $(pgrep -x claude 2>/dev/null || true); do
+    tty="$(ps -o tty= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+    case "$tty" in
+      '' | '?' | '??' | 'none') continue ;;  # 制御端末なし = バックグラウンド → 除外
+    esac
+    lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p'
+  done | sort -u
+}
+
+# stdin: live な cwd(1行1個)。各 cwd を cwd\tbranch\tmtime_epoch の TSV にする。
+#   branch = git から直接(index に頼らない)。detached/非repo は空。
+#   mtime  = その cwd の transcript ディレクトリ内、最新 .jsonl の実 mtime。
+cca_enumerate() {
+  local projroot="${CCA_PROJECTS_DIR:-$HOME/.claude/projects}"
+  local cwd branch mtime
+  while IFS= read -r cwd || [ -n "$cwd" ]; do
+    [ -n "$cwd" ] || continue
+    # ホーム直下(~)で起動した非プロジェクト claude は一覧から除外(対応する zellij session も無い)
+    if [ "$cwd" = "$HOME" ]; then continue; fi
+    branch="$(git -C "$cwd" branch --show-current 2>/dev/null || true)"
+    mtime="$(cca_newest_mtime "$projroot/$(cca_encode_dir "$cwd")")"
+    printf '%s\t%s\t%s\n' "$cwd" "$branch" "$mtime"
+  done
+}
+
+# stdin: cwd\tbranch\tmtime_epoch → cwd\tproj\tbranch\t"icon reltime"(表示用)。
+#   先頭列 cwd は fzf で隠して選択後に cut -f1 で復元する。
+#   \x1f センチネル分割: IFS=$'\t' read は空 branch(\t\t)を潰すため回避。
+cca_render() {
+  local now="${CCA_NOW:-$(date +%s)}"
+  local win="${CCA_ACTIVE_WINDOW:-300}"
+  local line cwd branch mtime age icon rel proj
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    IFS=$'\x1f' read -r cwd branch mtime <<< "${line//$'\t'/$'\x1f'}"
+    proj="$(basename "$cwd")"
+    mtime="${mtime:-0}"
+    if [ "$mtime" -le 0 ]; then
+      # transcript .jsonl が無い(例: ~ 直下で起動した claude)→ 鮮度不明。0=1970 で巨大 age を出さない。
+      printf '%s\t%s\t%s\t%s\n' "$cwd" "$proj" "${branch:-–}" "–"
+      continue
+    fi
+    age=$(( now - mtime ))
+    if [ "$age" -lt 0 ]; then age=0; fi
+    if [ "$age" -lt "$win" ]; then icon="🟢"; else icon="💤"; fi
+    rel="$(cca_reltime "$age")"
+    printf '%s\t%s\t%s\t%s %s\n' "$cwd" "$proj" "${branch:-–}" "$icon" "$rel"
+  done
+}
+
+# stdin から session名(1行1個)を読み、cwd の basename と一致する session名を返す。
+# zellij session 名は '-' を '_' に変えて付けられることがある(例: second_brain ↔ second-brain)ため、
+# 比較時に両側とも '_' → '-' に正規化してから突き合わせる。一致した「元の」session名を返す。
+cca_join() {
+  local cwd="$1" base s
+  base="$(basename "$cwd" | tr '_' '-')"
+  while IFS= read -r s || [ -n "$s" ]; do
+    [ -n "$s" ] || continue
+    if [ "$(printf '%s' "$s" | tr '_' '-')" = "$base" ]; then
+      printf '%s\n' "$s"
+      return 0
+    fi
+  done
+}
+
+cca_pick() {
+  fzf --delimiter='\t' --with-nth=2.. \
+      --layout=reverse --prompt 'CLAUDE SESSION> '
+}
+
+cca_attach() {
+  local sess="$1"
+  [ -n "$sess" ] || { echo "cca: attach 先の session がありません" >&2; return 1; }
+  # zellij 内からの session 切替は、対話 zsh の job control 文脈でないと
+  # `zellij action switch-session` がフリーズして切り替わらない(実測: fish/bash/非対話/
+  # background/exec/stdinリダイレクト いずれも不可。対話 zsh のみ成功)。job control は `-i` で
+  # 有効になり rc は不要だったため `-ifc`(対話・rc読まず高速)経由で exec する。
+  # 位置引数 $1 で session 名を安全に渡す。zellij 外は通常の attach。
+  if [ -n "${ZELLIJ:-}" ]; then
+    # shellcheck disable=SC2016  # $1 は zsh 側で展開させる(意図的にシングルクォート)
+    exec zsh -ifc 'zellij action switch-session "$1"' cca "$sess"
+  fi
+  exec zellij attach "$sess"
+}
+
+# --list: fzf/zellij を呼ばない。cca_live|cca_enumerate|cca_render の4列TSVを stdout にそのまま出す。
+cca_cmd_list() {
+  cca_live | cca_enumerate | cca_render
+}
+
+# --attach <cwd>: 既存の zellij session 解決(cca_join)→フォールバック fzf→cca_attach を実行する。
+# 引数なし cca(対話フロー)からも共有され、attach ロジックを1箇所に集約する(DRY)。
+cca_cmd_attach() {
+  local cwd="$1" sessions sess
+  [ -n "$cwd" ] || { echo "cca: attach 先の cwd が指定されていません" >&2; return 1; }
+  sessions="$(zellij list-sessions --no-formatting 2>/dev/null | awk '{print $1}')"
+  sess="$(printf '%s' "$sessions" | cca_join "$cwd")"
+  if [ -z "$sess" ]; then
+    sess="$(printf '%s' "$sessions" | fzf --layout=reverse --prompt 'ZELLIJ SESSION> ' || true)"
+  fi
+  cca_attach "$sess"
+}
+
+cca_main() {
+  local sel cwd
+  case "${1:-}" in
+    --list)
+      cca_cmd_list
+      ;;
+    --attach)
+      shift
+      cca_cmd_attach "${1:-}"
+      ;;
+    '')
+      sel="$(cca_live | cca_enumerate | cca_render | cca_pick || true)"
+      [ -n "$sel" ] || return 0
+      cwd="$(printf '%s' "$sel" | cut -f1)"
+      cca_cmd_attach "$cwd"
+      ;;
+    *)
+      echo "cca: 不明なオプション: ${1}" >&2
+      echo "usage: cca [--list|--attach <cwd>]" >&2
+      return 2
+      ;;
+  esac
+}
+
+# sourced（テスト）時は main を実行しない
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  cca_main "$@"
+fi
