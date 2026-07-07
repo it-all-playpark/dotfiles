@@ -155,10 +155,16 @@ cc_launch_session_exists() {
   zellij list-sessions --no-formatting 2>/dev/null | awk '{ print $1 }' | grep -Fxq "$session"
 }
 
-cc_launch_has_live_claude() {
+cc_launch_has_live_remote_control() {
   local dir="$1" pid cwd
 
   for pid in $(pgrep -x claude 2>/dev/null || true); do
+    # Only a Remote Control claude counts. A plain interactive session in the
+    # same dir (e.g. active editing) must not block launching Remote Control.
+    case " $(ps -o args= -p "$pid" 2>/dev/null) " in
+      *' --remote-control '*) ;;
+      *) continue ;;
+    esac
     cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
     [ "$cwd" = "$dir" ] && return 0
   done
@@ -176,8 +182,8 @@ cc_launch_start() {
   claude_bin="$(cc_launch_claude_bin)"
   log="${TMPDIR:-/tmp}/cc-launch-${session}.log"
 
-  if cc_launch_has_live_claude "$dir"; then
-    printf 'cc-launch: already running project=%s session=%s dir=%s\n' "$project" "$session" "$dir"
+  if cc_launch_has_live_remote_control "$dir"; then
+    printf 'cc-launch: Remote Control already running project=%s session=%s dir=%s\n' "$project" "$session" "$dir"
     return 0
   fi
 
