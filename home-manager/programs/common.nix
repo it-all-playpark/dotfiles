@@ -20,6 +20,10 @@
     # gh
     # githubブラウザページを開く
     ghb = "gh browse";
+    # issueをfzf選択してブラウザで開く
+    ghi = "gh issue list --limit 100 --state all | fzf --ansi --preview 'GH_FORCE_TTY=1 gh issue view {1}' --preview-window 'right,60%,wrap' | awk '{print $1}' | xargs gh issue view -w";
+    # PRをfzf選択してブラウザで開く
+    ghp = "gh pr list --limit 100 --state all | fzf --ansi --preview 'GH_FORCE_TTY=1 gh pr view {1}' --preview-window 'right,60%,wrap' | awk '{print $1}' | xargs gh pr view -w";
     # lazigit
     lg = "lazygit";
     # lazydocker
