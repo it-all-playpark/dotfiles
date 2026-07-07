@@ -129,3 +129,32 @@ v1 の割り切り:
 4. mosh 先でも同じ `cca` が同じ挙動で動く（Nix 配布後）。
 
 **実機検証済み(2026-07-05):** 4つの live プロジェクト(second-brain 🟢3s / skills 💤4h / jikka-scan 💤41m branch=feature/report-partners-page / yeg 💤56m)が正しい鮮度・branch で列挙されることを確認。
+
+## 11. サブコマンド構成（`--list` / `--attach`）
+
+`cca` を「データ源」と「アクション実行器」に分離し、他ツール（fzf ラッパー、他 CLI 等）から `cca` の一覧データだけを再利用できるようにする。§4/§5 のパイプライン・関数群自体は無変更。`cca_main` に case ディスパッチを追加し、既存ロジックを2つのサブコマンドへ振り分けるだけのリファクタ。
+
+### `cca --list`（データ源）
+
+- データ源: `cca_live | cca_enumerate | cca_render` をそのままパイプし、結果を **stdout に出力するだけ**。
+- 出力フォーマット: 既存 `cca_render` の4列 TSV `cwd\tproj\tbranch\t"🟢/💤 reltime"`（§4 の render 整形と同一。列追加・削除なし）。
+- fzf・zellij を**一切呼び出さない**。副作用ゼロの純データ源として、他プロセスからパイプで消費できる。
+
+### `cca --attach <cwd>`（アクション実行器）
+
+- 入力: 一覧の1行目に相当する `cwd`（絶対パス）を引数で受け取る。
+- 処理は既存 `cca_main` 後段のロジックをそのまま踏襲する:
+  1. `zellij list-sessions --no-formatting` で session 一覧を取得
+  2. `cca_join`（`_`/`-` 正規化した basename マッチ）で `cwd` → session 名を逆引き
+  3. 一意に決まらなければ `zellij list-sessions` の出力を fzf に出す手動確定フォールバック
+  4. `cca_attach`（zellij 内なら `zsh -ifc` 経由の `switch-session`、zellij 外なら通常の `zellij attach`）で実際に移動
+- `cwd` が空（引数省略）の場合はエラーメッセージを stderr に出して非0で終了する。
+
+### 引数なし `cca`（従来の対話フロー）
+
+- 挙動は従来と完全に同一: `cca_live | cca_enumerate | cca_render | cca_pick` で fzf 選択 → 選択行を `cut -f1` で `cwd` として取り出す → その `cwd` で `--attach` の実処理（上記アクション実行器）を内部再利用して attach する。
+- 打鍵手順・表示・attach 挙動はリファクタ前後で変わらない。`--list`/`--attach` の追加は対話フローに新しい選択肢や手順を増やさない。
+
+### 非目標
+
+- zellij の job-control 回避策（zellij 内 attach 時に対話 `zsh -ifc` 経由で `switch-session` を呼ぶ現行手法。§7 参照）は本リファクタの対象外であり、変更しない。

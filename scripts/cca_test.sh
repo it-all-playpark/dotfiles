@@ -59,4 +59,16 @@ assert_eq "join exact basename" "alpha" "$(printf '%s' "$sessions" | cca_join /h
 assert_eq "join normalizes _ vs -" "second_brain" "$(printf '%s' "$sessions" | cca_join /home/u/second-brain)"
 assert_eq "join no match returns empty" "" "$(printf '%s' "$sessions" | cca_join /home/u/unknown)"
 
+# --- cca_cmd_list (--list) ---
+# 上流(cca_live/cca_enumerate)を fixture に差し替え、fzf/zellij を「呼ばれたら失敗」スタブにして
+# --list がデータパイプ(cca_live|cca_enumerate|cca_render)のみで完結し、fzf/zellij を一切呼ばないことを検証する。
+cca_live() { printf '%s\n' /home/u/alpha /home/u/beta; }
+cca_enumerate() { printf '%s\n' $'/home/u/alpha\tfeat/x\t3000' $'/home/u/beta\t\t1000'; }
+fzf() { echo FZF-CALLED >&2; return 99; }
+zellij() { echo ZELLIJ-CALLED >&2; return 99; }
+
+list_actual="$(CCA_NOW=3000 CCA_ACTIVE_WINDOW=300 cca_cmd_list)"
+list_expected=$'/home/u/alpha\talpha\tfeat/x\t🟢 0s\n/home/u/beta\tbeta\t–\t💤 33m'
+assert_eq "cca --list (cca_cmd_list) outputs TSV without calling fzf/zellij" "$list_expected" "$list_actual"
+
 exit "$FAIL"

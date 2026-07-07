@@ -122,17 +122,46 @@ cca_attach() {
   exec zellij attach "$sess"
 }
 
-cca_main() {
-  local sel cwd sessions sess
-  sel="$(cca_live | cca_enumerate | cca_render | cca_pick || true)"
-  [ -n "$sel" ] || return 0
-  cwd="$(printf '%s' "$sel" | cut -f1)"
+# --list: fzf/zellij を呼ばない。cca_live|cca_enumerate|cca_render の4列TSVを stdout にそのまま出す。
+cca_cmd_list() {
+  cca_live | cca_enumerate | cca_render
+}
+
+# --attach <cwd>: 既存の zellij session 解決(cca_join)→フォールバック fzf→cca_attach を実行する。
+# 引数なし cca(対話フロー)からも共有され、attach ロジックを1箇所に集約する(DRY)。
+cca_cmd_attach() {
+  local cwd="$1" sessions sess
+  [ -n "$cwd" ] || { echo "cca: attach 先の cwd が指定されていません" >&2; return 1; }
   sessions="$(zellij list-sessions --no-formatting 2>/dev/null | awk '{print $1}')"
   sess="$(printf '%s' "$sessions" | cca_join "$cwd")"
   if [ -z "$sess" ]; then
     sess="$(printf '%s' "$sessions" | fzf --layout=reverse --prompt 'ZELLIJ SESSION> ' || true)"
   fi
   cca_attach "$sess"
+}
+
+cca_main() {
+  local sel cwd
+  case "${1:-}" in
+    --list)
+      cca_cmd_list
+      ;;
+    --attach)
+      shift
+      cca_cmd_attach "${1:-}"
+      ;;
+    '')
+      sel="$(cca_live | cca_enumerate | cca_render | cca_pick || true)"
+      [ -n "$sel" ] || return 0
+      cwd="$(printf '%s' "$sel" | cut -f1)"
+      cca_cmd_attach "$cwd"
+      ;;
+    *)
+      echo "cca: 不明なオプション: ${1}" >&2
+      echo "usage: cca [--list|--attach <cwd>]" >&2
+      return 2
+      ;;
+  esac
 }
 
 # sourced（テスト）時は main を実行しない
