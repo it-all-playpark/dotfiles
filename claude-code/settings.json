@@ -469,6 +469,7 @@
     "enabled": true,
     "failIfUnavailable": true,
     "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
     "network": {
       "allowedDomains": [
         "github.com",
@@ -539,6 +540,7 @@
     ]
   },
   "tui": "fullscreen",
+  "askUserQuestionTimeout": "10m",
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
