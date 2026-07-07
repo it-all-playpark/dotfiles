@@ -58,6 +58,16 @@ in
       cleanup = "uninstall"; # Brewfileにないものをアンインストール
       extraFlags = [ "--force-cleanup" ]; # cleanup実行時の確認を明示的に許可
     };
+    taps = [
+      # 追加のHomebrew tap
+      "rjyo/moshi" # moshi CLI / moshi-hook サービス
+    ];
+    brews = [
+      # インストールするformula（brew）のリスト
+      # moshi-hook: Moshiアプリ連携のhookサービス
+      # 初回のみ手動で「moshi-hook host setup」を実行する（Moshiアプリでのペアリングが前提のため自動化しない）
+      "moshi-hook"
+    ];
     casks = [
       # インストールするCaskアプリケーションのリスト
       "antigravity"
