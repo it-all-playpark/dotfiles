@@ -455,6 +455,12 @@
       }
     ]
   },
+  "worktree": {
+    "symlinkDirectories": [
+      "node_modules",
+      ".cache"
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "telegram@claude-plugins-official": true,
