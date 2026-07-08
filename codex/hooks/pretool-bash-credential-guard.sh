@@ -45,9 +45,11 @@ fi
 
 # aws --profile values containing prod.
 if printf '%s' "$CMD" | grep -qE '(^|[[:space:]])aws([[:space:]]|$)'; then
-  PROFILE=$(printf '%s' "$CMD" | grep -oE -- '--profile[= ][^[:space:]]+' | head -1 | sed -E 's/^--profile[= ]//')
-  if [[ -n $PROFILE ]] && printf '%s' "$PROFILE" | grep -qiE 'prod'; then
-    emit_ask "aws prod profile を検知: --profile ${PROFILE}"
+  if printf '%s' "$CMD" | grep -qE -- '--profile[= ]'; then
+    PROFILE=$(printf '%s' "$CMD" | grep -oE -- '--profile[= ][^[:space:]]+' | head -1 | sed -E 's/^--profile[= ]//')
+    if [[ -n $PROFILE ]] && printf '%s' "$PROFILE" | grep -qiE 'prod'; then
+      emit_ask "aws prod profile を検知: --profile ${PROFILE}"
+    fi
   fi
 fi
 

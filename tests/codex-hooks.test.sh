@@ -75,6 +75,35 @@ else
   fail "pretool credential guard detects prod env" "unexpected output: $pretool_out"
 fi
 
+set +e
+aws_no_profile_out="$(
+  jq -n '{tool_name:"Bash", tool_input:{command:"aws s3 ls"}}' |
+    "$HOOK_DIR/pretool-bash-credential-guard.sh"
+)"
+aws_no_profile_rc=$?
+set -e
+if [[ $aws_no_profile_rc -eq 0 ]] &&
+  [[ -z "$(printf '%s' "$aws_no_profile_out" | jq -r '.hookSpecificOutput.permissionDecision // empty')" ]]; then
+  pass "pretool credential guard passes aws command without --profile"
+else
+  fail "pretool credential guard passes aws command without --profile" \
+    "rc=$aws_no_profile_rc output=$aws_no_profile_out"
+fi
+
+set +e
+benign_out="$(
+  jq -n '{tool_name:"Bash", tool_input:{command:"ls -la"}}' |
+    "$HOOK_DIR/pretool-bash-credential-guard.sh"
+)"
+benign_rc=$?
+set -e
+if [[ $benign_rc -eq 0 ]] &&
+  [[ -z "$(printf '%s' "$benign_out" | jq -r '.hookSpecificOutput.permissionDecision // empty')" ]]; then
+  pass "pretool credential guard passes benign command"
+else
+  fail "pretool credential guard passes benign command" "rc=$benign_rc output=$benign_out"
+fi
+
 posttool_out="$(
   jq -n --arg stdout 'TOKEN=ghp_1234567890123456789012345678901234567890' \
     '{tool_name:"Bash", tool_response:{stdout:$stdout, stderr:""}}' |
