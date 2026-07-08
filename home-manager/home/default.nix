@@ -216,6 +216,29 @@ in
         cp "$DOTFILES_CODEX/rules/default.rules" "$rules_target"
       fi
 
+      # hooks.json は Codex runtime が trust state を持つためここでは上書きしない。
+      # ただし既存 hooks.json が参照する ~/.codex/hooks/* は dotfiles から補完する。
+      # 参照先が欠けると PreToolUse/PostToolUse が毎回失敗するため、hook scripts は managed symlink にする。
+      if [ -d "$DOTFILES_CODEX/hooks" ]; then
+        hooks_dir="$CODEX_DIR/hooks"
+        mkdir -p "$hooks_dir"
+        for f in "$DOTFILES_CODEX"/hooks/*.py "$DOTFILES_CODEX"/hooks/*.sh; do
+          if [ -f "$f" ]; then
+            base="$(basename "$f")"
+            case "$base" in
+              *.test.sh) continue ;;
+            esac
+            target="$hooks_dir/$base"
+            if [ -e "$target" ] && [ ! -L "$target" ]; then
+              backup="$hooks_dir/$base.backup.$(date +%Y%m%d%H%M%S)"
+              echo "Backing up existing Codex hook $target to $backup"
+              mv "$target" "$backup"
+            fi
+            ln -sfn "$f" "$target"
+          fi
+        done
+      fi
+
       # base config をシンボリックリンクで同期
       if [ -f "$CODEX_DIR/config.base.toml" ] && [ ! -L "$CODEX_DIR/config.base.toml" ]; then
         rm "$CODEX_DIR/config.base.toml"
