@@ -229,7 +229,7 @@
       "~/ghq/github.com/Cistree-dev"
     ]
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
   "fallbackModel": [
     "claude-opus-4-8",
     "claude-sonnet-5"
@@ -474,8 +474,8 @@
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
-    "allowUnsandboxedCommands": false,
     "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
     "network": {
       "allowedDomains": [
         "github.com",
@@ -549,8 +549,8 @@
       "zernio:*"
     ]
   },
-  "tui": "fullscreen",
   "askUserQuestionTimeout": "10m",
+  "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
