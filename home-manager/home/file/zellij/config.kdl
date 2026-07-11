@@ -157,8 +157,10 @@ keybinds clear-defaults=true {
         // デタッチ
         bind "q" { Detach; }
 
-        // レイアウト切替（base ⇄ stack ⇄ vertical ⇄ horizontal）
+        // レイアウト切替（vertical → horizontal → stack の循環。従来と同順）
         bind "Space" { NextSwapLayout; SwitchToMode "Normal"; }
+        // 逆順切替: base から1発で末尾の stack（完全スタック）へ
+        bind "k" { PreviousSwapLayout; SwitchToMode "Normal"; }
 
         // ペイン入替え（tmux の C-]/C-[）
         bind "]" { MovePane; SwitchToMode "Normal"; }

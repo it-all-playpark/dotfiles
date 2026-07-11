@@ -16,7 +16,8 @@
 | `z` | pane 全画面トグル | 抜ける |
 | `b` | pane を新タブに昇格（BreakPane） | 抜ける |
 | `f` | floating pane トグル | 抜ける |
-| `Space` | レイアウト切替（base → **stack** → vertical → horizontal） | 抜ける |
+| `Space` | レイアウト切替（vertical → horizontal → **stack** の循環。従来と同順） | 抜ける |
+| `k` | 逆順レイアウト切替（base から1発で **stack**） | 抜ける |
 | `S` / `N` | pane 分割 右 / 下（旧 s/n から格上げ） | 抜ける |
 | `i` | スクロールモード | — |
 | `l` | セッションモード | — |
@@ -48,11 +49,19 @@ Moshi のショートカットビルダーでキーシーケンスをボタン /
 
 ## レイアウト（layouts/mobile.kdl）
 
-builtin compact 相当 + `stack`（完全スタック, min_panes=2）を先頭に追加したもの。
-`Ctrl+a Space` 一発で「フォーカス pane だけ展開・他はタイトル1行」になり、
-狭い画面でも読める。もう一度以降の Space で builtin 相当の分割系に循環する。
+builtin compact 相当 + `stack`（完全スタック, min_panes=2）を**末尾**に追加したもの。
+`Ctrl+a k`（逆順1発）または `Ctrl+a Space` の循環で「フォーカス pane だけ展開・
+他はタイトル1行」になり、狭い画面でも読める。
+
+swap layout の順序は builtin と同じ vertical → horizontal を先頭に維持している。
+Zellij は pane 開閉時に先頭から合致する swap layout を自動選択するため、
+stack を先頭に置くとデスクトップでも pane を開いた瞬間にスタック表示になってしまう。
 
 ## 既知の制約
+
+- `default_layout` は**新規セッション作成時のみ**参照される。既存セッションは
+  従来の挙動のまま（壊れないが stack layout も使えない）。作り直しは不要で、
+  新レイアウトを使いたいセッションだけ作り直せばよい
 
 - 複数クライアント同時 attach 時は最小クライアントに合わせてリサイズされる
   （tmux の grouped session 相当は Zellij に無い）。スマホとデスクトップの

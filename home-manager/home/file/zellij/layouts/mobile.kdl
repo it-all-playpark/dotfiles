@@ -1,10 +1,14 @@
 // mobile.kdl — builtin compact 相当 + モバイル向け full-stack swap layout
 //
-// builtin compact との差分は swap_tiled_layout "stack" のみ。
+// builtin compact との差分は末尾の swap_tiled_layout "stack" のみ
+// （builtin の stacked: min_panes=4・左右分割併用 を min_panes=2 の完全スタックに置換）。
 // 全 pane を1スタックに積み、フォーカス中の pane だけ展開・他はタイトル1行になる。
 // スマホ等の狭い画面で「一度に1つを全画面、他の気配はタイトル行で」を実現する。
-// 先頭に置いているので Ctrl+a Space 一発で base → stack に切り替わる。
-// builtin の stacked (min_panes=4, 左右分割併用) と異なり min_panes=2 で完全スタック。
+//
+// 順序は builtin と同じ vertical → horizontal → stack を維持すること。
+// Zellij は pane 開閉時に先頭から合致する swap layout を自動選択するため、
+// stack を先頭に置くとデスクトップで pane を開いた瞬間にスタック表示になってしまう。
+// stack へは Ctrl+a Space の循環（3回目）か Ctrl+a k（逆順1回）で到達する。
 
 layout {
     tab_template name="ui" {
@@ -22,14 +26,7 @@ layout {
         }
     }
 
-    // === モバイル用: 完全スタック（Ctrl+a Space で最初に到達） ===
-    swap_tiled_layout name="stack" {
-        ui min_panes=2 {
-            pane stacked=true { children; }
-        }
-    }
-
-    // === 以下 builtin compact.swap.kdl と同等 ===
+    // === builtin compact.swap.kdl と同等（順序も同じ） ===
     swap_tiled_layout name="vertical" {
         ui max_panes=4 {
             pane split_direction="vertical" {
@@ -69,6 +66,13 @@ layout {
                 pane split_direction="vertical" { pane; pane; pane; pane; }
                 pane split_direction="vertical" { pane; pane; pane; pane; }
             }
+        }
+    }
+
+    // === モバイル用: 完全スタック（末尾 = デスクトップの自動選択に影響しない） ===
+    swap_tiled_layout name="stack" {
+        ui min_panes=2 {
+            pane stacked=true { children; }
         }
     }
 
