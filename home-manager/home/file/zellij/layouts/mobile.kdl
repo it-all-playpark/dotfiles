@@ -1,0 +1,114 @@
+// mobile.kdl — builtin compact 相当 + モバイル向け full-stack swap layout
+//
+// builtin compact との差分は swap_tiled_layout "stack" のみ。
+// 全 pane を1スタックに積み、フォーカス中の pane だけ展開・他はタイトル1行になる。
+// スマホ等の狭い画面で「一度に1つを全画面、他の気配はタイトル行で」を実現する。
+// 先頭に置いているので Ctrl+a Space 一発で base → stack に切り替わる。
+// builtin の stacked (min_panes=4, 左右分割併用) と異なり min_panes=2 で完全スタック。
+
+layout {
+    tab_template name="ui" {
+        children
+        pane size=1 borderless=true {
+            plugin location="zellij:compact-bar"
+        }
+    }
+
+    // 通常タブ（base layout）にも同じ compact-bar を付ける
+    default_tab_template {
+        children
+        pane size=1 borderless=true {
+            plugin location="zellij:compact-bar"
+        }
+    }
+
+    // === モバイル用: 完全スタック（Ctrl+a Space で最初に到達） ===
+    swap_tiled_layout name="stack" {
+        ui min_panes=2 {
+            pane stacked=true { children; }
+        }
+    }
+
+    // === 以下 builtin compact.swap.kdl と同等 ===
+    swap_tiled_layout name="vertical" {
+        ui max_panes=4 {
+            pane split_direction="vertical" {
+                pane
+                pane { children; }
+            }
+        }
+        ui max_panes=7 {
+            pane split_direction="vertical" {
+                pane { children; }
+                pane { pane; pane; pane; pane; }
+            }
+        }
+        ui max_panes=11 {
+            pane split_direction="vertical" {
+                pane { children; }
+                pane { pane; pane; pane; pane; }
+                pane { pane; pane; pane; pane; }
+            }
+        }
+    }
+
+    swap_tiled_layout name="horizontal" {
+        ui max_panes=3 {
+            pane
+            pane
+        }
+        ui max_panes=7 {
+            pane {
+                pane split_direction="vertical" { children; }
+                pane split_direction="vertical" { pane; pane; pane; pane; }
+            }
+        }
+        ui max_panes=11 {
+            pane {
+                pane split_direction="vertical" { children; }
+                pane split_direction="vertical" { pane; pane; pane; pane; }
+                pane split_direction="vertical" { pane; pane; pane; pane; }
+            }
+        }
+    }
+
+    swap_floating_layout name="staggered" {
+        floating_panes
+    }
+
+    swap_floating_layout name="enlarged" {
+        floating_panes max_panes=10 {
+            pane { x "5%"; y 1; width "90%"; height "90%"; }
+            pane { x "5%"; y 2; width "90%"; height "90%"; }
+            pane { x "5%"; y 3; width "90%"; height "90%"; }
+            pane { x "5%"; y 4; width "90%"; height "90%"; }
+            pane { x "5%"; y 5; width "90%"; height "90%"; }
+            pane { x "5%"; y 6; width "90%"; height "90%"; }
+            pane { x "5%"; y 7; width "90%"; height "90%"; }
+            pane { x "5%"; y 8; width "90%"; height "90%"; }
+            pane { x "5%"; y 9; width "90%"; height "90%"; }
+            pane { x 10; y 10; width "90%"; height "90%"; }
+        }
+    }
+
+    swap_floating_layout name="spread" {
+        floating_panes max_panes=1 {
+            pane { y "50%"; x "50%"; }
+        }
+        floating_panes max_panes=2 {
+            pane { x "1%"; y "25%"; width "45%"; }
+            pane { x "50%"; y "25%"; width "45%"; }
+        }
+        floating_panes max_panes=3 {
+            pane { y "55%"; width "45%"; height "45%"; }
+            pane { x "1%"; y "1%"; width "45%"; }
+            pane { x "50%"; y "1%"; width "45%"; }
+        }
+        floating_panes max_panes=4 {
+            pane { x "1%"; y "55%"; width "45%"; height "45%"; }
+            pane { x "50%"; y "55%"; width "45%"; height "45%"; }
+            pane { x "1%"; y "1%"; width "45%"; height "45%"; }
+            pane { x "50%"; y "1%"; width "45%"; height "45%"; }
+        }
+    }
+}

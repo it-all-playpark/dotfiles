@@ -3,7 +3,8 @@
 
 // テーマ・外観
 theme "default"
-default_layout "compact"
+// compact 相当 + full-stack swap layout（モバイル全画面用）。layouts/mobile.kdl 参照
+default_layout "mobile"
 default_shell "fish"
 pane_frames false
 ui {
@@ -115,10 +116,40 @@ keybinds clear-defaults=true {
     }
 
     // === Tmux プレフィックスモード（Ctrl+a で起動） ===
+    // モバイルゲートウェイ兼用: Ctrl+a 一発のあとは全操作が単打キー。
+    // ナビ系（t/n/r/s）はモードに留まり連打可能、アクション系は実行後 Normal に戻る。
+    // 大西配列の方向ニーモニックを維持: t=左(前タブ) n=下 r=上 s=右(次タブ)
     tmux {
-        // ペイン分割（prefix + s/n）
-        bind "s" { NewPane "Right"; SwitchToMode "Normal"; }
-        bind "n" { NewPane "Down"; SwitchToMode "Normal"; }
+        // タブ移動（連打可。Esc/Enter で抜ける）
+        bind "t" { GoToPreviousTab; }
+        bind "s" { GoToNextTab; }
+
+        // ペインフォーカス上下（stacked layout でのスタック内移動。連打可）
+        bind "n" { MoveFocus "Down"; }
+        bind "r" { MoveFocus "Up"; }
+
+        // タブ番号で直接移動
+        bind "1" { GoToTab 1; SwitchToMode "Normal"; }
+        bind "2" { GoToTab 2; SwitchToMode "Normal"; }
+        bind "3" { GoToTab 3; SwitchToMode "Normal"; }
+        bind "4" { GoToTab 4; SwitchToMode "Normal"; }
+        bind "5" { GoToTab 5; SwitchToMode "Normal"; }
+        bind "6" { GoToTab 6; SwitchToMode "Normal"; }
+        bind "7" { GoToTab 7; SwitchToMode "Normal"; }
+        bind "8" { GoToTab 8; SwitchToMode "Normal"; }
+        bind "9" { GoToTab 9; SwitchToMode "Normal"; }
+
+        // 全画面トグル / pane→新タブ昇格 / floating トグル
+        bind "z" { ToggleFocusFullscreen; SwitchToMode "Normal"; }
+        bind "b" { BreakPane; SwitchToMode "Normal"; }
+        bind "f" { ToggleFloatingPanes; SwitchToMode "Normal"; }
+
+        // ペイン分割（旧 s/n から大文字へ格上げ。モバイルでは低頻度のため）
+        bind "S" { NewPane "Right"; SwitchToMode "Normal"; }
+        bind "N" { NewPane "Down"; SwitchToMode "Normal"; }
+
+        // スクロール（Alt i と同じ）
+        bind "i" { SwitchToMode "Scroll"; }
 
         // セッション一覧
         bind "l" { SwitchToMode "Session"; }
@@ -126,7 +157,7 @@ keybinds clear-defaults=true {
         // デタッチ
         bind "q" { Detach; }
 
-        // 設定リロード的な操作（レイアウト切替）
+        // レイアウト切替（base ⇄ stack ⇄ vertical ⇄ horizontal）
         bind "Space" { NextSwapLayout; SwitchToMode "Normal"; }
 
         // ペイン入替え（tmux の C-]/C-[）
@@ -134,6 +165,7 @@ keybinds clear-defaults=true {
         bind "[" { MovePaneBackwards; SwitchToMode "Normal"; }
 
         bind "Esc" { SwitchToMode "Normal"; }
+        bind "Enter" { SwitchToMode "Normal"; }
     }
 
     session {
