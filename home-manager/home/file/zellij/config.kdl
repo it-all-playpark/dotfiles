@@ -3,7 +3,8 @@
 
 // テーマ・外観
 theme "default"
-default_layout "compact"
+// compact 相当 + full-stack swap layout（モバイル全画面用）。layouts/mobile.kdl 参照
+default_layout "mobile"
 default_shell "fish"
 pane_frames false
 ui {
@@ -50,6 +51,7 @@ keybinds clear-defaults=true {
         // ペイン操作
         bind "Alt q" { CloseFocus; }
         bind "Alt z" { ToggleFocusFullscreen; }
+        bind "Alt b" { BreakPane; }  // pane を新タブに昇格（モバイルで全画面閲覧用）
 
         // タブ（ウィンドウ）操作
         bind "Alt T" { GoToPreviousTab; }
@@ -128,6 +130,8 @@ keybinds clear-defaults=true {
 
         // 設定リロード的な操作（レイアウト切替）
         bind "Space" { NextSwapLayout; SwitchToMode "Normal"; }
+        // 逆順切替: base から1発で末尾の stack（完全スタック）へ
+        bind "k" { PreviousSwapLayout; SwitchToMode "Normal"; }
 
         // ペイン入替え（tmux の C-]/C-[）
         bind "]" { MovePane; SwitchToMode "Normal"; }

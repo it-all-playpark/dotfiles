@@ -365,6 +365,7 @@
   "enabledPlugins": {},
   "extraKnownMarketplaces": {},
   "language": "ja",
+  "askUserQuestionTimeout": "10m",
   "skipAutoPermissionPrompt": true,
   "voiceEnabled": false,
   "agentPushNotifEnabled": false
