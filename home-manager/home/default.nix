@@ -63,6 +63,10 @@ in
         source = ./file/zellij;
         recursive = true;
       };
+      ".config/herdr" = {
+        source = ./file/herdr;
+        recursive = true;
+      };
       ".config/cc-launch" = {
         source = ./file/cc-launch;
         recursive = true;
