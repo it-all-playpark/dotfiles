@@ -9,6 +9,11 @@
 # - copy mode 内の大西移動キー → herdr copy mode は h/j/k/l 固定
 # - Alt+b BreakPane (pane の新タブ昇格) → 対応 action なし
 
+[terminal]
+# 新規 pane の shell — zellij config.kdl の default_shell "fish" と同じ。
+# 未設定だと $SHELL (login shell = /bin/zsh) が使われ、pane 分割で zsh が起動する。
+default_shell = "fish"
+
 [keys]
 # prefix — tmux/zellij (Ctrl+a) と同じ (herdr default: ctrl+b)
 prefix = "ctrl+a"

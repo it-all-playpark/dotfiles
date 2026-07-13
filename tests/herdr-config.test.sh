@@ -141,6 +141,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# tier-1 (5c): [terminal] default_shell = "fish" (zellij config.kdl と同じ)
+# ---------------------------------------------------------------------------
+echo "- configToml_sets_default_shell_fish"
+if [ -f "${CONFIG_TOML}" ] &&
+  awk '/^\[terminal\]/{f=1;next} /^\[/{f=0} f' "${CONFIG_TOML}" |
+  grep -qE '^default_shell *= *"fish"'; then
+  pass "configToml_sets_default_shell_fish"
+else
+  fail "configToml_sets_default_shell_fish" \
+    "Expected default_shell = \"fish\" inside [terminal] section in ${CONFIG_TOML}"
+fi
+
+# ---------------------------------------------------------------------------
 # tier-1 (6): reload_config must NOT be overridden (keep herdr default prefix+shift+r)
 # ---------------------------------------------------------------------------
 echo "- configToml_does_not_set_reload_config"
