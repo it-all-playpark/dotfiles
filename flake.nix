@@ -21,9 +21,15 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # hunk - review-first diff viewer (https://github.com/modem-dev/hunk)
+    # nixpkgs を follows しない: hunk → bun2nix (flake-parts) が x86_64-darwin を含む
+    # 全システム向けに outputs を評価するため、x86_64-darwin サポートを打ち切った
+    # nixos-unstable を follows すると aarch64-darwin でも eval error になる。
+    # x86_64-darwin を保持する stable branch に固定する（branch 指定なので
+    # nix flake update でも branch 内更新に留まり再発しない）。
+    # hunk が nixos-unstable channel に着弾したら input ごと削除して pkgs.hunk に切替可。
     hunk = {
       url = "github:modem-dev/hunk";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
     };
   };
 
@@ -39,10 +45,11 @@
     }:
     let
       # サポートするシステムのリスト
+      # x86_64-darwin (Intel Mac) は使用予定がなく、nixpkgs unstable (26.11) が
+      # サポートを打ち切ったため対象外。
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
 
