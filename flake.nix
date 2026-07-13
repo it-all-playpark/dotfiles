@@ -21,9 +21,20 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # hunk - review-first diff viewer (https://github.com/modem-dev/hunk)
+    # nixpkgs を follows しない: hunk → bun2nix (flake-parts) が x86_64-darwin を含む
+    # 全システム向けに outputs を評価するため、x86_64-darwin サポートを打ち切った
+    # nixos-unstable を follows すると aarch64-darwin でも eval error になる。
+    # x86_64-darwin を保持する stable branch に固定する（branch 指定なので
+    # nix flake update でも branch 内更新に留まり、26.11 の打ち切りエラーは再発しない）。
+    # 注意: Linux (WSL) 構成の hunk もこの pin でビルドされる（cli-packages.nix の
+    # hostOnly に platform gate なしで含まれるため）。darwin 系 branch の rev は
+    # Linux 向け binary cache と一致しない場合があり source build に落ち得る。
+    # nixpkgs-26.05-darwin は 2026 年末に EOL。それまでに hunk が nixos-unstable
+    # channel に着弾したら input ごと削除して pkgs.hunk に切替する
+    # （着弾すると overlay の warnIf が eval warning で通知する）。
     hunk = {
       url = "github:modem-dev/hunk";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
     };
   };
 
@@ -39,10 +50,11 @@
     }:
     let
       # サポートするシステムのリスト
+      # x86_64-darwin (Intel Mac) は使用予定がなく、nixpkgs unstable (26.11) が
+      # サポートを打ち切ったため対象外。
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
 
@@ -92,8 +104,14 @@
               });
             })
             # hunk は flake input から取得（nixpkgs unstable 未着のため overlay で pkgs.hunk を注入。
-            # nixpkgs に hunk が降りてきた場合もこの overlay が優先される）
-            (_final: _prev: { hunk = hunk.packages.${system}.default; })
+            # nixpkgs に hunk が降りてきた場合もこの overlay が優先されるが、
+            # warnIf が eval warning で「input 削除して pkgs.hunk へ切替可」と通知する）
+            (_final: prev: {
+              hunk =
+                nixpkgs.lib.warnIf (prev ? hunk)
+                  "hunk が nixpkgs に着弾済み: flake input 'hunk' とこの overlay を削除して pkgs.hunk に切替可"
+                  hunk.packages.${system}.default;
+            })
             # starship 1.26.0 は darwin で cctools ld64 がクラッシュしビルド失敗する
             # (nixpkgs#540450, ld64 の libc++ hardening 問題)。
             # upstream fix (nixpkgs#540463) と同じく lld でリンクして回避。
