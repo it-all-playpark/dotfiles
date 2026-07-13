@@ -20,6 +20,22 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # hunk - review-first diff viewer (https://github.com/modem-dev/hunk)
+    # nixpkgs を follows しない: hunk → bun2nix (flake-parts) が x86_64-darwin を含む
+    # 全システム向けに outputs を評価するため、x86_64-darwin サポートを打ち切った
+    # nixos-unstable を follows すると aarch64-darwin でも eval error になる。
+    # x86_64-darwin を保持する stable branch に固定する（branch 指定なので
+    # nix flake update でも branch 内更新に留まり、26.11 の打ち切りエラーは再発しない）。
+    # 注意: Linux (WSL) 構成の hunk もこの pin でビルドされる（cli-packages.nix の
+    # hostOnly に platform gate なしで含まれるため）。darwin 系 branch の rev は
+    # Linux 向け binary cache と一致しない場合があり source build に落ち得る。
+    # nixpkgs-26.05-darwin は 2026 年末に EOL。それまでに hunk が nixos-unstable
+    # channel に着弾したら input ごと削除して pkgs.hunk に切替する
+    # （着弾すると overlay の warnIf が eval warning で通知する）。
+    hunk = {
+      url = "github:modem-dev/hunk";
+      inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
+    };
   };
 
   outputs =
@@ -29,14 +45,16 @@
       home-manager,
       nix-darwin,
       treefmt-nix,
+      hunk,
       ...
     }:
     let
       # サポートするシステムのリスト
+      # x86_64-darwin (Intel Mac) は使用予定がなく、nixpkgs unstable (26.11) が
+      # サポートを打ち切ったため対象外。
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
 
@@ -84,6 +102,31 @@
                   builtins.replaceStrings [ "cmake -B build" ] [ "cmake -B build -DOLLAMA_MLX_BACKENDS=\"\"" ]
                     old.preBuild;
               });
+            })
+            # hunk は flake input から取得（nixpkgs unstable 未着のため overlay で pkgs.hunk を注入。
+            # nixpkgs に hunk が降りてきた場合もこの overlay が優先されるが、
+            # warnIf が eval warning で「input 削除して pkgs.hunk へ切替可」と通知する）
+            (_final: prev: {
+              hunk =
+                nixpkgs.lib.warnIf (prev ? hunk)
+                  "hunk が nixpkgs に着弾済み: flake input 'hunk' とこの overlay を削除して pkgs.hunk に切替可"
+                  hunk.packages.${system}.default;
+            })
+            # starship 1.26.0 は darwin で cctools ld64 がクラッシュしビルド失敗する
+            # (nixpkgs#540450, ld64 の libc++ hardening 問題)。
+            # upstream fix (nixpkgs#540463) と同じく lld でリンクして回避。
+            # nixpkgs#540463 が nixos-unstable channel に到達したら削除可。
+            (_final: prev: {
+              starship =
+                if prev.stdenv.hostPlatform.isDarwin then
+                  prev.starship.overrideAttrs (old: {
+                    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ prev.llvmPackages.lld ];
+                    env = (old.env or { }) // {
+                      NIX_CFLAGS_LINK = "-fuse-ld=lld";
+                    };
+                  })
+                else
+                  prev.starship;
             })
           ];
         }
@@ -226,12 +269,31 @@
               BACKUP_EXT="backup-$(date +%Y%m%d%H%M%S)"
 
               echo "Updating flake for user: $USERNAME..."
+              LOCK_BACKUP=$(mktemp)
+              cp flake.lock "$LOCK_BACKUP"
               nix flake update
+
+              # 更新後の入力でビルド検証し、失敗したら flake.lock をロールバックする。
+              # nixos-unstable は darwin 全パッケージのビルド成功を保証しないため、
+              # 壊れた rev を踏んだ場合は既知の正常な入力のまま switch を続行する。
+              verify_or_rollback() {
+                echo "Verifying build with updated inputs..."
+                if nix build --no-link "$@"; then
+                  rm -f "$LOCK_BACKUP"
+                else
+                  echo "WARNING: updated inputs failed to build. Rolling back flake.lock to the previous (working) revision..."
+                  mv "$LOCK_BACKUP" flake.lock
+                fi
+              }
 
               # システムタイプに基づいて適切な設定を使用
               if [[ "$(uname)" == "Darwin" ]]; then
                 # macOS系の場合
                 echo "Detected macOS environment"
+                verify_or_rollback \
+                  ".#homeConfigurations.''${USERNAME}-darwin.activationPackage" \
+                  ".#darwinConfigurations.MyMBP-''${USERNAME}.system"
+
                 echo "Updating home-manager..."
                 nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-darwin switch
 
@@ -240,18 +302,22 @@
               else
                 # Linux系の場合（WSLを含む）
                 echo "Detected Linux environment"
-                echo "Updating home-manager..."
 
                 # アーキテクチャを検出
                 ARCH=$(uname -m)
                 if [[ "$ARCH" == "x86_64" ]]; then
-                  nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-linux-x86 switch
+                  SUFFIX="linux-x86"
                 elif [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-                  nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-linux-arm switch
+                  SUFFIX="linux-arm"
                 else
                   echo "Unsupported architecture: $ARCH"
                   exit 1
                 fi
+
+                verify_or_rollback ".#homeConfigurations.''${USERNAME}-$SUFFIX.activationPackage"
+
+                echo "Updating home-manager..."
+                nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-$SUFFIX switch
               fi
 
               echo "Update complete!"
@@ -270,12 +336,35 @@
               BACKUP_EXT="backup-$(date +%Y%m%d%H%M%S)"
 
               echo "Updating flake for all users..."
+              LOCK_BACKUP=$(mktemp)
+              cp flake.lock "$LOCK_BACKUP"
               nix flake update
+
+              # 更新後の入力でビルド検証し、失敗したら flake.lock をロールバックする。
+              # nixos-unstable は darwin 全パッケージのビルド成功を保証しないため、
+              # 壊れた rev を踏んだ場合は既知の正常な入力のまま switch を続行する。
+              verify_or_rollback() {
+                echo "Verifying build with updated inputs..."
+                if nix build --no-link "$@"; then
+                  rm -f "$LOCK_BACKUP"
+                else
+                  echo "WARNING: updated inputs failed to build. Rolling back flake.lock to the previous (working) revision..."
+                  mv "$LOCK_BACKUP" flake.lock
+                fi
+              }
 
               # システムタイプに基づいて処理
               if [[ "$(uname)" == "Darwin" ]]; then
                 # macOS系の場合
                 echo "Detected macOS environment"
+
+                # 全ユーザー分のビルドをまとめて検証
+                VERIFY_TARGETS=()
+                for USERNAME in "''${USERNAMES[@]}"; do
+                  VERIFY_TARGETS+=(".#homeConfigurations.''${USERNAME}-darwin.activationPackage")
+                  VERIFY_TARGETS+=(".#darwinConfigurations.MyMBP-''${USERNAME}.system")
+                done
+                verify_or_rollback "''${VERIFY_TARGETS[@]}"
 
                 # 各ユーザーのhome-managerとnix-darwin設定を更新
                 for USERNAME in "''${USERNAMES[@]}"; do
@@ -300,6 +389,13 @@
                   echo "Unsupported architecture: $ARCH"
                   exit 1
                 fi
+
+                # 全ユーザー分のビルドをまとめて検証
+                VERIFY_TARGETS=()
+                for USERNAME in "''${USERNAMES[@]}"; do
+                  VERIFY_TARGETS+=(".#homeConfigurations.''${USERNAME}-$SUFFIX.activationPackage")
+                done
+                verify_or_rollback "''${VERIFY_TARGETS[@]}"
 
                 # 各ユーザーのhome-manager設定を更新
                 for USERNAME in "''${USERNAMES[@]}"; do

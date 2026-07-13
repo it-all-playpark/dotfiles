@@ -66,6 +66,8 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_staleness=""
   repo=""
   pr_number=""
+  ci_wait_seconds=""
+  ci_poll_attempts=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -83,7 +85,9 @@ for f in "${PENDING_DIR}"/*.json; do
     eval_iter: .telemetry.eval_iter,
     eval_verdict: .telemetry.eval_verdict,
     iterate_status: .telemetry.iterate_status,
-    eval_staleness: .telemetry.eval_staleness
+    eval_staleness: .telemetry.eval_staleness,
+    ci_wait_seconds: .telemetry.ci_wait_seconds,
+    ci_poll_attempts: .telemetry.ci_poll_attempts
   }' "$claimed" 2>/dev/null); then
     # JSON parse error
     mkdir -p "${PENDING_DIR}/malformed"
@@ -119,6 +123,8 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_staleness=$(echo "$parsed" | jq -r '.eval_staleness // empty')
   repo=$(echo "$parsed" | jq -r '.repo // empty')
   pr_number=$(echo "$parsed" | jq -r '.pr_number // empty')
+  ci_wait_seconds=$(echo "$parsed" | jq -r '.ci_wait_seconds // empty')
+  ci_poll_attempts=$(echo "$parsed" | jq -r '.ci_poll_attempts // empty')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -161,6 +167,12 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $pr_number && $pr_number != "null" ]]; then
     cmd_args+=(--pr-number "$pr_number")
+  fi
+  if [[ -n $ci_wait_seconds && $ci_wait_seconds != "null" ]]; then
+    cmd_args+=(--ci-wait-seconds "$ci_wait_seconds")
+  fi
+  if [[ -n $ci_poll_attempts && $ci_poll_attempts != "null" ]]; then
+    cmd_args+=(--ci-poll-attempts "$ci_poll_attempts")
   fi
 
   # --- Execute journal.sh ---

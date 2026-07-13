@@ -86,7 +86,10 @@ eval_pkg_names() {
   nix eval --json --impure --expr "
     let
       flake = builtins.getFlake \"${REPO_ROOT}\";
-      pkgs = flake.inputs.nixpkgs.legacyPackages.${system};
+      pkgs = import flake.inputs.nixpkgs {
+        system = \"${system}\";
+        overlays = [ (_final: _prev: { hunk = flake.inputs.hunk.packages.\"${system}\".default; }) ];
+      };
     in
       map (p: p.pname or p.name) (
         import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; mode = \"${mode}\"; }
@@ -129,6 +132,30 @@ else
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
   skip "eval_hostMode_unchanged_no_nodejs_in_cli_packages" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
+fi
+
+# ---------------------------------------------------------------------------
+# AC: host mode must include hunk (git diff review TUI)
+# upstream pname is "hunkdiff" (binary is bin/hunk), so use a prefix match.
+# ---------------------------------------------------------------------------
+echo "- hostMode_includes_hunk"
+if echo "${host_pkgs}" | jq -e 'map(select(startswith("hunk"))) | length > 0' >/dev/null 2>&1; then
+  pass "hostMode_includes_hunk"
+else
+  fail "hostMode_includes_hunk" \
+    "Expected hunk* in host mode packages, got: ${host_pkgs}"
+fi
+
+# ---------------------------------------------------------------------------
+# AC: container mode must NOT include hunk (host-only, not needed in
+# hermes-agent container image)
+# ---------------------------------------------------------------------------
+echo "- containerMode_excludes_hunk"
+if echo "${container_pkgs}" | jq -e 'map(select(startswith("hunk"))) | length == 0' >/dev/null 2>&1; then
+  pass "containerMode_excludes_hunk"
+else
+  fail "containerMode_excludes_hunk" \
+    "hunk must NOT appear in container mode (host-only tool). Got: ${container_pkgs}"
 fi
 
 # ---------------------------------------------------------------------------

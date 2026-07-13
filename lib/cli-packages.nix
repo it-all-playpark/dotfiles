@@ -53,6 +53,7 @@ let
     ffmpeg
     flyctl
     herdr
+    hunk
     mariadb
     marp-cli
     ollama
