@@ -63,6 +63,10 @@ in
         source = ./file/zellij;
         recursive = true;
       };
+      ".config/herdr" = {
+        source = ./file/herdr;
+        recursive = true;
+      };
     };
 
     # Claude Code 設定を dotfiles/claude-code/ からシンボリックリンクで参照

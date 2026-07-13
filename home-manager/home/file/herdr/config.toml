@@ -1,0 +1,16 @@
+# herdr keybindings — 大西配列 (t=left, n=down, r=up, s=right)
+# 変更後は prefix+shift+r (keys.reload_config の herdr default) で reload できる。
+# primary (alt+*) と fallback (prefix+*) を array binding で併記する (herdr v0.7.1+ 対応)。
+
+[keys]
+# pane focus 移動 — zellij の bind "Alt t/n/r/s" { MoveFocus } と同じ操作感
+focus_pane_left = ["alt+t", "prefix+t"]
+focus_pane_down = ["alt+n", "prefix+n"]
+focus_pane_up = ["alt+r", "prefix+r"]
+focus_pane_right = ["alt+s", "prefix+s"]
+
+# herdr は user binding と衝突する default binding を無警告で無効化するため、
+# fallback (prefix+s/n/r) と衝突する default 機能を default 未使用キーへ明示的に退避する。
+settings = "prefix+shift+s" # default "prefix+s" が focus_pane_right と衝突
+next_tab = "prefix+]" # default "prefix+n" が focus_pane_down と衝突
+resize_mode = "prefix+shift+e" # default "prefix+r" が focus_pane_up と衝突
