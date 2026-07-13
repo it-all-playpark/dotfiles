@@ -52,6 +52,7 @@ let
     fastfetch
     ffmpeg
     flyctl
+    hunk
     mariadb
     marp-cli
     ollama

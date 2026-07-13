@@ -20,6 +20,11 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # hunk - review-first diff viewer (https://github.com/modem-dev/hunk)
+    hunk = {
+      url = "github:modem-dev/hunk";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -29,6 +34,7 @@
       home-manager,
       nix-darwin,
       treefmt-nix,
+      hunk,
       ...
     }:
     let
@@ -85,6 +91,9 @@
                     old.preBuild;
               });
             })
+            # hunk は flake input から取得（nixpkgs unstable 未着のため overlay で pkgs.hunk を注入。
+            # nixpkgs に hunk が降りてきた場合もこの overlay が優先される）
+            (_final: _prev: { hunk = hunk.packages.${system}.default; })
           ];
         }
       );
