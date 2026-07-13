@@ -229,7 +229,7 @@
       "~/ghq/github.com/Cistree-dev"
     ]
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
   "fallbackModel": [
     "claude-opus-4-8",
     "claude-sonnet-5"
@@ -455,6 +455,12 @@
       }
     ]
   },
+  "worktree": {
+    "symlinkDirectories": [
+      "node_modules",
+      ".cache"
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "telegram@claude-plugins-official": true,
@@ -468,6 +474,7 @@
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
     "network": {
       "allowedDomains": [
@@ -534,10 +541,15 @@
       "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "bash $HOME/.claude/skills/*",
+      "python3 $HOME/.claude/skills/*",
+      "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
+      "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
       "codex:*",
       "zernio:*"
     ]
   },
+  "askUserQuestionTimeout": "10m",
   "tui": "fullscreen",
   "skipWorkflowUsageWarning": true,
   "agentPushNotifEnabled": true,

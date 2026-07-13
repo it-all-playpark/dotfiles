@@ -17,8 +17,8 @@ assert_eq() {
 }
 
 # --- cca_reltime ---
-assert_eq "reltime 30s"  "30s" "$(cca_reltime 30)"
-assert_eq "reltime 90=1m" "1m"  "$(cca_reltime 90)"
+assert_eq "reltime 30s" "30s" "$(cca_reltime 30)"
+assert_eq "reltime 90=1m" "1m" "$(cca_reltime 90)"
 assert_eq "reltime 4000=1h" "1h" "$(cca_reltime 4000)"
 assert_eq "reltime 200000=2d" "2d" "$(cca_reltime 200000)"
 
@@ -31,7 +31,7 @@ assert_eq "encode_dir short" "-a-b-c-d" "$(cca_encode_dir /a/b.c/d)"
 
 # --- cca_newest_mtime ---
 mt_tmp="$(mktemp -d)"
-: > "$mt_tmp/a.jsonl"
+: >"$mt_tmp/a.jsonl"
 mt_exp="$(stat -c %Y "$mt_tmp/a.jsonl" 2>/dev/null || stat -f %m "$mt_tmp/a.jsonl")"
 assert_eq "newest_mtime returns file epoch" "$mt_exp" "$(cca_newest_mtime "$mt_tmp")"
 assert_eq "newest_mtime empty/absent dir → 0" "0" "$(cca_newest_mtime "$mt_tmp/none")"
@@ -64,8 +64,14 @@ assert_eq "join no match returns empty" "" "$(printf '%s' "$sessions" | cca_join
 # --list がデータパイプ(cca_live|cca_enumerate|cca_render)のみで完結し、fzf/zellij を一切呼ばないことを検証する。
 cca_live() { printf '%s\n' /home/u/alpha /home/u/beta; }
 cca_enumerate() { printf '%s\n' $'/home/u/alpha\tfeat/x\t3000' $'/home/u/beta\t\t1000'; }
-fzf() { echo FZF-CALLED >&2; return 99; }
-zellij() { echo ZELLIJ-CALLED >&2; return 99; }
+fzf() {
+  echo FZF-CALLED >&2
+  return 99
+}
+zellij() {
+  echo ZELLIJ-CALLED >&2
+  return 99
+}
 
 list_actual="$(CCA_NOW=3000 CCA_ACTIVE_WINDOW=300 cca_cmd_list)"
 list_expected=$'/home/u/alpha\talpha\tfeat/x\t🟢 0s\n/home/u/beta\tbeta\t–\t💤 33m'

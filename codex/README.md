@@ -7,6 +7,7 @@ This directory stores shared Codex configuration managed by dotfiles.
 - `config.base.toml`: shared defaults merged into `~/.codex/config.toml`
 - `config.local.toml.template`: template for local-only overrides/secrets
 - `prompts/`, `policy/`: static assets synced as symlinks
+- `hooks/`: Codex hook scripts synced as symlinks for existing `~/.codex/hooks.json`
 - `rules/default.rules`: baseline template copied once to `~/.codex/rules/default.rules`
 
 ## Runtime and secret separation
@@ -14,6 +15,7 @@ This directory stores shared Codex configuration managed by dotfiles.
 - Local-only files: `~/.codex/config.local.toml`, `~/.codex/rules/default.rules`
 - Generated file: `~/.codex/config.toml` (rebuilt on each Home Manager activation)
 - Runtime files such as `auth.json`, `history.jsonl`, `sessions/` are not managed here.
+- `~/.codex/hooks.json` is runtime-managed because Codex stores hook trust hashes for it. Dotfiles only ensures referenced scripts under `~/.codex/hooks/` exist.
 
 ## Migration behavior
 
@@ -39,3 +41,9 @@ On first activation:
 - Avoid `sandbox_mode = "danger-full-access"` as a shared default. Use it only per-invocation when an external sandbox already exists.
 - Prefix rules are literal prefix matches. `["git", "push"]` does not match `git -C <path> push ...`.
 - `~/.codex/rules/default.rules` is local-only and copied only once. If you already have a local rules file, updates in `dotfiles/codex/rules/default.rules` will not overwrite it automatically.
+
+## Hook troubleshooting
+
+Codex reports PreToolUse/PostToolUse failures when `~/.codex/hooks.json` references scripts that do not exist under `~/.codex/hooks/`. Home Manager activation now symlinks the supported hook scripts from `codex/hooks/` without replacing `hooks.json`, so existing trusted hashes remain valid.
+
+Some lifecycle hooks are intentionally no-op placeholders until Codex-specific behavior is defined. They exist to keep stale runtime hook references from failing.

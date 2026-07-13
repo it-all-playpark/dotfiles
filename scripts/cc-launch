@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cc_launch_usage() {
+  cat <<'USAGE'
+usage: cc-launch <project>
+       cc-launch --list
+
+Start a Claude Code Remote Control session for a local project.
+
+Project resolution order:
+  1. ~/.config/cc-launch/projects.tsv
+  2. ~/.config/cc-launch/projects.tsv.template
+  3. ghq repo basename, only when it resolves to exactly one repo
+
+projects.tsv format:
+  project<TAB>path<TAB>session-name<TAB>remote-control-name
+USAGE
+}
+
+cc_launch_die() {
+  echo "cc-launch: $*" >&2
+  exit 1
+}
+
+cc_launch_validate_name() {
+  local kind="$1" value="$2"
+  case "$value" in
+    '')
+      cc_launch_die "$kind is empty"
+      ;;
+    *[!A-Za-z0-9._-]*)
+      cc_launch_die "$kind contains unsupported characters: $value"
+      ;;
+  esac
+}
+
+cc_launch_expand_path() {
+  local path="$1"
+  case "$path" in
+    [~])
+      printf '%s\n' "$HOME"
+      ;;
+    [~]/*)
+      printf '%s/%s\n' "$HOME" "${path#\~/}"
+      ;;
+    *)
+      printf '%s\n' "$path"
+      ;;
+  esac
+}
+
+cc_launch_config_files() {
+  printf '%s\n' \
+    "$HOME/.config/cc-launch/projects.tsv" \
+    "$HOME/.config/cc-launch/projects.tsv.template"
+}
+
+cc_launch_lookup_config() {
+  local project="$1" file line found=1
+
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    line="$(
+      awk -F '\t' -v key="$project" '
+        $0 ~ /^[[:space:]]*($|#)/ { next }
+        $1 == key { print; found = 1; exit }
+        END { if (!found) exit 1 }
+      ' "$file"
+    )" || true
+    if [ -n "${line:-}" ]; then
+      printf '%s\n' "$line"
+      return 0
+    fi
+  done < <(cc_launch_config_files)
+
+  return "$found"
+}
+
+cc_launch_lookup_ghq() {
+  local project="$1" matches count
+
+  command -v ghq >/dev/null 2>&1 || return 1
+  matches="$(ghq list --full-path 2>/dev/null | awk -F/ -v key="$project" '$NF == key { print }')"
+  [ -n "$matches" ] || return 1
+
+  count="$(printf '%s\n' "$matches" | awk 'NF { n++ } END { print n + 0 }')"
+  if [ "$count" -ne 1 ]; then
+    echo "cc-launch: project '$project' matched multiple ghq repos:" >&2
+    printf '%s\n' "$matches" >&2
+    echo "cc-launch: add it to ~/.config/cc-launch/projects.tsv to disambiguate" >&2
+    exit 1
+  fi
+
+  printf '%s\t%s\t%s\t%s\n' "$project" "$matches" "$project" "$project"
+}
+
+cc_launch_resolve_project() {
+  local project="$1" line key dir session remote_name rest
+
+  line="$(cc_launch_lookup_config "$project" || true)"
+  if [ -z "${line:-}" ]; then
+    line="$(cc_launch_lookup_ghq "$project" || true)"
+  fi
+  [ -n "${line:-}" ] || cc_launch_die "unknown project: $project"
+
+  IFS=$'\t' read -r key dir session remote_name rest <<< "$line"
+  [ -z "${rest:-}" ] || cc_launch_die "too many columns for project: $project"
+  [ "$key" = "$project" ] || cc_launch_die "config key mismatch: $key"
+
+  dir="$(cc_launch_expand_path "$dir")"
+  session="${session:-$project}"
+  remote_name="${remote_name:-$session}"
+
+  cc_launch_validate_name "project" "$project"
+  cc_launch_validate_name "session name" "$session"
+  cc_launch_validate_name "Remote Control name" "$remote_name"
+  [ -d "$dir" ] || cc_launch_die "project directory does not exist: $dir"
+
+  printf '%s\t%s\t%s\t%s\n' "$project" "$dir" "$session" "$remote_name"
+}
+
+cc_launch_list() {
+  local file
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    awk -F '\t' '
+      $0 ~ /^[[:space:]]*($|#)/ { next }
+      { print $1 "\t" $2 "\t" ($3 == "" ? $1 : $3) "\t" ($4 == "" ? ($3 == "" ? $1 : $3) : $4) }
+    ' "$file"
+    return 0
+  done < <(cc_launch_config_files)
+
+  command -v ghq >/dev/null 2>&1 || return 0
+  ghq list --full-path 2>/dev/null | awk -F/ '{ print $NF "\t" $0 "\t" $NF "\t" $NF }'
+}
+
+cc_launch_claude_bin() {
+  local mise_claude="$HOME/.local/share/mise/installs/claude-code/latest/claude"
+
+  if command -v claude >/dev/null 2>&1; then
+    command -v claude
+    return 0
+  fi
+  if [ -x "$mise_claude" ]; then
+    printf '%s\n' "$mise_claude"
+    return 0
+  fi
+
+  cc_launch_die "claude binary not found"
+}
+
+cc_launch_session_exists() {
+  local session="$1"
+  zellij list-sessions --no-formatting 2>/dev/null | awk '{ print $1 }' | grep -Fxq "$session"
+}
+
+cc_launch_has_live_remote_control() {
+  local dir="$1" pid cwd
+
+  for pid in $(pgrep -x claude 2>/dev/null || true); do
+    # Only a Remote Control claude counts. A plain interactive session in the
+    # same dir (e.g. active editing) must not block launching Remote Control.
+    case " $(ps -o args= -p "$pid" 2>/dev/null) " in
+      *' --remote-control '*) ;;
+      *) continue ;;
+    esac
+    cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+    [ "$cwd" = "$dir" ] && return 0
+  done
+
+  return 1
+}
+
+cc_launch_start() {
+  local project="$1" resolved dir session remote_name claude_bin log run_args=()
+
+  cc_launch_validate_name "project" "$project"
+  resolved="$(cc_launch_resolve_project "$project")"
+  IFS=$'\t' read -r project dir session remote_name <<< "$resolved"
+
+  claude_bin="$(cc_launch_claude_bin)"
+  log="${TMPDIR:-/tmp}/cc-launch-${session}.log"
+
+  if cc_launch_has_live_remote_control "$dir"; then
+    printf 'cc-launch: Remote Control already running project=%s session=%s dir=%s\n' "$project" "$session" "$dir"
+    return 0
+  fi
+
+  if ! cc_launch_session_exists "$session"; then
+    {
+      printf '[cc-launch] creating zellij session %s cwd=%s\n' "$session" "$dir"
+      zellij attach --create-background "$session" options --default-cwd "$dir"
+    } >>"$log" 2>&1
+    run_args+=(--in-place)
+  fi
+
+  {
+    printf '[cc-launch] starting Claude Remote Control name=%s cwd=%s\n' "$remote_name" "$dir"
+    zellij --session "$session" run "${run_args[@]}" --name claude-remote --cwd "$dir" -- \
+      "$claude_bin" --remote-control "$remote_name"
+  } >>"$log" 2>&1
+
+  printf 'cc-launch: started project=%s session=%s remote=%s dir=%s log=%s\n' \
+    "$project" "$session" "$remote_name" "$dir" "$log"
+}
+
+cc_launch_main() {
+  case "${1:-}" in
+    -h | --help)
+      cc_launch_usage
+      ;;
+    --list)
+      cc_launch_list
+      ;;
+    '')
+      cc_launch_usage >&2
+      return 2
+      ;;
+    --*)
+      cc_launch_die "unknown option: $1"
+      ;;
+    *)
+      cc_launch_start "$1"
+      ;;
+  esac
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  cc_launch_main "$@"
+fi
