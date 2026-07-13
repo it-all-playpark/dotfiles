@@ -260,7 +260,9 @@ STUB_EOF
         eval_iter: 3,
         eval_verdict: "PASS",
         iterate_status: "converged",
-        eval_staleness: "iterate_fixed"
+        eval_staleness: "iterate_fixed",
+        ci_wait_seconds: 30,
+        ci_poll_attempts: 3
       }
     }' >"${tmpd}/journal/pending/handoff.json"
 
@@ -303,6 +305,16 @@ STUB_EOF
       pass "optional_pr_number_present"
     else
       fail "optional_pr_number_present" "--pr-number 123 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--ci-wait-seconds 30"; then
+      pass "optional_ci_wait_seconds_present"
+    else
+      fail "optional_ci_wait_seconds_present" "--ci-wait-seconds 30 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--ci-poll-attempts 3"; then
+      pass "optional_ci_poll_attempts_present"
+    else
+      fail "optional_ci_poll_attempts_present" "--ci-poll-attempts 3 not found. got: ${captured}"
     fi
   else
     fail "optional_fields_stub_called" "capture file not created"
@@ -367,6 +379,16 @@ STUB_EOF
       pass "no_pr_number_when_absent"
     else
       fail "no_pr_number_when_absent" "--pr-number should not appear"
+    fi
+    if ! echo "$captured" | grep -q -- "--ci-wait-seconds"; then
+      pass "no_ci_wait_seconds_when_absent"
+    else
+      fail "no_ci_wait_seconds_when_absent" "--ci-wait-seconds should not appear"
+    fi
+    if ! echo "$captured" | grep -q -- "--ci-poll-attempts"; then
+      pass "no_ci_poll_attempts_when_absent"
+    else
+      fail "no_ci_poll_attempts_when_absent" "--ci-poll-attempts should not appear"
     fi
   else
     fail "no_optional_fields_stub_called" "capture file not created"
