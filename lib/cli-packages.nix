@@ -52,6 +52,7 @@ let
     fastfetch
     ffmpeg
     flyctl
+    herdr
     hunk
     mariadb
     marp-cli

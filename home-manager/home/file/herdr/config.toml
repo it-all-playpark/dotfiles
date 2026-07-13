@@ -1,0 +1,58 @@
+# herdr keybindings — 大西配列 (t=left, n=down, r=up, s=right)
+# zellij config.kdl の操作体系を herdr v0.7.1 スキーマへ移植したもの。
+# 変更後は prefix+shift+r (keys.reload_config の herdr default) で reload できる。
+# primary (alt+*) と fallback (prefix+*) を array binding で併記する (herdr v0.7.1+ 対応)。
+#
+# herdr v0.7.1 に対応 action がなく移植できない zellij 操作:
+# - Ctrl+Alt+t/n/r/s の方向 resize → modal resize のみ (resize_mode で入り、
+#   mode 内は h/j/k/l または矢印キー固定、Esc/Enter で抜ける)
+# - copy mode 内の大西移動キー → herdr copy mode は h/j/k/l 固定
+# - Alt+b BreakPane (pane の新タブ昇格) → 対応 action なし
+
+[keys]
+# prefix — tmux/zellij (Ctrl+a) と同じ (herdr default: ctrl+b)
+prefix = "ctrl+a"
+
+# pane focus 移動 — zellij の bind "Alt t/n/r/s" { MoveFocus } と同じ操作感
+focus_pane_left = ["alt+t", "prefix+t"]
+focus_pane_down = ["alt+n", "prefix+n"]
+focus_pane_up = ["alt+r", "prefix+r"]
+focus_pane_right = ["alt+s", "prefix+s"]
+
+# navigate mode (workspace/pane 選択画面) の pane 移動も大西配列に (default: h/j/k/l)
+navigate_pane_left = "t"
+navigate_pane_down = "n"
+navigate_pane_up = "r"
+navigate_pane_right = "s"
+
+# pane 分割 — zellij の Alt+Right (NewPane Right) / Alt+Down (NewPane Down)
+split_vertical = ["alt+right", "prefix+v"]
+split_horizontal = ["alt+down", "prefix+minus"]
+
+# pane 操作 — zellij の Alt+q (CloseFocus) / Alt+z (ToggleFocusFullscreen)
+close_pane = ["alt+q", "prefix+x"]
+zoom = ["alt+z", "prefix+z"]
+
+# tab 操作 — zellij の Alt+T/S/y/Q
+previous_tab = ["alt+shift+t", "prefix+p"]
+next_tab = ["alt+shift+s", "prefix+]"] # default "prefix+n" が focus_pane_down と衝突するため退避
+new_tab = ["alt+y", "prefix+c"]
+close_tab = ["alt+shift+q", "prefix+shift+x"]
+
+# tab 番号直接移動 — zellij の Alt+1..9 (GoToTab)
+switch_tab = "alt+1..9"
+
+# copy mode — zellij の Alt+i (SwitchToMode "Scroll")
+copy_mode = ["alt+i", "prefix+["]
+
+# session/workspace 操作 — zellij の Alt+d (Detach) / Alt+w (session-manager)
+detach = ["alt+d", "prefix+q"]
+workspace_picker = ["alt+w", "prefix+w"]
+
+# resize mode — zellij の Ctrl+Alt 系 resize の代替入口。
+# default "prefix+r" が focus_pane_up と衝突するため退避し、direct chord も追加。
+resize_mode = ["ctrl+alt+r", "prefix+shift+e"]
+
+# herdr は user binding と衝突する default binding を無警告で無効化するため、
+# fallback (prefix+s) と衝突する default 機能を default 未使用キーへ明示的に退避する。
+settings = "prefix+shift+s" # default "prefix+s" が focus_pane_right と衝突
