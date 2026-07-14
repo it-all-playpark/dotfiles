@@ -29,3 +29,6 @@ java = "21"
 
 [settings]
 experimental = true
+# 供給網攻撃対策の minimum_release_age (default: 24h) から除外し、リリース即日で追随する。
+# いずれも GitHub Releases (aqua) 直取得のためリスク低。npm:* 系は 24h ガードを維持する。
+minimum_release_age_excludes = ["claude-code", "codex", "copilot"]
