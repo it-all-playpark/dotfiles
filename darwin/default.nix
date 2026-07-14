@@ -58,6 +58,17 @@ in
       cleanup = "uninstall"; # Brewfileにないものをアンインストール
       extraFlags = [ "--force-cleanup" ]; # cleanup実行時の確認を明示的に許可
     };
+    taps = [
+      "rjyo/moshi" # moshi-hook 配布用 tap
+    ];
+    brews = [
+      {
+        # コーディングエージェント(Claude Code等)のイベントを iOS アプリ Moshi に中継する常駐デーモン
+        name = "moshi-hook";
+        start_service = true;
+        restart_service = "changed";
+      }
+    ];
     casks = [
       # インストールするCaskアプリケーションのリスト
       "antigravity"
