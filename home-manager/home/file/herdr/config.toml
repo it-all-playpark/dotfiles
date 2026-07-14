@@ -46,8 +46,10 @@ switch_tab = "alt+1..9"
 copy_mode = ["alt+i", "prefix+["]
 
 # session/workspace 操作 — zellij の Alt+d (Detach) / Alt+w (session-manager)
+# goto = session navigator (全 workspace/pane 横断の検索付き floating overlay) が
+# zellij session-manager に最も近い。workspace_picker は sidebar 選択面なので使わない。
 detach = ["alt+d", "prefix+q"]
-workspace_picker = ["alt+w", "prefix+w"]
+goto = ["alt+w", "prefix+g"]
 
 # resize mode — zellij の Ctrl+Alt 系 resize の代替入口。
 # default "prefix+r" が focus_pane_up と衝突するため退避し、direct chord も追加。
