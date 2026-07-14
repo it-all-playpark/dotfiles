@@ -464,5 +464,39 @@ in
         ThrottleInterval = 30;
       };
     };
+
+    # mise 管理ツールを毎日自動更新する。
+    # minimum_release_age_excludes (mise/config.toml) と組で、claude-code 等の
+    # 高頻度リリースツールへの即日追随を宣言的に実現する。
+    # 04:30 (ローカルタイム) にスリープ中だった場合は launchd が復帰時にまとめて実行する。
+    mise-upgrade = {
+      enable = true;
+      config = {
+        Label = "com.playpark.mise-upgrade";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''
+            /bin/wait4path "${pkgs.mise}/bin/mise" \
+              && exec "${pkgs.mise}/bin/mise" upgrade --yes
+          ''
+        ];
+        EnvironmentVariables = {
+          # npm backend が node/npm を解決できるよう mise shims を先頭に置く
+          PATH = "${config.home.homeDirectory}/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+          HOME = config.home.homeDirectory;
+        };
+        StartCalendarInterval = [
+          {
+            Hour = 4;
+            Minute = 30;
+          }
+        ];
+        RunAtLoad = false;
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/mise-upgrade.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/mise-upgrade.log";
+      };
+    };
   };
 }
