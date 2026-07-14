@@ -129,7 +129,7 @@ if [ -f "${CONFIG_TOML}" ] &&
   grep -Fq 'switch_tab = "alt+1..9"' "${CONFIG_TOML}" &&
   grep -qE 'copy_mode *= *\["alt\+i", *"prefix\+\["\]' "${CONFIG_TOML}" &&
   grep -qE 'detach *= *\["alt\+d", *"prefix\+q"\]' "${CONFIG_TOML}" &&
-  grep -qE 'workspace_picker *= *\["alt\+w", *"prefix\+w"\]' "${CONFIG_TOML}" &&
+  grep -qE 'goto *= *\["alt\+w", *"prefix\+g"\]' "${CONFIG_TOML}" &&
   grep -qE 'navigate_pane_left *= *"t"' "${CONFIG_TOML}" &&
   grep -qE 'navigate_pane_down *= *"n"' "${CONFIG_TOML}" &&
   grep -qE 'navigate_pane_up *= *"r"' "${CONFIG_TOML}" &&
@@ -137,7 +137,7 @@ if [ -f "${CONFIG_TOML}" ] &&
   pass "configToml_has_zellij_ported_bindings"
 else
   fail "configToml_has_zellij_ported_bindings" \
-    "Expected zellij-ported bindings (prefix=ctrl+a, split_*, close_pane, zoom, tab ops, switch_tab, copy_mode, detach, workspace_picker, navigate_pane_* 大西配列) in ${CONFIG_TOML}"
+    "Expected zellij-ported bindings (prefix=ctrl+a, split_*, close_pane, zoom, tab ops, switch_tab, copy_mode, detach, goto, navigate_pane_* 大西配列) in ${CONFIG_TOML}"
 fi
 
 # ---------------------------------------------------------------------------
