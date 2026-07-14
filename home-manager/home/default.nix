@@ -107,6 +107,23 @@ in
         echo "Warning: $SKILLS_AGENTS does not exist. Skipping agents symlink."
       fi
 
+      # ~/.claude/skills/hunk-review → hunk 同梱スキル（upstream 推奨の symlink 方式）
+      # `hunk skill path` の store path は hunk 更新 + GC で消えるため、
+      # rebuild ごとに現行世代の pkgs.hunk へ貼り直して同期を保つ。
+      # ~/.claude/skills は skills repo への symlink なので実体は repo 内に作られる
+      # （store path は環境依存のため skills repo 側で gitignore する）。
+      CLAUDE_SKILLS="$CLAUDE_DIR/skills"
+      HUNK_SKILL="$CLAUDE_SKILLS/hunk-review"
+      if [ -d "$CLAUDE_SKILLS" ]; then
+        if [ -L "$HUNK_SKILL" ] || [ ! -e "$HUNK_SKILL" ]; then
+          ln -sfn "${pkgs.hunk}/skills/hunk-review" "$HUNK_SKILL"
+        else
+          echo "Warning: $HUNK_SKILL exists and is not a symlink. Skipping (manual review needed)."
+        fi
+      else
+        echo "Warning: $CLAUDE_SKILLS does not exist. Skipping hunk-review skill symlink."
+      fi
+
       # settings.json へのシンボリックリンク
       # 既存ファイルがシンボリックリンクでない場合は削除
       if [ -f "$CLAUDE_DIR/settings.json" ] && [ ! -L "$CLAUDE_DIR/settings.json" ]; then
