@@ -82,7 +82,7 @@ echo "--- tier-2: nix eval verification (requires nix daemon) ---"
 eval_pkg_names() {
   local mode="$1"
   local system
-  system="$(nix eval --impure --raw --expr 'builtins.currentSystem')"
+  system="$(nix eval --impure --raw --expr 'builtins.currentSystem' 2>/dev/null || true)"
   nix eval --json --impure --expr "
     let
       flake = builtins.getFlake \"${REPO_ROOT}\";
@@ -97,7 +97,7 @@ eval_pkg_names() {
   " 2>/dev/null
 }
 
-if nix store info >/dev/null 2>&1; then
+if nix store info >/dev/null 2>&1 && nix eval --impure --raw --expr 'builtins.currentSystem' >/dev/null 2>&1; then
   NIX_AVAILABLE=1
 else
   NIX_AVAILABLE=0
@@ -108,7 +108,7 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # AC1: container mode must include nodejs_24
   # -------------------------------------------------------------------------
   echo "- eval_containerMode_includes_nodejs_24"
-  container_pkgs="$(eval_pkg_names "container")"
+  container_pkgs="$(eval_pkg_names "container" || true)"
   if echo "${container_pkgs}" | jq -e 'map(select(startswith("nodejs"))) | length > 0' >/dev/null 2>&1; then
     pass "eval_containerMode_includes_nodejs_24"
   else
@@ -120,7 +120,7 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # AC1 supplement: host mode must NOT include nodejs (PATH collision guard)
   # -------------------------------------------------------------------------
   echo "- eval_hostMode_unchanged_no_nodejs_in_cli_packages"
-  host_pkgs="$(eval_pkg_names "host")"
+  host_pkgs="$(eval_pkg_names "host" || true)"
   if echo "${host_pkgs}" | jq -e 'map(select(startswith("nodejs"))) | length == 0' >/dev/null 2>&1; then
     pass "eval_hostMode_unchanged_no_nodejs_in_cli_packages"
   else
