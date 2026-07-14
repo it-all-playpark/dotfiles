@@ -468,7 +468,7 @@ in
     # mise 管理ツールを毎日自動更新する。
     # minimum_release_age_excludes (mise/config.toml) と組で、claude-code 等の
     # 高頻度リリースツールへの即日追随を宣言的に実現する。
-    # 09:00 にスリープ中だった場合は launchd が復帰時にまとめて実行する。
+    # 04:30 (ローカルタイム) にスリープ中だった場合は launchd が復帰時にまとめて実行する。
     mise-upgrade = {
       enable = true;
       config = {
@@ -488,8 +488,8 @@ in
         };
         StartCalendarInterval = [
           {
-            Hour = 9;
-            Minute = 0;
+            Hour = 4;
+            Minute = 30;
           }
         ];
         RunAtLoad = false;
