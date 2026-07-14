@@ -141,6 +141,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# tier-1 (5c): [terminal] default_shell = "fish" (zellij config.kdl と同じ)
+# ---------------------------------------------------------------------------
+echo "- configToml_sets_default_shell_fish"
+if [ -f "${CONFIG_TOML}" ] &&
+  awk '/^\[terminal\]/{f=1;next} /^\[/{f=0} f' "${CONFIG_TOML}" |
+  grep -qE '^default_shell *= *"fish"'; then
+  pass "configToml_sets_default_shell_fish"
+else
+  fail "configToml_sets_default_shell_fish" \
+    "Expected default_shell = \"fish\" inside [terminal] section in ${CONFIG_TOML}"
+fi
+
+# ---------------------------------------------------------------------------
 # tier-1 (6): reload_config must NOT be overridden (keep herdr default prefix+shift+r)
 # ---------------------------------------------------------------------------
 echo "- configToml_does_not_set_reload_config"
@@ -182,7 +195,7 @@ echo "--- tier-2: nix eval verification (requires nix daemon) ---"
 eval_pkg_names() {
   local mode="$1"
   local system
-  system="$(nix eval --impure --raw --expr 'builtins.currentSystem')"
+  system="$(nix eval --impure --raw --expr 'builtins.currentSystem' 2>/dev/null || true)"
   nix eval --json --impure --expr "
     let
       flake = builtins.getFlake \"${REPO_ROOT}\";
@@ -194,7 +207,7 @@ eval_pkg_names() {
   " 2>/dev/null
 }
 
-if nix store info >/dev/null 2>&1; then
+if nix store info >/dev/null 2>&1 && nix eval --impure --raw --expr 'builtins.currentSystem' >/dev/null 2>&1; then
   NIX_AVAILABLE=1
 else
   NIX_AVAILABLE=0
@@ -205,7 +218,7 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # tier-2 (a): host mode must include herdr
   # -------------------------------------------------------------------------
   echo "- eval_hostMode_includes_herdr"
-  host_pkgs="$(eval_pkg_names "host")"
+  host_pkgs="$(eval_pkg_names "host" || true)"
   if echo "${host_pkgs}" | jq -e 'map(select(. == "herdr")) | length > 0' >/dev/null 2>&1; then
     pass "eval_hostMode_includes_herdr"
   else
@@ -217,7 +230,7 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # tier-2 (b): container mode must NOT include herdr (hostOnly, not needed in image)
   # -------------------------------------------------------------------------
   echo "- eval_containerMode_excludes_herdr"
-  container_pkgs="$(eval_pkg_names "container")"
+  container_pkgs="$(eval_pkg_names "container" || true)"
   if echo "${container_pkgs}" | jq -e 'map(select(. == "herdr")) | length == 0' >/dev/null 2>&1; then
     pass "eval_containerMode_excludes_herdr"
   else
