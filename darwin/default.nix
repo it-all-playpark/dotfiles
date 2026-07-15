@@ -64,7 +64,10 @@ in
     brews = [
       {
         # コーディングエージェント(Claude Code等)のイベントを iOS アプリ Moshi に中継する常駐デーモン
-        name = "moshi-hook";
+        # brew の tap trust は完全修飾名の formula にしか効かない (非修飾名だと
+        # trusted: true が無視され、bundle cleanup が trust store を Brewfile 由来で
+        # 全置換するため手動 `brew trust` も activation の度に消される)。
+        name = "rjyo/moshi/moshi-hook";
         start_service = true;
         restart_service = "changed";
       }
