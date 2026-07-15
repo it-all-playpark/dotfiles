@@ -49,6 +49,8 @@ let
   # NOTE: Node.js は host では mise ("node = lts") で管理。PATH 衝突を避けるためここには入れない。
   hostOnly = with pkgs; [
     act
+    agent-browser
+    dotenv-cli
     fastfetch
     ffmpeg
     flyctl
@@ -56,6 +58,7 @@ let
     hunk
     mariadb
     marp-cli
+    netlify-cli
     ollama
     opentofu
     postgresql_17
