@@ -17,10 +17,12 @@
 let
   # 共通 (host / container 両方)
   common = with pkgs; [
+    ast-grep # 構文認識の検索・一括書き換え (codemod)。AI agent がコンテキスト外で安全に一括変更するための道具
     bat
     bun
     coreutils
     curl
+    difftastic # 構文木ベースの構造 diff。--exit-code で「構造変化あり/フォーマットのみ」を機械判定できる
     eza
     fd
     fzf
