@@ -123,6 +123,21 @@ in
     trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
   };
 
+  # Nix store の自動 GC（毎週日曜 5:00、mise upgrade の 04:30 と競合しない時間帯）
+  # --delete-older-than 14d により直近 2 週間の generation は保持し、rollback 可能性を確保
+  nix.gc = {
+    automatic = true;
+    interval = {
+      Weekday = 0;
+      Hour = 5;
+      Minute = 0;
+    };
+    options = "--delete-older-than 14d";
+  };
+
+  # store 内の同一内容ファイルを hardlink 化してディスク使用量を削減
+  nix.optimise.automatic = true;
+
   # Linux builder（macOS 上で linux 用 derivation を build する VM）
   # hermes-agent 用 Docker image (dockerTools.buildLayeredImage) は Linux 専用のため
   # darwin から build するには linux-builder が必須。
