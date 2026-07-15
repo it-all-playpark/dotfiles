@@ -29,6 +29,7 @@ let
     gh
     ghq
     git
+    gron # JSON を grep 可能な行形式に展開。構造が未知の JSON を全読みせず `gron | rg` で探索できる
     gws
     jq
     lazygit
@@ -40,9 +41,11 @@ let
     starship
     stripe-cli
     tldr
+    tokei # コードベースの言語構成・規模を1コマンドで把握。AI agent が全ファイルを読まずに概観を得る
     turso-cli
     vips
     which
+    yq-go # YAML/TOML/XML から必要部分だけ抽出 (jq の YAML 版)。設定ファイル全読みを避ける
     zellij
     zoxide
   ];
@@ -53,11 +56,13 @@ let
     act
     agent-browser
     dotenv-cli
+    duckdb # CSV/Parquet/巨大 JSON を SQL で集計・抽出。AI agent がデータファイルを全読みせず必要行だけ取り出す
     fastfetch
     ffmpeg
     flyctl
     herdr
     hunk
+    hyperfine # 統計的に妥当なベンチマーク CLI。性能主張を計測で裏付ける (Evidence > assumptions)
     mariadb
     marp-cli
     netlify-cli

@@ -27,6 +27,19 @@ Conflict: Safety > Scope > Quality > Speed
 - **Inherit ≠ Default-Heavy**: `agent()` は明示しない限りセッションモデル（opus xhigh）を継承する。軽ステージに指定をサボると全部 opus xhigh になる
 - **No Over-Orchestration**: trivial な単発作業は Workflow 化せず直接ツールを叩く。ultracode でも例外でない
 
+## Tool Routing
+🟢 コンテキスト節約と精度向上のため、ファイル全読み・テキスト grep の前に専用 CLI で絞る:
+- **コードベース概観** → `tokei`（言語構成・規模。ファイルを読み始める前にまず全体像）
+- **構造的コード検索・一括リライト** → `ast-grep`（AST 条件のマッチ・codemod。テキスト grep で偽陽性が出る時）
+- **JSON** → `jq` で必要キーのみ抽出。構造が未知なら `gron <file> | rg <keyword>` でパス発見
+- **YAML/TOML/XML** → `yq` で必要部分のみ抽出
+- **CSV/Parquet/巨大 JSON の集計** → `duckdb -c "SELECT ..."`（Read で全読みしない）
+- **PDF/docx/zip/sqlite 内の検索** → `rga`（ripgrep-all）
+- **機械的な文字列置換** → `sd`（sed より事故りにくい）
+- **diff の構造変化判定** → `difft --exit-code`（フォーマットのみの変更か機械判別）
+- **リポジトリ全体のコンテキスト化** → repomix（/repo-export skill）
+- **性能主張の裏取り** → `hyperfine`（体感や推測で速い/遅いを言わない）
+
 ## Organization
 - Follow existing project conventions for naming and directory structure
 - Reports/analyses → `claudedocs/`、Tests → `tests/`、Scripts → `scripts/`
