@@ -30,13 +30,14 @@ Conflict: Safety > Scope > Quality > Speed
 ## Tool Routing
 🟢 コンテキスト節約と精度向上のため、ファイル全読み・テキスト grep の前に専用 CLI で絞る:
 - **コードベース概観** → `tokei`（言語構成・規模。ファイルを読み始める前にまず全体像）
-- **構造的コード検索・一括リライト** → `ast-grep`（AST 条件のマッチ・codemod。テキスト grep で偽陽性が出る時）
+- **同一コードパターンを3箇所以上書き換える時**（rename・API移行・codemod）→ sed/手編集でなく `ast-grep --pattern … --rewrite …`。コメント・文字列リテラルへの誤爆がなく、全箇所を機械的に網羅できる
+- **grep 結果にコメント・文字列の偽陽性が混ざる検索** → `ast-grep --pattern`（AST ノードのみマッチ）
 - **JSON** → `jq` で必要キーのみ抽出。構造が未知なら `gron <file> | rg <keyword>` でパス発見
 - **YAML/TOML/XML** → `yq` で必要部分のみ抽出
 - **CSV/Parquet/巨大 JSON の集計** → `duckdb -c "SELECT ..."`（Read で全読みしない）
 - **PDF/docx/zip/sqlite 内の検索** → `rga`（ripgrep-all）
 - **機械的な文字列置換** → `sd`（sed より事故りにくい）
-- **diff の構造変化判定** → `difft --exit-code`（フォーマットのみの変更か機械判別）
+- **refactor・フォーマッタ適用後の「挙動不変」確認** → `difft --exit-code old new`（構造変化ゼロ＝フォーマットのみ、を機械判定。目視 diff レビューを省略できる）
 - **リポジトリ全体のコンテキスト化** → repomix（/repo-export skill）
 - **性能主張の裏取り** → `hyperfine`（体感や推測で速い/遅いを言わない）
 
