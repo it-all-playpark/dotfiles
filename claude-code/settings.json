@@ -1,13 +1,268 @@
 {
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "API_TIMEOUT_MS": "900000"
-  },
+  "agentPushNotifEnabled": true,
+  "askUserQuestionTimeout": "10m",
   "attribution": {
     "commit": "",
     "pr": ""
   },
+  "effortLevel": "xhigh",
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [],
+  "enabledPlugins": {
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true,
+    "vercel@claude-plugins-official": true
+  },
+  "env": {
+    "API_TIMEOUT_MS": "900000",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "extraKnownMarketplaces": {},
+  "fallbackModel": [
+    "claude-opus-4-8",
+    "claude-sonnet-5"
+  ],
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "-e",
+              "display notification \"Claude Code needs your attention\" with title \"Claude Code\""
+            ],
+            "command": "osascript",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
+            "statusMessage": "permission request logging...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
+            "statusMessage": "出力内の秘匿情報マスク中...",
+            "timeout": 5,
+            "type": "command"
+          },
+          {
+            "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" hook-capture",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pre-compact-dump.sh\"",
+            "statusMessage": "session 状態を claudedocs/session-*.md に退避中...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" track-skill",
+            "timeout": 3,
+            "type": "command"
+          }
+        ],
+        "matcher": "Skill"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
+            "if": "Write(*/SKILL.md)",
+            "statusMessage": "SKILL.md frontmatter バリデーション中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/allow-feature-push.sh\"",
+            "if": "Bash(git push*)",
+            "statusMessage": "push ブランチチェック中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pretool-bash-credential-guard.sh\"",
+            "statusMessage": "prod credential 検知中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
+            "if": "Bash(git worktree add*)",
+            "statusMessage": ".worktreeinclude 自動生成チェック中...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/allow-pr-merge.sh\"",
+            "if": "Bash(gh pr merge*)",
+            "statusMessage": "PR merge ブランチチェック中...",
+            "timeout": 15,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes."
+            ],
+            "command": "echo",
+            "type": "command"
+          },
+          {
+            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
+      },
+      {
+        "hooks": [
+          {
+            "command": "SCRIPT=\"$HOME/.claude/skills/claude-zombie-kill/scripts/zombie-kill.sh\"; [[ -x \"$SCRIPT\" ]] && bash \"$SCRIPT\" --force --min-hours 48",
+            "type": "command"
+          },
+          {
+            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "resume"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash '/Users/naramotoyuuji/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          },
+          {
+            "command": "bash \"$HOME/.claude/hooks/stop-devflow-telemetry.sh\"",
+            "timeout": 15,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "-c",
+              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
+            ],
+            "command": "bash",
+            "timeout": 1,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  },
+  "language": "ja",
+  "model": "claude-fable-5[1m]",
   "permissions": {
+    "additionalDirectories": [
+      "~/ghq/github.com/playpark-llc",
+      "~/ghq/github.com/it-all-playpark",
+      "~/ghq/github.com/Cistree-dev",
+      "~/Library/CloudStorage/Box-Box"
+    ],
     "allow": [
       "Read",
       "Write",
@@ -29,6 +284,7 @@
       "Bash(zernio post:*)",
       "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio:*)"
     ],
+    "defaultMode": "auto",
     "deny": [
       "Bash(gh repo delete:*)",
       "Bash(gh repo rename:*)",
@@ -221,261 +477,50 @@
       "Read(./.aws/**)",
       "Read(./.config/gh/**)"
     ],
-    "defaultMode": "auto",
-    "disableBypassPermissionsMode": "disable",
-    "additionalDirectories": [
-      "~/ghq/github.com/playpark-llc",
-      "~/ghq/github.com/it-all-playpark",
-      "~/ghq/github.com/Cistree-dev"
-    ]
+    "disableBypassPermissionsMode": "disable"
   },
-  "model": "claude-fable-5[1m]",
-  "fallbackModel": [
-    "claude-opus-4-8",
-    "claude-sonnet-5"
-  ],
-  "enableAllProjectMcpServers": false,
-  "enabledMcpjsonServers": [],
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo",
-            "args": [
-              "Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes."
-            ]
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "startup",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "SCRIPT=\"$HOME/.claude/skills/claude-zombie-kill/scripts/zombie-kill.sh\"; [[ -x \"$SCRIPT\" ]] && bash \"$SCRIPT\" --force --min-hours 48"
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/pre-compact-dump.sh\"",
-            "timeout": 10,
-            "statusMessage": "session 状態を claudedocs/session-*.md に退避中..."
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" track-skill",
-            "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
-            "if": "Write(*/SKILL.md)",
-            "timeout": 5,
-            "statusMessage": "SKILL.md frontmatter バリデーション中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/allow-feature-push.sh\"",
-            "if": "Bash(git push*)",
-            "timeout": 5,
-            "statusMessage": "push ブランチチェック中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/pretool-bash-credential-guard.sh\"",
-            "timeout": 5,
-            "statusMessage": "prod credential 検知中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
-            "if": "Bash(git worktree add*)",
-            "timeout": 10,
-            "statusMessage": ".worktreeinclude 自動生成チェック中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/allow-pr-merge.sh\"",
-            "if": "Bash(gh pr merge*)",
-            "timeout": 15,
-            "statusMessage": "PR merge ブランチチェック中..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
-            "timeout": 5,
-            "statusMessage": "出力内の秘匿情報マスク中..."
-          },
-          {
-            "type": "command",
-            "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\""
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" hook-capture",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
-            "timeout": 5,
-            "statusMessage": "permission request logging..."
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "osascript",
-            "args": [
-              "-e",
-              "display notification \"Claude Code needs your attention\" with title \"Claude Code\""
-            ]
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/stop-devflow-telemetry.sh\"",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash",
-            "args": [
-              "-c",
-              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
-            ],
-            "timeout": 1
-          }
-        ]
-      }
-    ]
-  },
-  "worktree": {
-    "symlinkDirectories": [
-      "node_modules",
-      ".cache"
-    ]
-  },
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true,
-    "vercel@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "security-guidance@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {},
-  "language": "ja",
   "sandbox": {
-    "enabled": true,
-    "failIfUnavailable": true,
-    "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true,
+    "excludedCommands": [
+      "gh:*",
+      "git:*",
+      "~/.claude/skills/*",
+      "bash ~/.claude/skills/*",
+      "python3 ~/.claude/skills/*",
+      "/Users/naramotoyuuji/.claude/skills/*",
+      "bash /Users/naramotoyuuji/.claude/skills/*",
+      "python3 /Users/naramotoyuuji/.claude/skills/*",
+      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
+      "bash $HOME/.claude/skills/*",
+      "python3 $HOME/.claude/skills/*",
+      "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
+      "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
+      "codex:*",
+      "zernio:*"
+    ],
+    "failIfUnavailable": true,
+    "filesystem": {
+      "allowWrite": [
+        "~/.claude/journal",
+        "~/.claude/logs",
+        "~/.claude/memory",
+        "~/.claude/jobs",
+        "~/Documents/meetings",
+        "~/Library/CloudStorage/Box-Box",
+        "~/ghq/**/.claude/scheduled_tasks.json",
+        "~/ghq/**/.claude/scheduled_tasks.lock"
+      ],
+      "denyRead": [
+        "~/.aws/**",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "~/.config/gh/**"
+      ]
+    },
     "network": {
       "allowedDomains": [
         "github.com",
@@ -511,48 +556,16 @@
         "zenn.dev",
         "api.slack.com"
       ]
-    },
-    "filesystem": {
-      "allowWrite": [
-        "~/.claude/journal",
-        "~/.claude/logs",
-        "~/.claude/memory",
-        "~/.claude/jobs",
-        "~/Documents/meetings",
-        "~/ghq/**/.claude/scheduled_tasks.json",
-        "~/ghq/**/.claude/scheduled_tasks.lock"
-      ],
-      "denyRead": [
-        "~/.aws/**",
-        "~/.ssh/**",
-        "~/.gnupg/**",
-        "~/.config/gh/**"
-      ]
-    },
-    "excludedCommands": [
-      "gh:*",
-      "git:*",
-      "~/.claude/skills/*",
-      "bash ~/.claude/skills/*",
-      "python3 ~/.claude/skills/*",
-      "/Users/naramotoyuuji/.claude/skills/*",
-      "bash /Users/naramotoyuuji/.claude/skills/*",
-      "python3 /Users/naramotoyuuji/.claude/skills/*",
-      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "bash $HOME/.claude/skills/*",
-      "python3 $HOME/.claude/skills/*",
-      "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
-      "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
-      "codex:*",
-      "zernio:*"
-    ]
+    }
   },
-  "askUserQuestionTimeout": "10m",
-  "tui": "fullscreen",
-  "skipWorkflowUsageWarning": true,
-  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": true
+  "skipWorkflowUsageWarning": true,
+  "tui": "fullscreen",
+  "voiceEnabled": true,
+  "worktree": {
+    "symlinkDirectories": [
+      "node_modules",
+      ".cache"
+    ]
+  }
 }
