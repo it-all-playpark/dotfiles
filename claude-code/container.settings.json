@@ -1,12 +1,157 @@
 {
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  },
+  "agentPushNotifEnabled": false,
+  "askUserQuestionTimeout": "10m",
   "attribution": {
     "commit": "",
     "pr": ""
   },
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [
+  ],
+  "enabledPlugins": {
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "extraKnownMarketplaces": {
+  },
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
+            "statusMessage": "permission request logging...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
+            "statusMessage": "出力内の秘匿情報マスク中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pre-compact-dump.sh\"",
+            "statusMessage": "session 状態を claudedocs/session-*.md に退避中...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
+            "if": "Write(*/SKILL.md)",
+            "statusMessage": "SKILL.md frontmatter バリデーション中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/allow-feature-push.sh\"",
+            "if": "Bash(git push*)",
+            "statusMessage": "push ブランチチェック中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pretool-bash-credential-guard.sh\"",
+            "statusMessage": "prod credential 検知中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
+            "if": "Bash(git worktree add*)",
+            "statusMessage": ".worktreeinclude 自動生成チェック中...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/allow-pr-merge.sh\"",
+            "if": "Bash(gh pr merge*)",
+            "statusMessage": "PR merge ブランチチェック中...",
+            "timeout": 15,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "args": [
+              "-c",
+              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
+            ],
+            "command": "bash",
+            "timeout": 1,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  },
+  "language": "ja",
   "permissions": {
+    "additionalDirectories": [
+      "/workspace/repos/github.com/playpark-llc",
+      "/workspace/repos/github.com/it-all-playpark",
+      "/workspace/repos/github.com/Cistree-dev"
+    ],
     "allow": [
       "Read",
       "Write",
@@ -26,6 +171,7 @@
       "mcp__plugin_telegram_telegram__edit_message",
       "mcp__plugin_telegram_telegram__download_attachment"
     ],
+    "defaultMode": "auto",
     "deny": [
       "Bash(gh repo delete:*)",
       "Bash(gh repo rename:*)",
@@ -222,151 +368,8 @@
       "Read(./.aws/**)",
       "Read(./.config/gh/**)"
     ],
-    "defaultMode": "auto",
-    "disableBypassPermissionsMode": "disable",
-    "additionalDirectories": [
-      "/workspace/repos/github.com/playpark-llc",
-      "/workspace/repos/github.com/it-all-playpark",
-      "/workspace/repos/github.com/Cistree-dev"
-    ]
+    "disableBypassPermissionsMode": "disable"
   },
-  "enableAllProjectMcpServers": false,
-  "enabledMcpjsonServers": [],
-  "hooks": {
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/pre-compact-dump.sh\"",
-            "timeout": 10,
-            "statusMessage": "session 状態を claudedocs/session-*.md に退避中..."
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
-            "if": "Write(*/SKILL.md)",
-            "timeout": 5,
-            "statusMessage": "SKILL.md frontmatter バリデーション中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/allow-feature-push.sh\"",
-            "if": "Bash(git push*)",
-            "timeout": 5,
-            "statusMessage": "push ブランチチェック中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/pretool-bash-credential-guard.sh\"",
-            "timeout": 5,
-            "statusMessage": "prod credential 検知中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
-            "if": "Bash(git worktree add*)",
-            "timeout": 10,
-            "statusMessage": ".worktreeinclude 自動生成チェック中..."
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/allow-pr-merge.sh\"",
-            "if": "Bash(gh pr merge*)",
-            "timeout": 15,
-            "statusMessage": "PR merge ブランチチェック中..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
-            "timeout": 5,
-            "statusMessage": "出力内の秘匿情報マスク中..."
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
-            "timeout": 5,
-            "statusMessage": "permission request logging..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash",
-            "args": [
-              "-c",
-              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
-            ],
-            "timeout": 1
-          }
-        ]
-      }
-    ]
-  },
-  "enabledPlugins": {},
-  "extraKnownMarketplaces": {},
-  "language": "ja",
-  "askUserQuestionTimeout": "10m",
   "skipAutoPermissionPrompt": true,
-  "voiceEnabled": false,
-  "agentPushNotifEnabled": false
+  "voiceEnabled": false
 }

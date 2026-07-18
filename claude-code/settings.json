@@ -5,9 +5,10 @@
     "commit": "",
     "pr": ""
   },
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
   "enableAllProjectMcpServers": false,
-  "enabledMcpjsonServers": [],
+  "enabledMcpjsonServers": [
+  ],
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
@@ -20,7 +21,8 @@
     "API_TIMEOUT_MS": "900000",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
-  "extraKnownMarketplaces": {},
+  "extraKnownMarketplaces": {
+  },
   "fallbackModel": [
     "claude-opus-4-8",
     "claude-sonnet-5"
@@ -255,7 +257,7 @@
     ]
   },
   "language": "ja",
-  "model": "claude-fable-5[1m]",
+  "model": "sonnet",
   "permissions": {
     "additionalDirectories": [
       "~/ghq/github.com/playpark-llc",
