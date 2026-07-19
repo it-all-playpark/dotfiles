@@ -55,6 +55,7 @@ let
   hostOnly = with pkgs; [
     act
     agent-browser
+    bats # bats-core。skills repo の tests/run-all-bats.sh 等スクリプト隣接テストの実行に必要
     dotenv-cli
     duckdb # CSV/Parquet/巨大 JSON を SQL で集計・抽出。AI agent がデータファイルを全読みせず必要行だけ取り出す
     fastfetch
