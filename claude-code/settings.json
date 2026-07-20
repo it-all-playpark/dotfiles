@@ -514,7 +514,8 @@
         "~/Documents/meetings",
         "~/Library/CloudStorage/Box-Box",
         "~/ghq/**/.claude/scheduled_tasks.json",
-        "~/ghq/**/.claude/scheduled_tasks.lock"
+        "~/ghq/**/.claude/scheduled_tasks.lock",
+        "~/.config/gws"
       ],
       "denyRead": [
         "~/.aws/**",
