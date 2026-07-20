@@ -66,11 +66,11 @@ fi
 # 書いている途中のものである可能性が高く「忘れ物」ではないためスルーする。
 # jq 不在・state.json 不在・schema 不一致など何かあれば安全側（ブロック継続）。
 SESSION_ID=$(printf '%s' "${PAYLOAD}" | jq -r '.session_id // empty' 2>/dev/null || echo "")
-if [[ -n "${SESSION_ID}" ]]; then
+if [[ -n ${SESSION_ID} ]]; then
   JOB_STATE="${HOME}/.claude/jobs/${SESSION_ID%%-*}/state.json"
-  if [[ -f "${JOB_STATE}" ]]; then
+  if [[ -f ${JOB_STATE} ]]; then
     HAS_WORKFLOW=$(jq -r '.inFlight.kinds // [] | index("local_workflow") // empty' "${JOB_STATE}" 2>/dev/null || echo "")
-    if [[ -n "${HAS_WORKFLOW}" ]]; then
+    if [[ -n ${HAS_WORKFLOW} ]]; then
       exit 0
     fi
   fi
