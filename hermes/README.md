@@ -170,6 +170,57 @@ foreground で debug したい場合は agent を unload してから:
 > 直接 `hermes gateway` を叩くと `~/.hermes/.env` は **load されない**。
 > debug 時も wrapper 経由で起動すること。
 
+## watchdog (S5, AC-4/AC-5)
+
+`~/.hermes/jobs/*.json` (claude_runner が dispatch_job で書く manifest) を定期 reconcile し、
+完了したジョブを Slack 通知した上で clone/manifest を後片付けする常駐タスク。
+
+- **多重run排除**: 起動直後に `flock -xn` で `~/.hermes/watchdog.lock` を排他取得する。
+  取得できなければ即 `exit 0`(他 run が処理中)。macOS には GNU flock(1) が同梱されないため
+  `pkgs.flock`(discoteq/flock, cross-platform 実装) を home-manager package として追加済み。
+- **通知の二重送信防止**: ジョブが `done`/`failed` に達した最初のパスで Slack 通知 → 通知成功後に
+  `manifest.notified` を atomic に `true` へ更新する。cleanup はこのパスでは行わず、
+  **次のパスで `notified=true` を確認してから** `workspace_host_dir` の clone と manifest を削除する。
+  通知と cleanup を別パスに分離しているため、cleanup が途中で失敗しても再送信は起きない。
+- **bg session の reconcile**: `status` がまだ `pending`/`running` のジョブは、
+  `CLAUDE_CONFIG_DIR=<claude_config_host_dir> claude agents --json --all --cwd <workspace_host_dir>`
+  で `bg_job_id` を照合する(host 非root からの `CLAUDE_CONFIG_DIR` 読み取りは
+  `claudedocs/hermes-phaseB-execution-model-decision.md` の AC-3 実機確認と同じ経路)。
+
+### 起動 (launchd)
+
+`com.playpark.hermes-watchdog` が **StartInterval 120秒**で `~/.hermes/watchdog.sh` を起動する。
+hermes-gateway と同じ opt-in marker `~/.hermes/.gateway-primary` を再利用するため、
+gateway を稼働させている primary 機でのみ watchdog も動く(marker 不在なら即 exit)。
+
+```bash
+# 状態確認
+launchctl list | grep hermes-watchdog
+
+# 停止/再開
+launchctl unload ~/Library/LaunchAgents/com.playpark.hermes-watchdog.plist
+launchctl load   ~/Library/LaunchAgents/com.playpark.hermes-watchdog.plist
+
+# 手動で1回だけ実行 (デバッグ用)
+~/.hermes/watchdog.sh
+
+# ログ
+tail -f ~/.hermes/logs/watchdog.{out,err}.log
+```
+
+### 多重run排除の手動確認 (AC-5)
+
+```bash
+# 2並列起動 — 片方は lock 取得に失敗し即 exit するはず
+~/.hermes/watchdog.sh & ~/.hermes/watchdog.sh; wait
+tail ~/.hermes/logs/watchdog.err.log   # "another watchdog run holds ... — exiting immediately (AC-5)" が出る
+```
+
+### env overrides (テスト/代替配置用)
+
+`manifest.py` と同じ規約で `HERMES_HOME` が jobs/workspaces/claude-state の基点になる。
+`HERMES_WATCHDOG_SKIP_LOCK=1` は **テスト専用**の flock 迂回フラグ(本番 launchd agent では絶対に設定しない)。
+
 ## path_guard plugin
 
 hermes built-in approvals が見落とす deny を補強する。
@@ -239,6 +290,148 @@ bash tests/hermes-image-smoke.sh --skip-docker  # docker run をスキップ
 
 > **follow-up**: Phase 3 (workspace/worktree 構成)・Phase 4 (`claude --bg` container 跨ぎ検証)・
 > Phase 5 (hermes plugin 化) は別 issue に切り出し予定。
+
+## フェーズE (Phase E): Discord / Google Chat (S7/E2/E3/E4, AC-12/AC-13)
+
+ChatOps dispatch を Slack 以外の platform に拡張するフェーズ。**着手前に precondition gate を
+必ず通すこと**。
+
+### 着手前提条件 (AC-14)
+
+未解決事項 C7 (blast-radius review) の要決定事項 4 項目がすべて decision-logged されている
+ことを、以下の自動アサーション test で確認してから着手する:
+
+```bash
+bash tests/hermes-phaseE-precondition.test.sh
+# → "Results: 3 passed, 0 failed" / exit 0 であること
+```
+
+このテストは決定ログ成果物
+[`claudedocs/hermes-c7-blast-radius-decisions.md`](../claudedocs/hermes-c7-blast-radius-decisions.md)
+に `## 1.`〜`## 4.` の4見出しと4件以上の `決定:` マーカーが存在するかを grep 検証するだけの
+filesystem アサーションで、docker/network 不要・CI/sandbox で安全に実行できる。fail した場合は
+C7 の当該項目を decision-log してから再実行すること。
+
+### Discord native adapter の有効化
+
+hermes 内蔵の native adapter (`gateway/platforms/discord.py`, 本リポジトリ管理外の editable
+install 側) を config で有効化する。
+
+1. Discord Developer Portal で bot を作成し `DISCORD_BOT_TOKEN` を発行、対象サーバーに招待する
+2. `~/.hermes/.env` (テンプレートは `hermes/.env.template`) に投入する:
+
+   | 変数 | 内容 |
+   |------|------|
+   | `DISCORD_BOT_TOKEN` | Discord bot token |
+   | `DISCORD_ALLOWED_USERS` | 許可する Discord user ID (カンマ区切り) |
+   | `DISCORD_ALLOWED_ROLES` | 許可する Discord role ID (カンマ区切り、任意) |
+
+   > **重要 (allowlist / fail-open 警告)**: `discord.py` の `_is_allowed_user` は
+   > `DISCORD_ALLOWED_USERS` と `DISCORD_ALLOWED_ROLES` が **両方空だと全員許可 (fail-open)**
+   > になる仕様。fail-closed にするため、どちらか (通常は両方) を必ず設定すること。未設定の
+   > ままではこの機能は allowlist を強制しない。
+
+3. `hermes/config.yaml` の `platforms.discord.extra.require_mention: true` で mention なし
+   メッセージの dispatch を防ぐ (strict_mention 相当)。`platforms.discord.dm_role_auth_guild`
+   は意図的に未設定のまま運用する — 設定すると DM でのロール認証が有効になり、共有 guild
+   経由の cross-guild 権限昇格リスクがあるため
+4. `hermes/repo_bindings.yaml` の `platforms.discord.channels.<channel_id>.repos` で
+   bind 対象 channel と repo を明示する (未 bind の channel は fail-closed で dispatch 不可)
+5. config.yaml は起動時のみ load されるため、変更後は `launchctl kickstart -k
+   gui/$(id -u)/com.playpark.hermes-gateway` で再起動する
+
+### Google Chat (generic webhook 経路)
+
+Google Chat 用の native adapter は存在しない (`gateway/platforms/` に `google_chat.py` は
+無い) ため、generic webhook 経路 (`gateway/platforms/webhook.py`, token/secret 認証) で
+受ける。
+
+1. `~/.hermes/.env` に投入する:
+
+   | 変数 | 内容 |
+   |------|------|
+   | `WEBHOOK_ENABLED` | `true` (Google Chat webhook route を使う場合) |
+   | `GOOGLE_CHAT_WEBHOOK_SECRET` | Google Chat 側からの POST を検証する共有 secret |
+
+2. `hermes/config.yaml` の `platforms.webhook.extra.routes.google-chat.secret` は
+   `"${GOOGLE_CHAT_WEBHOOK_SECRET}"` として `.env` の値を参照する
+   (`hermes_cli/config.py` の `_expand_env_vars` が load 時に展開)
+3. `hermes/repo_bindings.yaml` の `platforms.google_chat.channels.<space_id>.repos` で
+   bind 対象 space (`spaces/AAAAxxxxxxx` 形式) と repo を明示する。shared secret を
+   知らない送信元 (または誤った secret) からの POST は `webhook.py` 側の signature 検証で
+   拒否され、この binding には到達しない (fail-closed)
+
+   > **重要 (per-user AC-12 は未充足): route/space 境界であって allowlist ではない**。
+   > `GOOGLE_CHAT_WEBHOOK_SECRET` は Google Chat 側サーバーが space にひも付けて保持するため、
+   > **bound space の全メンバーのメッセージが正しい secret を伴って到達する**。この secret
+   > 検証は「正しい secret を伴った POST か (= route/space 境界の未認証源の遮断)」を保証する
+   > のであって、「どの個人が送信したか」を検証する per-user allowlist でも、Discord の
+   > `require_mention` に相当する mention gating でもない。`guard.py`/`dispatch_job` の検証も
+   > `platform` + `channel` (space) → repo scope の判定のみで user scope を持たない。
+   > enforcement 層 (`gateway/platforms/webhook.py`) は editable install 側で本リポジトリ
+   > 管理外のため、`hermes/config.yaml`/`hermes/repo_bindings.yaml` の config 変更だけでは
+   > per-user gating を追加できない。したがって **Google Chat は AC-12 (allowlist 外ユーザー/
+   > mention なしの dispatch 拒否) を per-user 粒度では config だけで満たさない**。
+   > 受容可否は人間判断への escalate 事項として
+   > [`claudedocs/hermes-phaseE-googlechat-user-gating-decision.md`](../claudedocs/hermes-phaseE-googlechat-user-gating-decision.md)
+   > (要決定・決定保留) に記録している。決定前に Google Chat を production bind する場合は
+   > このリスクを踏まえた上で行うこと。
+
+### 重複配送 (dedupe) は platform adapter 層の責務 (AC-13)
+
+同一 event/message id の重複配送に対する二重 dispatch (二重 clone・二重 PR) 防止は
+**plugin 層 (`hermes/plugins/claude_runner/`) では実装しない**。inbound メッセージフック
+(invoke_hook 対象イベント) には該当フックが存在しないため、これは正しい統合点ではない。
+
+dedupe は各 platform adapter 層に委譲される:
+
+- **Slack / Discord**: hermes 内蔵 adapter が dedupe 済み
+- **Google Chat**: generic webhook 経路 (`gateway/platforms/webhook.py`) 側の dedupe に依存
+- 実装パターンの参照: `~/.hermes/hermes-agent/gateway/platforms/wecom_callback.py` の
+  `_seen_messages` + TTL による重複配送防止パターン (本リポジトリ管理外、editable install
+  側のソース参照用)
+
+plugin 層はこの dedupe を前提として、adapter を通過したメッセージのみを受け取る。
+
+### AC-12/AC-13 手動実機検証チェックリスト
+
+Discord / Google Chat は保証レベルが異なる (per-user allowlist vs route/space 境界のみ) ため、
+チェックリストを分離して記載する。実機で手動検証すること (自動テストではない):
+
+#### [Discord・per-user 粒度] AC-12
+
+- [ ] **allowlist 外ユーザからの依頼が dispatch されないこと**
+  - `DISCORD_ALLOWED_USERS`/`DISCORD_ALLOWED_ROLES` に含まれない user で bind 済み channel に
+    メンション付き依頼を送り、`~/.hermes/jobs/*.json` に新規 manifest が生成されないことを
+    確認する (env allowlist、`discord.py` の `_is_allowed_user`)
+- [ ] **mention なしメッセージが dispatch されないこと**
+  - `require_mention: true` の bind channel に bot を mention せず通常メッセージを送り、
+    dispatch_job が呼ばれないことを確認する
+
+#### [Google Chat・route/space 境界のみ] AC-12
+
+> per-user 粒度の allowlist・mention gating は存在しない。以下は「未認証源 (誤った secret)
+> の遮断」の確認であり、「allowlist 外の個人・mention なしの拒否」ではない。受容可否は
+> [`claudedocs/hermes-phaseE-googlechat-user-gating-decision.md`](../claudedocs/hermes-phaseE-googlechat-user-gating-decision.md)
+> の決定 (要決定・決定保留) に依存する。
+
+- [ ] **誤った/未知の secret を伴う POST が拒否されること (route/space 境界の確認、per-user
+      allowlist の確認ではない)**
+  - `GOOGLE_CHAT_WEBHOOK_SECRET` を知らない送信元、または誤った secret で webhook route に
+    POST し、`webhook.py` の signature 検証で拒否され dispatch されないことを確認する
+  - **per-user 制御の確認ではない**: bound space に在籍する正規メンバーが secret を伴って
+    送信した場合の per-user 絞り込み・mention gating は E3 決定 (上記リンク) が案A/案B の
+    どちらかに定まるまで検証対象外
+
+#### [dedupe・AC-13] 全 platform 共通
+
+- [ ] **同一 event/message id の重複配送で dispatch が1回のみであること**
+  - allowlist 済みユーザ (Discord) または route secret を伴う正規送信元 (Google Chat) から
+    mention 付き/正規経路で1件依頼を送った後、同一 message id / event id を platform 側
+    (または adapter の再送機構) から再送させ、`~/.hermes/jobs/*.json` の manifest が1件のみ
+    (clone・PR とも1回のみ) であることを確認する。Slack/Discord は内蔵 adapter の dedupe、
+    Google Chat は webhook 経路の dedupe に依存する
+    (`gateway/platforms/wecom_callback.py` の `_seen_messages` + TTL パターン参照)
 
 ## Rollback
 
