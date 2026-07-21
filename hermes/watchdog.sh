@@ -12,15 +12,17 @@
 #      verification in claudedocs/hermes-phaseB-execution-model-decision.md)
 #      to detect completion.
 #   3. Once a manifest reaches a terminal status (`done`/`failed`) it is
-#      notified over Slack *exactly once* — `manifest.notified` is flipped
-#      to `true` atomically right after a successful notify so a later run
-#      never re-sends (edge_cases: 同一完了ジョブへの watchdog による二重通知).
+#      notified over its own `manifest.platform` (Slack/Discord — see
+#      `notify_dispatch` below) *exactly once* — `manifest.notified` is
+#      flipped to `true` atomically right after a successful notify so a
+#      later run never re-sends (edge_cases: 同一完了ジョブへの watchdog に
+#      よる二重通知).
 #   4. Only on a **later** pass, once `notified=true` is already on disk, is
 #      the job's `workspace_host_dir` clone removed and its manifest deleted.
 #      Splitting notify and cleanup into separate passes means a cleanup
 #      failure (partial `rm`, killed mid-run) can never cause a duplicate
-#      Slack notification on retry — the manifest survives with
-#      `notified=true` until cleanup actually succeeds.
+#      notification on retry — the manifest survives with `notified=true`
+#      until cleanup actually succeeds.
 #
 # Env overrides (test/alt-deployment hooks, mirrors manifest.py conventions):
 #   HERMES_HOME              default ~/.hermes ; jobs/workspaces/claude-state
@@ -40,7 +42,44 @@
 #                             manifest's platform is `slack` and this is
 #                             unset, notify is skipped (logged) and the
 #                             manifest is retried on the next pass rather
-#                             than silently dropped.
+#                             than silently dropped. A Slack API-level
+#                             failure (HTTP 200 + body `.ok == false`, e.g.
+#                             channel_not_found) is treated the same way —
+#                             `notify_slack` inspects the response body, not
+#                             just the curl exit code.
+#   DISCORD_BOT_TOKEN         Discord bot token used to notify manifests
+#                             whose platform is `discord`, via the Discord
+#                             REST API (`POST /channels/<id>/messages`,
+#                             `Authorization: Bot <token>`) — the same
+#                             credential the native gateway adapter
+#                             (`gateway/platforms/discord.py`) authenticates
+#                             with. If unset, notify is skipped (logged) and
+#                             retried next pass.
+#   HERMES_WATCHDOG_ABSENT_GRACE_SECONDS
+#                             Minimum age (manifest.created_at) a
+#                             pending/running job must reach before an empty
+#                             `claude agents --json --all` listing is even
+#                             considered as a signal of completion — guards
+#                             against the registration lag right after
+#                             dispatch. Default 60.
+#   HERMES_WATCHDOG_ABSENT_CONFIRM_COUNT
+#                             Number of *consecutive* reconcile passes a
+#                             job's bg_job_id must be missing from the
+#                             listing (after the grace period) before it is
+#                             declared `done`. A single transient empty
+#                             listing is not enough — guards a still-running
+#                             job (and its bind-mounted workspace_host_dir,
+#                             which cleanup_job later `rm -rf`s) against a
+#                             false-positive done verdict. Default 3.
+#
+# notify dispatch (manifest.platform):
+#   `notify_slack` and `notify_discord` are the only real network sends;
+#   any other/unknown platform has no outbound adapter wired into this
+#   script (e.g. Google Chat currently only has an *inbound* webhook route
+#   — see hermes/README.md フェーズE — no send credential exists here) and
+#   is logged + left `notified=false` for retry rather than being routed
+#   through notify_slack, which would silently "succeed" against the wrong
+#   channel namespace.
 set -euo pipefail
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
@@ -75,13 +114,27 @@ acquire_lock_or_exit() {
   fi
 }
 
+ABSENT_GRACE_SECONDS="${HERMES_WATCHDOG_ABSENT_GRACE_SECONDS:-60}"
+ABSENT_CONFIRM_COUNT="${HERMES_WATCHDOG_ABSENT_CONFIRM_COUNT:-3}"
+
 # Reconcile a still-pending/running job's bg_job_id against `claude agents`.
 # Echoes one of: running | done | failed
 # `claude agents --json --all --cwd <workspace_host_dir>` is invoked with the
 # job's own CLAUDE_CONFIG_DIR (host path), exactly the pattern verified GO in
 # claudedocs/hermes-phaseB-execution-model-decision.md (AC-3).
+#
+# When bg_job_id is missing from the listing entirely, that is NOT taken as
+# an immediate `done` verdict: a job just dispatched can hit a registration
+# lag before `claude agents` lists it, and a transient/empty listing can
+# occur for other reasons too. A false-positive `done` here flows straight
+# into notify + (next pass) `cleanup_job`'s `rm -rf` of a still-running job's
+# bind-mounted workspace_host_dir, so we require both (a) the manifest is
+# older than ABSENT_GRACE_SECONDS and (b) the absence has now been observed
+# on ABSENT_CONFIRM_COUNT *consecutive* passes (persisted on the manifest as
+# `bg_absent_streak`) before declaring `done`. Any pass where the job IS
+# listed resets the streak to 0.
 poll_bg_status() {
-  local claude_config_host_dir="$1" workspace_host_dir="$2" bg_job_id="$3"
+  local manifest_path="$1" claude_config_host_dir="$2" workspace_host_dir="$3" bg_job_id="$4" created_at="$5"
   local json
   if ! json=$(CLAUDE_CONFIG_DIR="$claude_config_host_dir" claude agents --json --all --cwd "$workspace_host_dir" 2>/dev/null); then
     log "claude agents --json failed for bg_job_id=$bg_job_id — treating as still running"
@@ -94,9 +147,36 @@ poll_bg_status() {
   ' 2>/dev/null || true)
 
   if [ -z "$entry_status" ]; then
-    # Session no longer listed at all (even with --all) -> it has exited.
+    # Session not (yet, or no longer) listed. Require grace + N consecutive
+    # absences before treating it as exited — see function docstring.
+    # created_at is a float (Python time.time()); compute integer age with
+    # awk rather than bash arithmetic (no float support) or `awk systime()`
+    # (gawk-only, absent from macOS's default BSD awk).
+    local now age
+    now=$(date +%s)
+    age=$(awk -v now="$now" -v created="$created_at" 'BEGIN { printf "%d", now - created }' 2>/dev/null || echo 0)
+    if [ -z "$age" ] || [ "$age" -lt "$ABSENT_GRACE_SECONDS" ]; then
+      log "bg_job_id=$bg_job_id not listed but manifest age (${age}s) < ${ABSENT_GRACE_SECONDS}s grace — treating as still running"
+      echo "running"
+      return
+    fi
+    local streak
+    streak=$(jq -r '.bg_absent_streak // 0' "$manifest_path" 2>/dev/null || echo 0)
+    streak=$((streak + 1))
+    if [ "$streak" -lt "$ABSENT_CONFIRM_COUNT" ]; then
+      set_manifest_field "$manifest_path" "bg_absent_streak" "$streak"
+      log "bg_job_id=$bg_job_id not listed ($streak/$ABSENT_CONFIRM_COUNT consecutive absences) — treating as still running"
+      echo "running"
+      return
+    fi
+    log "bg_job_id=$bg_job_id not listed for $ABSENT_CONFIRM_COUNT consecutive passes past grace — treating as done"
     echo "done"
     return
+  fi
+
+  # Listed again -> reset any prior absence streak.
+  if [ "$(jq -r '.bg_absent_streak // 0' "$manifest_path" 2>/dev/null || echo 0)" != "0" ]; then
+    set_manifest_field "$manifest_path" "bg_absent_streak" "0"
   fi
   case "$entry_status" in
     running | in_progress | pending)
@@ -111,22 +191,83 @@ poll_bg_status() {
   esac
 }
 
+# Slack's chat.postMessage returns HTTP 200 + body `{"ok":false,"error":...}`
+# for API-level failures (e.g. channel_not_found when a non-Slack channel id
+# is handed to it) — `curl -fsS` only checks the HTTP status, so a body-only
+# failure must be inspected explicitly or it is silently treated as success.
 notify_slack() {
   local channel="$1" text="$2"
   if [ -z "${SLACK_BOT_TOKEN:-}" ]; then
     log "SLACK_BOT_TOKEN not set — skipping notify for channel $channel (will retry next pass)"
     return 1
   fi
-  local payload
+  local payload response
   payload=$(jq -n --arg channel "$channel" --arg text "$text" '{channel: $channel, text: $text}')
-  if ! curl -fsS -X POST "https://slack.com/api/chat.postMessage" \
+  if ! response=$(curl -fsS -X POST "https://slack.com/api/chat.postMessage" \
     -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
     -H "Content-Type: application/json; charset=utf-8" \
-    -d "$payload" >/dev/null; then
-    log "Slack notify failed for channel $channel (will retry next pass)"
+    -d "$payload"); then
+    log "Slack notify failed for channel $channel (request error, will retry next pass)"
+    return 1
+  fi
+  if [ "$(printf '%s' "$response" | jq -r '.ok // false' 2>/dev/null)" != "true" ]; then
+    local slack_error
+    slack_error=$(printf '%s' "$response" | jq -r '.error // "unknown"' 2>/dev/null)
+    log "Slack notify rejected for channel $channel (ok:false, error=$slack_error; will retry next pass)"
     return 1
   fi
   return 0
+}
+
+# Discord notify via the bot REST API, using the same DISCORD_BOT_TOKEN the
+# native gateway adapter authenticates with (gateway/platforms/discord.py).
+notify_discord() {
+  local channel="$1" text="$2"
+  if [ -z "${DISCORD_BOT_TOKEN:-}" ]; then
+    log "DISCORD_BOT_TOKEN not set — skipping notify for channel $channel (will retry next pass)"
+    return 1
+  fi
+  local payload response http_status body
+  payload=$(jq -n --arg content "$text" '{content: $content}')
+  if ! response=$(curl -sS -w '\n%{http_code}' -X POST \
+    "https://discord.com/api/v10/channels/${channel}/messages" \
+    -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$payload"); then
+    log "Discord notify failed for channel $channel (request error, will retry next pass)"
+    return 1
+  fi
+  http_status=$(printf '%s' "$response" | tail -n1)
+  body=$(printf '%s' "$response" | sed '$d')
+  case "$http_status" in
+    2??) return 0 ;;
+    *)
+      log "Discord notify failed for channel $channel (HTTP $http_status: $body; will retry next pass)"
+      return 1
+      ;;
+  esac
+}
+
+# Route a manifest's completion notify by platform. Only `slack` and
+# `discord` have a real outbound send wired here — any other/unknown
+# platform (e.g. `google_chat`, which currently only has an *inbound*
+# webhook route with no send credential — see hermes/README.md フェーズE) is
+# logged and left for retry rather than silently routed through
+# notify_slack against the wrong channel namespace (see module docstring).
+notify_dispatch() {
+  local platform="$1" channel="$2" text="$3"
+  case "$platform" in
+    slack)
+      notify_slack "$channel" "$text"
+      ;;
+    discord)
+      notify_discord "$channel" "$text"
+      ;;
+    *)
+      log "no outbound notify adapter wired for platform=$platform (channel=$channel) — skipping (will retry next pass)"
+      return 1
+      ;;
+  esac
 }
 
 # Atomically flip manifest.<field> = <value> (same tmp-file + os.replace
@@ -150,7 +291,7 @@ cleanup_job() {
 
 reconcile_job() {
   local manifest_path="$1"
-  local job_id platform channel repo bg_job_id status notified workspace_host_dir claude_config_host_dir
+  local job_id platform channel repo bg_job_id status notified workspace_host_dir claude_config_host_dir created_at
 
   job_id=$(jq -r '.job_id' "$manifest_path")
   platform=$(jq -r '.platform' "$manifest_path")
@@ -161,6 +302,7 @@ reconcile_job() {
   notified=$(jq -r '.notified' "$manifest_path")
   workspace_host_dir=$(jq -r '.workspace_host_dir' "$manifest_path")
   claude_config_host_dir=$(jq -r '.claude_config_host_dir' "$manifest_path")
+  created_at=$(jq -r '.created_at // 0' "$manifest_path")
 
   if [ "$status" = "pending" ] || [ "$status" = "running" ]; then
     if [ -z "$bg_job_id" ]; then
@@ -168,7 +310,7 @@ reconcile_job() {
       return
     fi
     local polled
-    polled=$(poll_bg_status "$claude_config_host_dir" "$workspace_host_dir" "$bg_job_id")
+    polled=$(poll_bg_status "$manifest_path" "$claude_config_host_dir" "$workspace_host_dir" "$bg_job_id" "$created_at")
     if [ "$polled" = "running" ]; then
       log "job $job_id still running — skipping"
       return
@@ -179,9 +321,9 @@ reconcile_job() {
 
   # status is now terminal (done/failed).
   if [ "$notified" = "false" ]; then
-    if notify_slack "$channel" "hermes job $job_id ($repo) finished: $status"; then
+    if notify_dispatch "$platform" "$channel" "hermes job $job_id ($repo) finished: $status"; then
       set_manifest_field "$manifest_path" "notified" "true"
-      log "job $job_id notified (status=$status)"
+      log "job $job_id notified (status=$status, platform=$platform)"
     fi
     # Cleanup is deliberately deferred to the pass *after* notified=true is
     # durably on disk (see module docstring) — do not fall through here.

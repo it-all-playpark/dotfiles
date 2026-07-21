@@ -83,7 +83,7 @@ def _fake_clone_and_bg(monkeypatch, calls, bg_job_id="bg-job-42"):
 
     def _fake_bg(**kwargs):
         calls.setdefault("bg", []).append(kwargs)
-        return bg_job_id
+        return {"container_id": f"container-{bg_job_id}", "bg_job_id": bg_job_id}
 
     monkeypatch.setattr(dispatch, "_git_clone", _fake_clone)
     monkeypatch.setattr(dispatch, "_docker_run_claude_bg", _fake_bg)
@@ -177,6 +177,11 @@ def test_bound_channel_dispatches_with_correct_host_and_container_paths(
     manifest = manifest_mod.read_manifest(job_id)
     assert manifest["status"] == "running"
     assert manifest["bg_job_id"] == "bg-job-42"
+    # container_id (docker run -d's own stdout) and bg_job_id (the claude
+    # agent job id read from docker logs) are distinct fields — the S5
+    # watchdog reconciles bg_job_id only (PR #117 review).
+    assert manifest["container_id"] == "container-bg-job-42"
+    assert manifest["container_id"] != manifest["bg_job_id"]
     assert manifest["notified"] is False
 
     # host/container paths are correctly derived and never collide

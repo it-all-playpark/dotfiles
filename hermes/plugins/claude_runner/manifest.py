@@ -43,6 +43,7 @@ REQUIRED_FIELDS = (
     "workspace_container_dir",
     "claude_config_host_dir",
     "claude_config_container_dir",
+    "container_id",
     "bg_job_id",
     "status",
     "notified",
@@ -71,13 +72,22 @@ def build_manifest(
     channel: str,
     repo: str,
     origin_url: str,
+    container_id: Optional[str] = None,
     bg_job_id: Optional[str] = None,
     status: str = "pending",
     notified: bool = False,
     created_at: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Build a manifest dict, deriving all four host/container paths from
-    ``job_id`` per the fixed layout documented on this module."""
+    ``job_id`` per the fixed layout documented on this module.
+
+    ``container_id`` (the Docker container id from ``docker run -d``'s own
+    stdout) and ``bg_job_id`` (the claude agent job id printed by the
+    containerized ``claude --bg`` process, read from ``docker logs``) are
+    two distinct identifiers — the S5 watchdog reconciles ``bg_job_id``
+    against ``claude agents --json``, never ``container_id`` (PR #117
+    review: conflating the two made ``poll_bg_status`` never find a match).
+    """
     manifest = {
         "job_id": job_id,
         "platform": platform,
@@ -88,6 +98,7 @@ def build_manifest(
         "workspace_container_dir": f"{WORKSPACE_CONTAINER_ROOT}/{job_id}",
         "claude_config_host_dir": str(CLAUDE_STATE_DIR / job_id),
         "claude_config_container_dir": f"{CLAUDE_CONFIG_CONTAINER_ROOT}/{job_id}",
+        "container_id": container_id,
         "bg_job_id": bg_job_id,
         "status": status,
         "notified": notified,

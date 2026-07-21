@@ -94,7 +94,7 @@ def _fake_clone_and_bg(monkeypatch, calls, bg_job_id="bg-job-42"):
 
     def _fake_bg(**kwargs):
         calls.setdefault("bg", []).append(kwargs)
-        return bg_job_id
+        return {"container_id": f"container-{bg_job_id}", "bg_job_id": bg_job_id}
 
     monkeypatch.setattr(dispatch, "_git_clone", _fake_clone)
     monkeypatch.setattr(dispatch, "_docker_run_claude_bg", _fake_bg)

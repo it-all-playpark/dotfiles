@@ -173,12 +173,21 @@ foreground で debug したい場合は agent を unload してから:
 ## watchdog (S5, AC-4/AC-5)
 
 `~/.hermes/jobs/*.json` (claude_runner が dispatch_job で書く manifest) を定期 reconcile し、
-完了したジョブを Slack 通知した上で clone/manifest を後片付けする常駐タスク。
+完了したジョブを `manifest.platform` に応じた経路で通知した上で clone/manifest を後片付けする
+常駐タスク。
 
 - **多重run排除**: 起動直後に `flock -xn` で `~/.hermes/watchdog.lock` を排他取得する。
   取得できなければ即 `exit 0`(他 run が処理中)。macOS には GNU flock(1) が同梱されないため
   `pkgs.flock`(discoteq/flock, cross-platform 実装) を home-manager package として追加済み。
-- **通知の二重送信防止**: ジョブが `done`/`failed` に達した最初のパスで Slack 通知 → 通知成功後に
+- **通知は platform 別に分岐 (`notify_dispatch`)**: `slack` は `chat.postMessage`
+  (`SLACK_BOT_TOKEN`)、`discord` は Discord bot REST API
+  (`POST /channels/<id>/messages`, `DISCORD_BOT_TOKEN`) — native gateway adapter
+  (`gateway/platforms/discord.py`) と同じ credential を使う。それ以外(例: `google_chat` —
+  現状は inbound webhook 経路のみで送信用 credential が無い)は adapter 未実装として
+  `notified=false` のまま次パスへ retry する。**非 Slack channel を `notify_slack` に丸投げしない**
+  ——Slack API は未知 channel でも HTTP 200 + `{"ok":false,"error":"channel_not_found"}` を返すため、
+  `notify_slack` は `curl` の終了コードだけでなくレスポンス body の `.ok` も検査する。
+- **通知の二重送信防止**: ジョブが `done`/`failed` に達した最初のパスで通知 → 通知成功後に
   `manifest.notified` を atomic に `true` へ更新する。cleanup はこのパスでは行わず、
   **次のパスで `notified=true` を確認してから** `workspace_host_dir` の clone と manifest を削除する。
   通知と cleanup を別パスに分離しているため、cleanup が途中で失敗しても再送信は起きない。
@@ -186,6 +195,12 @@ foreground で debug したい場合は agent を unload してから:
   `CLAUDE_CONFIG_DIR=<claude_config_host_dir> claude agents --json --all --cwd <workspace_host_dir>`
   で `bg_job_id` を照合する(host 非root からの `CLAUDE_CONFIG_DIR` 読み取りは
   `claudedocs/hermes-phaseB-execution-model-decision.md` の AC-3 実機確認と同じ経路)。
+  `bg_job_id` が一覧に無い場合は即 `done` 扱いにはせず、`manifest.created_at` からの猶予
+  (`HERMES_WATCHDOG_ABSENT_GRACE_SECONDS`、既定60秒)を過ぎてから、かつ連続
+  `HERMES_WATCHDOG_ABSENT_CONFIRM_COUNT` 回(既定3回、manifest の `bg_absent_streak` に永続化)
+  不在が続いて初めて `done` と判定する — dispatch 直後の登録遅延や一時的な空応答一発で、
+  稼働中ジョブの bind-mount された `workspace_host_dir` が誤って `cleanup_job` に `rm -rf`
+  されるのを防ぐため。
 
 ### 起動 (launchd)
 

@@ -22,7 +22,17 @@ Processing order, per plan S2:
    host path here breaks dispatch because the path doesn't exist inside the
    container (edge_cases: host-vs-container path mixup). ``_docker_run_
    claude_bg`` asserts this explicitly.
-5. Reconcile the returned bg job id into ``manifest.bg_job_id`` and flip
+   ``docker run -d``'s own stdout is the Docker **container id**, never the
+   claude agent job id — the id the S5 watchdog needs to compare against
+   ``claude agents --json``'s ``.id``/``.sessionId`` only ever appears in
+   the *containerized process's* stdout, i.e. ``docker logs <container_id>``
+   (PR #117 review: storing the container id as ``bg_job_id`` makes
+   ``poll_bg_status`` never find a match and misreport ``done`` on its very
+   first pass, prematurely ``rm -rf``-ing a still-running job's workspace).
+   ``_docker_run_claude_bg`` therefore keeps the two identifiers distinct
+   and returns both.
+5. Reconcile the returned ``container_id``/``bg_job_id`` pair into the
+   manifest (``manifest.container_id``, ``manifest.bg_job_id``) and flip
    ``status`` to ``running`` (or ``failed`` if steps 3/4 raised).
 
 ``_git_clone`` and ``_docker_run_claude_bg`` are the two "real world" seams
@@ -50,6 +60,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -79,6 +90,16 @@ DEFAULT_FORWARD_ENV = (
 # claude_runner.max_concurrent_jobs fallback when config.yaml doesn't set it
 # (or sets it to something non-positive) — see _load_claude_runner_config.
 DEFAULT_MAX_CONCURRENT_JOBS = 3
+
+# How long / how often to poll `docker logs <container_id>` for the real
+# `claude --bg` job id after `docker run -d` returns (its stdout is only
+# the *container* id — see `_docker_run_claude_bg`). `claude --bg` prints
+# the job id essentially immediately after the process starts, well before
+# a first-time image pull would even matter (the image is expected to
+# already be present locally), so this is a short poll for process-startup
+# jitter, not a job-completion wait.
+BG_JOB_ID_LOG_POLL_TIMEOUT_SECONDS = 30.0
+BG_JOB_ID_LOG_POLL_INTERVAL_SECONDS = 0.5
 
 # Manifest statuses that occupy a concurrency slot.
 ACTIVE_JOB_STATUSES = ("pending", "running")
@@ -217,6 +238,43 @@ def _git_clone(origin_url: str, host_dir: Path) -> None:
     )
 
 
+def _read_bg_job_id_from_container_logs(
+    container_id: str,
+    *,
+    timeout: float = BG_JOB_ID_LOG_POLL_TIMEOUT_SECONDS,
+    interval: float = BG_JOB_ID_LOG_POLL_INTERVAL_SECONDS,
+) -> str:
+    """Poll ``docker logs <container_id>`` for the claude agent job id that
+    ``claude --bg`` prints to *its own* stdout (i.e. the containerized
+    process's stdout, captured by the Docker daemon into the container's
+    log — never ``docker run -d``'s own stdout, which is only ever the
+    container id; see ``_docker_run_claude_bg``).
+
+    A short poll (default 30s / 0.5s interval) absorbs the small delay
+    between the container starting and ``claude --bg`` actually printing —
+    ``docker run -d`` returns as soon as the container is created, which can
+    be before the containerized process has produced any output yet.
+    """
+    deadline = time.monotonic() + timeout
+    last_logs = ""
+    while True:
+        logs = subprocess.run(
+            ["docker", "logs", container_id],
+            capture_output=True,
+            text=True,
+        )
+        last_logs = (logs.stdout or "") + (logs.stderr or "")
+        bg_job_id = last_logs.strip().splitlines()[0].strip() if last_logs.strip() else ""
+        if bg_job_id:
+            return bg_job_id
+        if time.monotonic() >= deadline:
+            raise DispatchError(
+                f"claude --bg produced no bg job id in `docker logs {container_id}` "
+                f"within {timeout}s; last logs: {last_logs[-500:]!r}"
+            )
+        time.sleep(interval)
+
+
 def _docker_run_claude_bg(
     *,
     job_id: str,
@@ -227,9 +285,20 @@ def _docker_run_claude_bg(
     prompt: str,
     docker_image: str,
     forward_env: tuple,
-) -> str:
-    """Launch ``claude --bg`` inside a per-job container and return the bg
-    job id printed on stdout.
+) -> Dict[str, str]:
+    """Launch ``claude --bg`` inside a per-job container and return
+    ``{"container_id": ..., "bg_job_id": ...}``.
+
+    These are two **distinct** identifiers that must never be conflated
+    (PR #117 review): ``docker run -d``'s own stdout is the Docker
+    container id, assigned by the Docker daemon and never seen by
+    ``claude agents --json`` — it is *not* the claude agent job id the S5
+    watchdog needs for reconcile. The real job id only ever appears in the
+    containerized ``claude --bg`` process's own stdout, retrieved via
+    ``docker logs`` (``_read_bg_job_id_from_container_logs``). Storing the
+    container id as ``bg_job_id`` (the pre-fix behavior) means
+    ``poll_bg_status`` can never find a match in ``claude agents --json``
+    and would misreport the job as immediately ``done``.
 
     ``--cwd`` and ``CLAUDE_CONFIG_DIR`` MUST be container paths — the
     asserts below make a host/container mixup (edge_cases) loud instead of
@@ -272,10 +341,12 @@ def _docker_run_claude_bg(
     ]
 
     result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-    bg_job_id = result.stdout.strip()
-    if not bg_job_id:
-        raise DispatchError("claude --bg produced no bg job id on stdout")
-    return bg_job_id
+    container_id = result.stdout.strip()
+    if not container_id:
+        raise DispatchError("docker run -d produced no container id on stdout")
+
+    bg_job_id = _read_bg_job_id_from_container_logs(container_id)
+    return {"container_id": container_id, "bg_job_id": bg_job_id}
 
 
 def _dispatch_one(
@@ -289,7 +360,7 @@ def _dispatch_one(
 
     try:
         _git_clone(manifest["origin_url"], Path(manifest["workspace_host_dir"]))
-        bg_job_id = _docker_run_claude_bg(
+        launch_result = _docker_run_claude_bg(
             job_id=job_id,
             workspace_host_dir=manifest["workspace_host_dir"],
             workspace_container_dir=manifest["workspace_container_dir"],
@@ -304,6 +375,9 @@ def _dispatch_one(
         manifest_mod.write_manifest(manifest)
         raise DispatchError(f"dispatch failed for {repo} (job {job_id}): {exc}") from exc
 
+    container_id = launch_result["container_id"]
+    bg_job_id = launch_result["bg_job_id"]
+    manifest["container_id"] = container_id
     manifest["bg_job_id"] = bg_job_id
     manifest["status"] = "running"
     manifest_mod.write_manifest(manifest)
