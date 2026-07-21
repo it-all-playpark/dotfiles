@@ -23,6 +23,10 @@
 #      failure (partial `rm`, killed mid-run) can never cause a duplicate
 #      notification on retry — the manifest survives with `notified=true`
 #      until cleanup actually succeeds.
+#   5. Reaper: a `pending`/`running` manifest older than
+#      `HERMES_WATCHDOG_REAP_TIMEOUT_SECONDS` (default 90 minutes) is
+#      reclaimed instead of being skipped/leaked forever — see that env var
+#      below for the two distinct stuck-forever cases it closes.
 #
 # Env overrides (test/alt-deployment hooks, mirrors manifest.py conventions):
 #   HERMES_HOME              default ~/.hermes ; jobs/workspaces/claude-state
@@ -71,6 +75,40 @@
 #                             job (and its bind-mounted workspace_host_dir,
 #                             which cleanup_job later `rm -rf`s) against a
 #                             false-positive done verdict. Default 3.
+#   HERMES_WATCHDOG_REAP_TIMEOUT_SECONDS
+#                             Age (manifest.created_at) after which a stuck
+#                             job is reaped rather than skipped/leaked
+#                             forever (PR #117 review: a `pending` job whose
+#                             dispatch never got as far as writing
+#                             `bg_job_id` was skipped by reconcile_job on
+#                             every single pass with no way out, silently
+#                             occupying a concurrency slot forever; a
+#                             terminal job on a platform with no outbound
+#                             notify adapter — e.g. `google_chat`, see
+#                             notify dispatch below — stayed
+#                             `notified=false` forever and so never reached
+#                             `cleanup_job`, leaking its `workspace_host_dir`
+#                             clone permanently). Once a `pending`/`running`
+#                             job's age passes this threshold:
+#                               - no `bg_job_id` yet → reaped: `status` is
+#                                 forced to `failed` (dispatch never
+#                                 registered) so it flows into the normal
+#                                 notify+cleanup path instead of skipping
+#                                 forever.
+#                               - `bg_job_id` set (still actively polled via
+#                                 `poll_bg_status`) → NOT force-terminated
+#                                 (an actually-running job is left running);
+#                                 a timeout warning is logged each pass
+#                                 instead so a stuck-for-hours job is visible
+#                                 in `watchdog.{out,err}.log`.
+#                             Separately, a terminal job whose platform has
+#                             no outbound notify adapter (`has_notify_adapter`
+#                             false) that has stayed `notified=false` past
+#                             this same threshold is reaped straight to
+#                             `cleanup_job` *without* ever having notified —
+#                             the only way to reclaim its slot/workspace,
+#                             since notify for that platform can never
+#                             succeed. Default 5400 (90 minutes).
 #
 # notify dispatch (manifest.platform):
 #   `notify_slack` and `notify_discord` are the only real network sends;
@@ -116,6 +154,17 @@ acquire_lock_or_exit() {
 
 ABSENT_GRACE_SECONDS="${HERMES_WATCHDOG_ABSENT_GRACE_SECONDS:-60}"
 ABSENT_CONFIRM_COUNT="${HERMES_WATCHDOG_ABSENT_CONFIRM_COUNT:-3}"
+REAP_TIMEOUT_SECONDS="${HERMES_WATCHDOG_REAP_TIMEOUT_SECONDS:-5400}"
+
+# manifest.created_at is a float (Python time.time()); compute integer age
+# with awk rather than bash arithmetic (no float support) or `awk systime()`
+# (gawk-only, absent from macOS's default BSD awk). Echoes 0 on any failure
+# so callers can safely compare it as an integer.
+job_age_seconds() {
+  local created_at="$1" now
+  now=$(date +%s)
+  awk -v now="$now" -v created="$created_at" 'BEGIN { printf "%d", now - created }' 2>/dev/null || echo 0
+}
 
 # Reconcile a still-pending/running job's bg_job_id against `claude agents`.
 # Echoes one of: running | done | failed
@@ -149,12 +198,8 @@ poll_bg_status() {
   if [ -z "$entry_status" ]; then
     # Session not (yet, or no longer) listed. Require grace + N consecutive
     # absences before treating it as exited — see function docstring.
-    # created_at is a float (Python time.time()); compute integer age with
-    # awk rather than bash arithmetic (no float support) or `awk systime()`
-    # (gawk-only, absent from macOS's default BSD awk).
-    local now age
-    now=$(date +%s)
-    age=$(awk -v now="$now" -v created="$created_at" 'BEGIN { printf "%d", now - created }' 2>/dev/null || echo 0)
+    local age
+    age=$(job_age_seconds "$created_at")
     if [ -z "$age" ] || [ "$age" -lt "$ABSENT_GRACE_SECONDS" ]; then
       log "bg_job_id=$bg_job_id not listed but manifest age (${age}s) < ${ABSENT_GRACE_SECONDS}s grace — treating as still running"
       echo "running"
@@ -248,6 +293,20 @@ notify_discord() {
   esac
 }
 
+# Whether `notify_dispatch` has a real outbound send wired for this
+# platform. Used both by `notify_dispatch` itself and by `reconcile_job`'s
+# reap fallback: a platform with no adapter (e.g. `google_chat`) can never
+# succeed a notify, so `notified` can never flip `true` on its own — without
+# an explicit reap that stuck job would leak its workspace/manifest forever
+# (PR #117 review, see HERMES_WATCHDOG_REAP_TIMEOUT_SECONDS in module
+# docstring).
+has_notify_adapter() {
+  case "$1" in
+    slack | discord) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Route a manifest's completion notify by platform. Only `slack` and
 # `discord` have a real outbound send wired here — any other/unknown
 # platform (e.g. `google_chat`, which currently only has an *inbound*
@@ -256,16 +315,16 @@ notify_discord() {
 # notify_slack against the wrong channel namespace (see module docstring).
 notify_dispatch() {
   local platform="$1" channel="$2" text="$3"
+  if ! has_notify_adapter "$platform"; then
+    log "no outbound notify adapter wired for platform=$platform (channel=$channel) — skipping (will retry next pass)"
+    return 1
+  fi
   case "$platform" in
     slack)
       notify_slack "$channel" "$text"
       ;;
     discord)
       notify_discord "$channel" "$text"
-      ;;
-    *)
-      log "no outbound notify adapter wired for platform=$platform (channel=$channel) — skipping (will retry next pass)"
-      return 1
       ;;
   esac
 }
@@ -305,18 +364,41 @@ reconcile_job() {
   created_at=$(jq -r '.created_at // 0' "$manifest_path")
 
   if [ "$status" = "pending" ] || [ "$status" = "running" ]; then
+    local age
+    age=$(job_age_seconds "$created_at")
+
     if [ -z "$bg_job_id" ]; then
-      log "job $job_id ($status) has no bg_job_id yet — skipping"
-      return
+      if [ "$age" -ge "$REAP_TIMEOUT_SECONDS" ]; then
+        # Dispatch never got as far as writing bg_job_id (e.g. the
+        # dispatching process was interrupted right after `reserve`) — this
+        # job can never progress on its own and would otherwise be skipped
+        # on every single pass forever, permanently occupying a
+        # max_concurrent_jobs slot (PR #117 review). Reap it: force to
+        # `failed` and fall through into the normal notify+cleanup path
+        # below instead of returning early.
+        log "job $job_id ($status) never received a bg_job_id and exceeded ${REAP_TIMEOUT_SECONDS}s (age=${age}s) — reaping as failed (dispatch timeout)"
+        status="failed"
+        set_manifest_field "$manifest_path" "status" "\"failed\""
+      else
+        log "job $job_id ($status) has no bg_job_id yet — skipping"
+        return
+      fi
+    else
+      if [ "$age" -ge "$REAP_TIMEOUT_SECONDS" ]; then
+        # An actually-dispatched job is left running — poll_bg_status is
+        # still the source of truth for its real state — but a job stuck
+        # for hours should be visible rather than silently polled forever.
+        log "job $job_id ($status) has been running for ${age}s, past the ${REAP_TIMEOUT_SECONDS}s timeout threshold (bg_job_id=$bg_job_id) — timeout warning"
+      fi
+      local polled
+      polled=$(poll_bg_status "$manifest_path" "$claude_config_host_dir" "$workspace_host_dir" "$bg_job_id" "$created_at")
+      if [ "$polled" = "running" ]; then
+        log "job $job_id still running — skipping"
+        return
+      fi
+      status="$polled"
+      set_manifest_field "$manifest_path" "status" "\"$status\""
     fi
-    local polled
-    polled=$(poll_bg_status "$manifest_path" "$claude_config_host_dir" "$workspace_host_dir" "$bg_job_id" "$created_at")
-    if [ "$polled" = "running" ]; then
-      log "job $job_id still running — skipping"
-      return
-    fi
-    status="$polled"
-    set_manifest_field "$manifest_path" "status" "\"$status\""
   fi
 
   # status is now terminal (done/failed).
@@ -324,9 +406,23 @@ reconcile_job() {
     if notify_dispatch "$platform" "$channel" "hermes job $job_id ($repo) finished: $status"; then
       set_manifest_field "$manifest_path" "notified" "true"
       log "job $job_id notified (status=$status, platform=$platform)"
+    elif ! has_notify_adapter "$platform"; then
+      # This platform can never succeed a notify (no outbound adapter, e.g.
+      # google_chat) — `notified` would stay `false` forever, so cleanup_job
+      # below would never run and workspace_host_dir/manifest would leak
+      # permanently (PR #117 review). Once stuck this long, reclaim anyway:
+      # accept the loss of the notify guarantee for this one job rather than
+      # leak its slot/workspace forever.
+      local age
+      age=$(job_age_seconds "$created_at")
+      if [ "$age" -ge "$REAP_TIMEOUT_SECONDS" ]; then
+        log "job $job_id (platform=$platform) has no outbound notify adapter and stayed unnotified for ${age}s past the ${REAP_TIMEOUT_SECONDS}s threshold — reaping (cleanup without notify) to avoid a permanent leak"
+        cleanup_job "$manifest_path" "$workspace_host_dir" "$job_id"
+      fi
     fi
     # Cleanup is deliberately deferred to the pass *after* notified=true is
-    # durably on disk (see module docstring) — do not fall through here.
+    # durably on disk (see module docstring) — do not fall through here,
+    # except via the reap path above.
     return
   fi
 

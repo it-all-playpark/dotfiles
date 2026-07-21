@@ -201,6 +201,18 @@ foreground で debug したい場合は agent を unload してから:
   不在が続いて初めて `done` と判定する — dispatch 直後の登録遅延や一時的な空応答一発で、
   稼働中ジョブの bind-mount された `workspace_host_dir` が誤って `cleanup_job` に `rm -rf`
   されるのを防ぐため。
+- **reaper / timeout 警告** (`HERMES_WATCHDOG_REAP_TIMEOUT_SECONDS`、既定 5400 秒 = 90 分):
+  `manifest.created_at` からの経過時間がこの閾値を超えた `pending`/`running` ジョブを
+  回収する。放置すると永久に詰まる2ケースに対応:
+  - `bg_job_id` が一度も書かれないまま(dispatch が `reserve` 直後に中断された等)閾値超過 →
+    `status` を `failed` に強制し、通常の notify+cleanup パスへ流す(それまでは毎パス
+    `has no bg_job_id yet — skipping` で永久 skip し `max_concurrent_jobs` の枠を占有し続けた)。
+  - `bg_job_id` があり実行中と判定され続ける場合は強制終了せず、閾値超過を毎パス
+    warning ログするのみ(`poll_bg_status` による通常の reconcile は継続)。
+  - 別枠として、outbound notify adapter が無い platform(例: `google_chat` — inbound webhook
+    のみで送信 credential が無い)の terminal ジョブが `notified=false` のまま閾値を超えた場合、
+    通知なしで `cleanup_job` する — この platform では notify が原理的に成功し得ないため、
+    reap しない限り `workspace_host_dir`/manifest が恒久的にリークする。
 
 ### 起動 (launchd)
 
