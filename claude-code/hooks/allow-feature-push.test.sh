@@ -115,6 +115,18 @@ run_case "bare git push on feature repo" 'git push' "allow" "$TMP_FEATURE_REPO"
 echo "[Undetectable destination → ask]"
 run_case "bare git push outside git repo" 'git push' "ask" "$TMP_NOGIT_DIR"
 
+echo "[Whitespace-normalized matching — protected → deny]"
+run_case "double space between git and push" 'git  push origin main' "deny"
+run_case "double space plus explicit feature refspec" 'git  push origin feature/x' "allow"
+run_case "tab between git and push" "$(printf 'git\tpush origin main')" "deny"
+
+echo "[Bare symbolic ref refspec (HEAD/@) — resolved to current branch]"
+run_case "origin HEAD on main repo (resolves to main)" 'git push origin HEAD' "deny" "$TMP_MAIN_REPO"
+run_case "origin HEAD on feature repo (resolves to feature/x)" 'git push origin HEAD' "allow" "$TMP_FEATURE_REPO"
+run_case "origin @ on main repo (resolves to main)" 'git push origin @' "deny" "$TMP_MAIN_REPO"
+run_case "origin @ on feature repo (resolves to feature/x)" 'git push origin @' "allow" "$TMP_FEATURE_REPO"
+run_case "force push +HEAD on main repo (resolves to main)" 'git push origin +HEAD' "deny" "$TMP_MAIN_REPO"
+
 echo "[Non-push commands → no hook output]"
 run_case "git status" 'git status' "noop"
 run_case "git push-something (not a real push)" 'echo not-a-push' "noop"

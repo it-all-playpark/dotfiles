@@ -10,6 +10,8 @@
 #   git push origin main             → main
 #   git push origin feature/x        → feature/x
 #   git push origin HEAD:refs/heads/production → production
+#   git push origin HEAD             → 現在ブランチへ解決してから判定（bare symbolic ref）
+#   git push origin @                → 同上（'@' は HEAD の別名）
 #   git push origin +main:main       → main（強制 push の '+' を除去）
 #   git push origin feature/x main   → 複数 refspec を全て走査（1つでも保護ブランチなら deny）
 #   git push --all origin            → 宛先を列挙できないため ask
@@ -18,8 +20,14 @@
 INPUT=$(cat)
 CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-# git push 系コマンドのみ対象
-case "$CMD" in
+# git push 系コマンドのみ対象。
+# 判定前に空白を正規化する — "git  push origin main"（連続空白/タブ）は
+# 素の "git push"* 前方一致では取りこぼし、container.settings.json の広い
+# Bash allow により保護ブランチ push が deny されず passthrough してしまう
+# ため、read -ra でトークン化してから単一スペース区切りに再結合して判定する。
+read -ra CMD_TOKENS <<<"$CMD"
+NORMALIZED_CMD="${CMD_TOKENS[*]}"
+case "$NORMALIZED_CMD" in
 "git push"*) ;;
 *) exit 0 ;;
 esac
@@ -52,8 +60,11 @@ is_protected() {
   esac
 }
 
-# "git push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）
-REST="${CMD#git push}"
+# "git push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）。
+# 元の $CMD ではなく正規化済み NORMALIZED_CMD から剥がす — 元の $CMD のまま
+# だと連続空白のケースで "git push" prefix が一致せず REST が丸ごと残り、
+# 後続の TOKENS/ARGS 抽出（remote 名/refspec の位置）がずれてしまうため。
+REST="${NORMALIZED_CMD#git push}"
 read -ra TOKENS <<<"$REST"
 
 ARGS=()
@@ -119,6 +130,19 @@ for REFSPEC in "${REFSPECS[@]}"; do
 
   if [ -z "$DEST_BRANCH" ]; then
     continue
+  fi
+
+  # bare な symbolic ref（"git push origin HEAD" / "git push origin @"）は
+  # コロン付き refspec を経ないため DEST_BRANCH に 'HEAD'/'@' がそのまま
+  # 残る。is_protected は具体的なブランチ名しか知らないため一致せず allow
+  # してしまう（main checkout 中の "git push origin HEAD" が push 先 main
+  # なのに通ってしまうケース）— 実ブランチへ解決してから判定する。
+  if [ "$DEST_BRANCH" = "HEAD" ] || [ "$DEST_BRANCH" = "@" ]; then
+    RESOLVED_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    if [ -z "$RESOLVED_BRANCH" ] || [ "$RESOLVED_BRANCH" = "HEAD" ]; then
+      ask "push 宛先ブランチを検出できません"
+    fi
+    DEST_BRANCH="$RESOLVED_BRANCH"
   fi
 
   if is_protected "$DEST_BRANCH"; then
