@@ -96,6 +96,17 @@ run_case "HEAD:refs/heads/feature/foo" 'git push origin HEAD:refs/heads/feature/
 run_case "origin fix/bug-123" 'git push origin fix/bug-123' "allow"
 run_case "with -u origin feature/x" 'git push -u origin feature/x' "allow"
 
+echo "[Multiple refspecs — protected among them → deny]"
+run_case "origin feature/x main (second refspec protected)" 'git push origin feature/x main' "deny"
+run_case "origin main feature/x (first refspec protected)" 'git push origin main feature/x' "deny"
+run_case "origin feat:feat dev:dev (colon refspecs, second protected)" 'git push origin feat:feat dev:dev' "deny"
+run_case "origin feature/x fix/y (all non-protected)" 'git push origin feature/x fix/y' "allow"
+
+echo "[--all / --mirror — destination unenumerable → ask]"
+run_case "--all origin" 'git push --all origin' "ask"
+run_case "--mirror origin" 'git push --mirror origin' "ask"
+run_case "origin --all" 'git push origin --all' "ask"
+
 echo "[Fallback to current branch when destination not specified]"
 run_case "bare git push on main repo" 'git push' "deny" "$TMP_MAIN_REPO"
 run_case "git push origin (remote only) on main repo" 'git push origin' "deny" "$TMP_MAIN_REPO"
