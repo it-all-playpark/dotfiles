@@ -241,10 +241,38 @@ bash tests/hermes-phaseB-gate.sh
 
 このシナリオでは、gate script が per-job コンテナ（`hermes-claude-<job_id>`）を dispatch 後に明示 `docker kill` し、`HERMES_WATCHDOG_SKIP_LOCK=1` を付けて `hermes/watchdog.sh` を最大 6 回（間に `sleep 2` を挟む）実行して、manifest が `status=failed` へ reconcile されること（`ac2b_watchdog_reconciles_killed_container_to_failed`）、および watchdog のログに reconcile 行と通知経路実行の文言（`reconciling status to failed (issue #122)` かつ `skipping notify for channel` または `notified (status=failed`）の両方が出力されること（`ac2b_notify_path_exercised`）を検証する。
 
-**オペレーター実測結果（未取得・記入待ち）**:
+**オペレーター実測結果（2026-07-23、docker socket 到達可能な host shell で実行）**: GO。
+
+初回〜3回目の実行では `ac2b_notify_path_exercised` が FAIL していたが、`watchdog.err` の全文を確認したところ `reconciling status to failed (issue #122)` の reconcile ログ自体は毎回正しく出力されており、原因は watchdog.sh ではなく gate script 側にあった。この環境では `SLACK_BOT_TOKEN` が実際に設定されているため `notify_slack` が本物の Slack API 呼び出しを行うが、gate script が使う偽チャンネル `C_PHASEB_GATE` は実在しないため Slack が `ok:false, error=channel_not_found` で reject する。`notify_slack` はこれを `Slack notify rejected for channel ... (ok:false, error=channel_not_found; will retry next pass)` としてログするが、gate script の grep は「token 未設定でスキップ」と「送信成功」の2パターンしか見ておらず、reject パターンを未実装のまま「通知経路が実行されていない」と誤判定していた。`tests/hermes-phaseB-gate.sh` の `NOTIFY_PATTERN` を4パターン（スキップ/送信エラー/reject/成功）すべてを許容するよう修正（commit `5dbd689`）した上で再実行し、GO を確認した。また同じ実行系列の中で、コンテナが `docker kill` より先に自然終了するケースの診断のため `docker inspect`/`docker logs`/`claude agents --json` を出力する診断コードと、FAIL 時に `WORK_DIR`（`watchdog.err` 含む）を保持するデバッグ用の変更（commit `cbc0711`, `a3b97b2`, `7cd499a`）も本 issue の一部として追加している。
+
+最終実行（全項目 PASS）:
 
 ```
-（ここに sandbox 外実行の ac2b_watchdog_reconciles_killed_container_to_failed / ac2b_notify_path_exercised の PASS/FAIL 行を追記する）
+=== hermes-phaseB go/no-go gate (AC-2, AC-3, フェーズB) ===
+  REPO_ROOT: /Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/.claude/worktrees/df-122
+  HERMES_AGENT_ROOT: /Users/naramotoyuuji/.hermes/hermes-agent
+  TARGET_REPO: it-all-playpark/dotfiles
+
+- ac2_dispatch_job_and_capture_manifest
+  PASS: ac2_dispatch_job_and_capture_manifest (invocation succeeded)
+- ac2_dispatch_container_running_before_kill
+  PASS: ac2_dispatch_container_running_before_kill
+- ac2_explicit_kill_of_dispatch_container
+  PASS: ac2_explicit_kill_of_dispatch_container
+- ac2b_watchdog_reconciles_killed_container_to_failed (up to 6 watchdog passes)
+  PASS: ac2b_watchdog_reconciles_killed_container_to_failed
+- ac2b_notify_path_exercised
+  PASS: ac2b_notify_path_exercised
+  AC-2 RESULT: RECONCILED -- per-job container killed -> watchdog
+               reconciled job to failed and notify path was
+               exercised (no auto-retry by design, issue #122).
+- ac3_claude_agents_reads_per_job_config_dir
+  PASS: ac3_claude_agents_reads_per_job_config_dir (uid=502, exit 0, JSON array returned)
+  AC-3 RESULT: GO -- non-root host user (uid=502) read
+               CLAUDE_CONFIG_DIR=/var/folders/ck/f0qvqvbd0fxb20mkgww4mfmc0000gp/T//hermes-phaseB-gate.josOfA/hermes-home/claude-state/job-d597af8b733d via `claude agents`
+               successfully. Record as confirmed in the decision-log.
+
+Results: 6 passed, 0 failed
 ```
 
 ### (4) issue #122 対応後のステータス（まとめテーブル更新）
@@ -255,4 +283,4 @@ bash tests/hermes-phaseB-gate.sh
 | オペレーターへの確実な通知 | **実装済み**（failed 確定後、既存 notify_dispatch/cleanup 経路に合流。gate script の `ac2b_notify_path_exercised` で検証設計） |
 | 自動再試行（コンテナ再起動・ジョブ再投入） | **非対応（運用制約として明記）**。手動でオペレーターが ChatOps コマンドを再実行する運用 |
 | AC-2 の NO-GO ギャップ | 上記実装により **解消**（reconcile + 通知で per-job コンテナ異常終了に対する回復力を確保）。長寿命 per-job コンテナモデルへの移行検討（フォローアップ 3.）は本 issue のスコープ外で別途扱う |
-| AC-2 相当シナリオの実機確認（gate script `ac2b_*`） | 本 implementer セッションでは sandbox 制約により SKIP。オペレーターによる sandbox 外再実行を依頼済み（上記(3)参照、結果は追記待ち） |
+| AC-2 相当シナリオの実機確認（gate script `ac2b_*`） | **実測 GO**（2026-07-23、オペレーターが docker socket 到達可能な host shell で実行、6 passed / 0 failed。上記(3)参照） |
