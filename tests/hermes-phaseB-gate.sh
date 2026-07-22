@@ -83,7 +83,22 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
 fi
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hermes-phaseB-gate.XXXXXX")"
-trap 'rm -rf "${WORK_DIR}"' EXIT
+_cleanup_work_dir() {
+  # Debug aid (issue #122 follow-up): on failure, keep WORK_DIR (watchdog.err,
+  # container_diag.txt, dispatch.err, etc.) around instead of silently
+  # deleting the only evidence of what actually happened.
+  if [ "${FAIL:-0}" -gt 0 ]; then
+    echo "" >&2
+    echo "NOTE: FAIL>0 -- preserving WORK_DIR for debugging: ${WORK_DIR}" >&2
+    if [ -f "${WORK_DIR}/watchdog.err" ]; then
+      echo "--- ${WORK_DIR}/watchdog.err (full contents) ---" >&2
+      cat "${WORK_DIR}/watchdog.err" >&2
+    fi
+  else
+    rm -rf "${WORK_DIR}"
+  fi
+}
+trap _cleanup_work_dir EXIT
 
 HERMES_HOME="${WORK_DIR}/hermes-home"
 mkdir -p "${HERMES_HOME}"
