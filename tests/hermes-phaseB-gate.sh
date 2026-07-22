@@ -154,6 +154,7 @@ PYEOF
 
   if [ -n "${JOB_ID}" ]; then
     CONTAINER_NAME="hermes-claude-${JOB_ID}"
+    MANIFEST_FILE="${HERMES_HOME}/jobs/${JOB_ID}.json"
 
     echo "- ac2_dispatch_container_running_before_kill"
     if docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null | grep -q true; then
@@ -182,14 +183,28 @@ PYEOF
           "${CONTAINER_NAME}" 2>&1 || echo "(inspect failed — container may already be --rm'd)"
         echo "--- docker logs (last 100 lines) ---"
         docker logs --tail 100 "${CONTAINER_NAME}" 2>&1 || echo "(logs unavailable)"
+        echo "--- claude agents --json --all (bg session's own reported status) ---"
+        if [ -f "${MANIFEST_FILE}" ]; then
+          BG_JOB_ID="$(jq -r '.bg_job_id // empty' "${MANIFEST_FILE}" 2>/dev/null || true)"
+          CFG_DIR="$(jq -r '.claude_config_host_dir // empty' "${MANIFEST_FILE}" 2>/dev/null || true)"
+          WS_DIR="$(jq -r '.workspace_host_dir // empty' "${MANIFEST_FILE}" 2>/dev/null || true)"
+          if [ -n "${CFG_DIR}" ] && [ -n "${WS_DIR}" ]; then
+            RAW_JSON="$(CLAUDE_CONFIG_DIR="${CFG_DIR}" claude agents --json --all --cwd "${WS_DIR}" 2>&1 || echo '(claude agents invocation failed)')"
+            echo "bg_job_id=${BG_JOB_ID}"
+            echo "matching entry: $(printf '%s' "${RAW_JSON}" | jq -c --arg id "${BG_JOB_ID}" '[.[] | select((.id // .sessionId // .taskId // .job_id) == $id)] | .[0]' 2>/dev/null || echo '(jq parse failed)')"
+            echo "full listing: ${RAW_JSON}"
+          else
+            echo "(manifest missing claude_config_host_dir/workspace_host_dir)"
+          fi
+        else
+          echo "(manifest ${MANIFEST_FILE} not found yet)"
+        fi
       } >"${DIAG_FILE}" 2>&1
       fail "ac2_explicit_kill_of_dispatch_container" \
         "docker kill ${CONTAINER_NAME} failed (container may have already exited); diagnostics: ${DIAG_FILE}"
       echo "  --- container diagnostics (${DIAG_FILE}) ---"
       cat "${DIAG_FILE}" | sed 's/^/    /'
     fi
-
-    MANIFEST_FILE="${HERMES_HOME}/jobs/${JOB_ID}.json"
 
     echo "- ac2b_watchdog_reconciles_killed_container_to_failed (up to 6 watchdog passes)"
     RECONCILED=false
