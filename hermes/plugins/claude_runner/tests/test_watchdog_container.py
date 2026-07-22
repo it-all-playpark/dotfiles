@@ -114,8 +114,8 @@ def _fake_bin_dir(
     """Build a PATH-prependable dir with fake curl (Slack), claude (bg
     session polling) and docker (container liveness). The fake docker's
     behavior is selected at *runtime* via the ``FAKE_DOCKER_MODE`` env var
-    (alive/exited/no_such/daemon_down) so a single script serves every test
-    case below."""
+    (alive/alive_with_stderr_warning/exited/no_such/daemon_down) so a single
+    script serves every test case below."""
     bin_dir = tmp_path / "fakebin"
     bin_dir.mkdir()
 
@@ -149,6 +149,11 @@ def _fake_bin_dir(
         'mode="${FAKE_DOCKER_MODE:-alive}"\n'
         'case "$mode" in\n'
         "  alive)\n"
+        '    echo "true"\n'
+        "    exit 0\n"
+        "    ;;\n"
+        "  alive_with_stderr_warning)\n"
+        '    echo "WARNING: could not read /etc/docker/config.json" >&2\n'
         '    echo "true"\n'
         "    exit 0\n"
         "    ;;\n"
@@ -259,6 +264,39 @@ def test_container_no_such_object_confirms_dead_after_two_passes_then_failed(
     assert after_pass2["notified"] is True
     calls = curl_log.read_text().splitlines() if curl_log.exists() else []
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# 2b. `docker inspect` succeeds (exit 0) but also writes a warning to stderr
+#    (e.g. a config-file parse warning) -- stdout/stderr must be captured
+#    separately so the warning text never gets mixed into the "true"/"false"
+#    comparison. A running container must stay `alive` (streak 0), not be
+#    misclassified as `dead` (issue #123 review).
+# ---------------------------------------------------------------------------
+
+
+def test_container_alive_with_stderr_warning_is_not_misdetected_as_dead(tmp_path):
+    manifest = _write_job(status="running", notified=False)
+    curl_log = tmp_path / "curl.log"
+    bin_dir = _fake_bin_dir(
+        tmp_path, curl_log=curl_log, claude_agents_json=_STILL_RUNNING_JSON
+    )
+    env = {"FAKE_DOCKER_MODE": "alive_with_stderr_warning"}
+
+    _run_watchdog(tmp_path, bin_dir=bin_dir, extra_env=env)
+    after_pass1 = manifest_mod.read_manifest(manifest["job_id"])
+    assert after_pass1["status"] == "running"
+    assert after_pass1.get("container_dead_streak", 0) == 0
+
+    # A second consecutive pass must not accumulate a dead streak either --
+    # the previous bug's persistent stderr warning would have kept forcing
+    # "dead" on every pass, eventually flipping the job to failed.
+    _run_watchdog(tmp_path, bin_dir=bin_dir, extra_env=env)
+    after_pass2 = manifest_mod.read_manifest(manifest["job_id"])
+    assert after_pass2["status"] == "running"
+    assert after_pass2.get("container_dead_streak", 0) == 0
+    calls = curl_log.read_text().splitlines() if curl_log.exists() else []
+    assert calls == []
 
 
 # ---------------------------------------------------------------------------

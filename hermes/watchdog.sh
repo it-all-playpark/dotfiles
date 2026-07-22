@@ -292,14 +292,27 @@ poll_bg_status() {
 #     which is why the CONTAINER_DEAD_CONFIRM_COUNT streak — not a single
 #     observation — is what actually forces `failed`, see reconcile_job).
 #   - anything else (daemon unreachable, permission error, etc.) -> unknown.
+#
+# stdout and stderr are captured separately (never `2>&1`): `docker inspect`
+# can exit 0 while still writing warnings to stderr (e.g. config-file parse
+# warnings), which would otherwise land in `out` ahead of the `true`/`false`
+# line and make the `[ "$out" = "true" ]` comparison fail for a container
+# that is actually still running -- misclassifying it as `dead`. On the
+# `dead`-streak path (CONTAINER_DEAD_CONFIRM_COUNT consecutive `dead`
+# passes) that would eventually flip a live job to `failed`, trigger the
+# notify path, and let `cleanup_job` `rm -rf` its still-in-use workspace.
+# stderr is only ever consulted on a non-zero exit, to match it against
+# "no such object".
 poll_container_state() {
   local container_id="$1"
   if ! command -v docker >/dev/null 2>&1; then
     echo "unknown"
     return
   fi
-  local out
-  if out=$(docker inspect -f '{{.State.Running}}' "$container_id" 2>&1); then
+  local out stderr_file
+  stderr_file=$(mktemp)
+  if out=$(docker inspect -f '{{.State.Running}}' "$container_id" 2>"$stderr_file"); then
+    rm -f -- "$stderr_file"
     if [ "$out" = "true" ]; then
       echo "alive"
     else
@@ -307,9 +320,11 @@ poll_container_state() {
     fi
     return
   fi
-  if printf '%s' "$out" | grep -qi 'no such object'; then
+  if grep -qi 'no such object' "$stderr_file" 2>/dev/null; then
+    rm -f -- "$stderr_file"
     echo "dead"
   else
+    rm -f -- "$stderr_file"
     echo "unknown"
   fi
 }
