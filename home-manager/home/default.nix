@@ -27,7 +27,11 @@ in
     stateVersion = "24.05"; # Please read the comment before changing.
 
     # 共通パッケージ + CLI tool 群 (host モード)
-    packages = packages.commonPackages ++ cliPackages;
+    # pkgs.flock (discoteq/flock, cross-platform flock(1)) — hermes/watchdog.sh
+    # (S5) が多重run排除の flock -xn に使う。BSD/macOS には flock(1) が同梱され
+    # ないため明示的に追加する (Linux util-linux 版と異なり file/fd# どちらの
+    # ロック対象も -xn で扱える)。
+    packages = packages.commonPackages ++ cliPackages ++ [ pkgs.flock ];
 
     file = {
       ".myclirc".source = ./file/.myclirc;
@@ -352,11 +356,22 @@ in
 
       mkdir -p "$HERMES_DIR/plugins" "$HERMES_DIR/logs"
 
+      # claude_runner (S2) — per-job dispatch state dirs. workspaces/claude-state
+      # are bind-mounted into the per-job container (see hermes/config.yaml
+      # docker_volumes); jobs holds the host-side job manifests.
+      mkdir -p "$HERMES_DIR/workspaces" "$HERMES_DIR/jobs" "$HERMES_DIR/claude-state"
+
       # config.yaml — symlink (上書き不可ファイルは事前削除)
       if [ -f "$HERMES_DIR/config.yaml" ] && [ ! -L "$HERMES_DIR/config.yaml" ]; then
         rm "$HERMES_DIR/config.yaml"
       fi
       ln -sf "$DOTFILES_HERMES/config.yaml" "$HERMES_DIR/config.yaml"
+
+      # repo_bindings.yaml — symlink (上書き不可ファイルは事前削除)
+      if [ -f "$HERMES_DIR/repo_bindings.yaml" ] && [ ! -L "$HERMES_DIR/repo_bindings.yaml" ]; then
+        rm "$HERMES_DIR/repo_bindings.yaml"
+      fi
+      ln -sf "$DOTFILES_HERMES/repo_bindings.yaml" "$HERMES_DIR/repo_bindings.yaml"
 
       # hermes-wrapper.sh — symlink。~/.hermes/.env を load してから real hermes を exec する。
       # launchd agent と手動起動の双方で同じ env 注入経路を提供する。
@@ -364,6 +379,13 @@ in
         rm "$HERMES_DIR/hermes-wrapper.sh"
       fi
       ln -sf "$DOTFILES_HERMES/hermes-wrapper.sh" "$HERMES_DIR/hermes-wrapper.sh"
+
+      # watchdog.sh (S5) — symlink。~/.hermes/jobs/*.json を定期 reconcile する
+      # launchd agent (com.playpark.hermes-watchdog) から起動される。
+      if [ -f "$HERMES_DIR/watchdog.sh" ] && [ ! -L "$HERMES_DIR/watchdog.sh" ]; then
+        rm "$HERMES_DIR/watchdog.sh"
+      fi
+      ln -sf "$DOTFILES_HERMES/watchdog.sh" "$HERMES_DIR/watchdog.sh"
 
       # plugins — 各 plugin ディレクトリを symlink
       # NOTE: 末尾 / 付き plugin_dir + 既存 directory symlink に対する ln -sf は、
@@ -445,6 +467,43 @@ in
         StandardOutPath = "${config.home.homeDirectory}/.hermes/logs/gateway.out.log";
         StandardErrorPath = "${config.home.homeDirectory}/.hermes/logs/gateway.err.log";
         ThrottleInterval = 30;
+      };
+    };
+
+    # hermes watchdog (S5, AC-4/AC-5) — ~/.hermes/jobs/*.json を定期 reconcile し、
+    # 完了ジョブを Slack 通知 (notified dedup 付き) した上で workspace clone +
+    # manifest を cleanup する。StartInterval で周期起動 (launchd は毎回新プロセス
+    # を起動するため、多重起動排除は watchdog.sh 冒頭の flock -xn が担う)。
+    #
+    # hermes-gateway と同じ opt-in marker `~/.hermes/.gateway-primary` を再利用する
+    # (同一アカウントを複数 Mac で運用する場合の二重 reconcile/二重通知防止)。
+    hermes-watchdog = {
+      enable = true;
+      config = {
+        Label = "com.playpark.hermes-watchdog";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''
+            MARKER="${config.home.homeDirectory}/.hermes/.gateway-primary"
+            if [ ! -f "$MARKER" ]; then
+              echo "hermes-watchdog: $MARKER not found on this host — skipping (opt-in via 'touch $MARKER')" >&2
+              exit 0
+            fi
+            /bin/wait4path "${config.home.homeDirectory}/.hermes/watchdog.sh" \
+              && exec "${config.home.homeDirectory}/.hermes/watchdog.sh"
+          ''
+        ];
+        EnvironmentVariables = {
+          PATH = "${config.home.homeDirectory}/.local/share/mise/shims:${config.home.homeDirectory}/.nix-profile/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${config.home.homeDirectory}/.local/bin";
+          HOME = config.home.homeDirectory;
+        };
+        WorkingDirectory = "${config.home.homeDirectory}/.hermes";
+        RunAtLoad = true;
+        StartInterval = 120;
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/.hermes/logs/watchdog.out.log";
+        StandardErrorPath = "${config.home.homeDirectory}/.hermes/logs/watchdog.err.log";
       };
     };
   };

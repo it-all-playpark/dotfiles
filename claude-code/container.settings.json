@@ -27,6 +27,7 @@
       "mcp__plugin_telegram_telegram__download_attachment"
     ],
     "deny": [
+      "Bash(gh pr merge:*)",
       "Bash(gh repo delete:*)",
       "Bash(gh repo rename:*)",
       "Bash(gh repo transfer:*)",
