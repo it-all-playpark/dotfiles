@@ -252,16 +252,25 @@ PYEOF
         "manifest ${MANIFEST_FILE} did not reach status=failed after up to 6 watchdog.sh passes; see ${WORK_DIR}/watchdog.err"
     fi
 
+    # notify_dispatch/notify_slack in watchdog.sh logs one of four distinct
+    # outcomes, all of which prove the notify path was actually invoked
+    # (the gate's fake C_PHASEB_GATE Slack channel realistically only ever
+    # hits the "no token" or "rejected" cases, never real success):
+    #   1. SLACK_BOT_TOKEN unset         -> "skipping notify for channel ..."
+    #   2. curl/network error           -> "Slack notify failed for channel ..."
+    #   3. Slack API-level rejection    -> "Slack notify rejected for channel ..."
+    #   4. success                      -> "notified (status=failed ..."
+    NOTIFY_PATTERN='skipping notify for channel|Slack notify failed for channel|Slack notify rejected for channel|notified \(status=failed'
     echo "- ac2b_notify_path_exercised"
     if grep -q 'reconciling status to failed (issue #122)' "${WORK_DIR}/watchdog.err" &&
-      grep -q -e 'skipping notify for channel' -e 'notified (status=failed' "${WORK_DIR}/watchdog.err"; then
+      grep -qE "${NOTIFY_PATTERN}" "${WORK_DIR}/watchdog.err"; then
       pass "ac2b_notify_path_exercised"
     else
       fail "ac2b_notify_path_exercised" \
-        "expected watchdog.err to contain both the 'reconciling status to failed (issue #122)' reconcile line and either a 'skipping notify for channel' or 'notified (status=failed' notify line; see ${WORK_DIR}/watchdog.err"
+        "expected watchdog.err to contain both the 'reconciling status to failed (issue #122)' reconcile line and a notify-path line (skipping/failed/rejected/notified); see ${WORK_DIR}/watchdog.err"
     fi
 
-    if [ "${RECONCILED}" = "true" ] && grep -q -e 'skipping notify for channel' -e 'notified (status=failed' "${WORK_DIR}/watchdog.err"; then
+    if [ "${RECONCILED}" = "true" ] && grep -qE "${NOTIFY_PATTERN}" "${WORK_DIR}/watchdog.err"; then
       echo "  AC-2 RESULT: RECONCILED -- per-job container killed -> watchdog"
       echo "               reconciled job to failed and notify path was"
       echo "               exercised (no auto-retry by design, issue #122)."
