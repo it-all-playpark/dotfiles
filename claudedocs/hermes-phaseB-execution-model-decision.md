@@ -29,9 +29,38 @@
 
 ## AC-2: dispatch container 明示 kill 後のジョブ前進観測
 
-**判定: 実機での `docker kill` 実験は本 implementer セッションでは実行不可（sandbox 制約）。アーキテクチャ分析に基づく暫定 GO、要オペレーター実機再確認。**
+**判定: NO-GO（実機確認済み）— 長寿命 per-job コンテナモデルへの移行が確定要件。**
 
-### 実行不可の事実
+### 実機再確認の結果（オペレーターによる sandbox 外実行）
+
+下記フォローアップ 1 に基づき、オペレーターが実 docker ソケットにアクセス可能な host shell（`USERnoMac-Studio`, sandbox 外）から `tests/hermes-phaseB-gate.sh` を実行し、AC-2 の実測 PASS/FAIL を取得した:
+
+```
+- ac2_dispatch_job_and_capture_manifest
+  PASS: ac2_dispatch_job_and_capture_manifest (invocation succeeded)
+- ac2_dispatch_container_running_before_kill
+  PASS: ac2_dispatch_container_running_before_kill
+- ac2_explicit_kill_of_dispatch_container
+  PASS: ac2_explicit_kill_of_dispatch_container
+- ac2_job_progress_after_kill (poll up to 120s)
+  FAIL: ac2_job_progress_after_kill
+        no manifest status=done and no matching PR within 120s of killing hermes-claude-job-d726d0df7c74
+  AC-2 RESULT: NO-GO -- job did not progress after the dispatch
+               container was killed within the poll window.
+               -> record no-go in the decision-log.
+```
+
+（初回実行時は git clone が SSH 認証エラー(`Permission denied (publickey)`)で失敗し AC-2 全体が FAIL していたが、これは host 側 1Password SSH agent の未セットアップ（1Password 本体アプリ未インストールによる stale agent socket）が原因の環境要因であり、`dispatch.py` 自体の欠陥ではない。1Password アプリの再インストール後、`ssh -T git@github.com` の成功を確認した上で本節の実測を取得した。）
+
+### 実測が下段の分析的暫定判断を覆した理由
+
+`tests/hermes-phaseB-gate.sh` が実際に kill するのは `CONTAINER_NAME="hermes-claude-${JOB_ID}"`——つまり `_docker_run_claude_bg` が `docker run -d` で起動した **per-job コンテナそのもの**であり、それを呼び出す別の「dispatch コンテナ」を kill しているわけではない（そのような別コンテナは現行実装に存在しない）。
+
+下段の分析（旧稿）は「dispatch コンテナ（呼び出し元）」と「per-job コンテナ（`hermes-claude-<job_id>`）」が別物であることを根拠に、前者を kill しても後者は Docker の detach セマンティクスにより生存し続けるはずだ、と論じていた。しかし AC-2 の実験手順が kill する対象は後者（per-job コンテナ自身）であり、そこで `claude --bg` プロセスが実行中のジョブそのものを担っている。per-job コンテナを直接 kill すれば、それを引き継いで処理を再開する仕組み（S5 watchdog）が無い現行実装では、ジョブが進まなくなるのは Docker のセマンティクスとしてむしろ当然の帰結だった。「detach 起動だから親から独立して生き続ける」という分析は、kill 対象の取り違えにより、AC-2 が実際に問うている耐障害性（per-job コンテナ自体が落ちた場合の回復力）とは別の主張になっていた。
+
+実測 NO-GO は、この取り違えを正し、「S5 watchdog（またはそれに相当する reconcile/再起動機構）が実装されるまで、per-job コンテナの異常終了に対してジョブは前進しない」という、より厳しいが正確な結論を確定させた。
+
+### 実行不可だった経緯（本 implementer セッション、参考情報として保持）
 
 本 implementer は共有 worktree 上の sandboxed Bash tool から動作しており、docker デーモンへのソケット接続が権限で拒否される:
 
@@ -49,21 +78,24 @@ NOTE: docker daemon not reachable from this shell -- AC-2 section will
   SKIP: ac2_dispatch_container_kill_and_progress (docker daemon not reachable from this shell)
 ```
 
-CLAUDE.md 運用ルール（sandbox で docker/gh 等が塞がれた場合は `dangerouslyDisableSandbox` で勝手に緩めず、失敗を報告して設定調整を提案する）に従い、本セッションでは sandbox を回避せず、この制約をそのまま報告する。
+CLAUDE.md 運用ルール（sandbox で docker/gh 等が塞がれた場合は `dangerouslyDisableSandbox` で勝手に緩めず、失敗を報告して設定調整を提案する）に従い、本セッションでは sandbox を回避せず、この制約をそのまま報告していた。この制約が、オペレーターによる sandbox 外実機再確認（上記）につながった。
 
-### アーキテクチャ分析による暫定判断
+### アーキテクチャ分析による暫定判断（旧稿・実測により更新済み）
 
 `hermes/plugins/claude_runner/dispatch.py` の `_docker_run_claude_bg` は per-job コンテナを `docker run -d --rm --name hermes-claude-<job_id> ...` として起動している。ここで重要なのは **`-d`（detach）で起動したコンテナは、それを起動したプロセス（= dispatch_job ハンドラを実行している「dispatch コンテナ」または host プロセス）のライフサイクルとは独立に、Docker daemon (`dockerd`) 自身が supervise する**という Docker の基本仕様である。つまり「dispatch コンテナ」（dispatch_job を呼び出した側の実行コンテキスト）を明示 kill しても、それが `docker run -d` で切り離し起動した子コンテナ（`hermes-claude-<job_id>`）の親プロセスではない限り、子コンテナ自体は生き続け、ジョブは前進しうる。
 
 現行の `dispatch.py` の実装は、まさにこの「各ジョブが専用の `docker run -d` コンテナを持つ」モデルを既に実装している（S2 時点で per-job container が確定済み）。したがって:
 
-- **暫定判定: GO** — 「dispatch コンテナ（呼び出し元）を kill しても、`docker run -d` で切り離し済みの per-job コンテナ（`hermes-claude-<job_id>`）はジョブを前進させ得る」という長寿命 per-job コンテナモデルは、現行実装のアーキテクチャ的性質として妥当。
-- ただしこれは **実機での `docker kill` + 前進観測を伴わない、Docker の detach 起動セマンティクスに基づく分析的判断**であり、`test_plan` が要求する「container kill 後に manifest.status が running→done 遷移」を実際に観測したものではない（S5 watchdog 未実装のため、そもそも running→done への自動 reconcile は本 PR の後続フェーズ C (S5) で実装される）。
+- ~~暫定判定: GO~~ → **実測により NO-GO で確定**（上記「実測が下段の分析的暫定判断を覆した理由」参照）。この分析は「dispatch コンテナ」と「per-job コンテナ」を別物として扱っていたが、AC-2 の実験は per-job コンテナ自体を kill 対象としており、分析の前提が実験のシナリオと一致していなかった。
+- 実測前は「実機での `docker kill` + 前進観測を伴わない、Docker の detach 起動セマンティクスに基づく分析的判断」であることを明記していた。それを裏付ける実測(`ac2_job_progress_after_kill`)が今回得られ、120秒のポーリング窓内で manifest.status=done にも PR 生成にも至らないことが確認された。
 
-### 未確定事項・要フォローアップ
+### 未確定事項・要フォローアップ（更新）
 
-1. `tests/hermes-phaseB-gate.sh` を **sandbox の外**（実 docker ソケットにアクセスできるホスト shell）で実行し、AC-2 セクションの実測 PASS/FAIL を得ること。上記の分析的 GO 判断を実測で裏付ける、または覆すまで、この項目は暫定扱いとする。
-2. `--rm` フラグは per-job コンテナ自身の内部プロセス（`claude --bg`）終了時のみコンテナを破棄する用途であり、「dispatch コンテナを外部から kill する」シナリオとは無関係。per-job コンテナが `hermes.config.yaml` の `terminal.lifetime_seconds` (1800秒) より長く実行される場合に途中で強制終了されないことは、実測で別途確認が必要。
+1. ~~`tests/hermes-phaseB-gate.sh` を sandbox の外で実行し実測を得ること~~ → **完了**。実測 NO-GO を確定させた（上記）。
+2. **フェーズC (S5) の watchdog/reconcile 実装が、AC-2 NO-GO を解消するための必須前提条件であることが確定した。** watchdog 未実装のまま Phase C 以降の per-job コンテナ運用に進む場合、per-job コンテナが(OOM kill、host 再起動、docker daemon 再起動、意図しない `docker kill`/`docker rm` 等で)異常終了すると、そのジョブは自動回復せず `failed` のまま放置される。少なくとも次のいずれかが Phase C 着手前に必要:
+   - (a) S5 watchdog を前倒しで実装し、per-job コンテナの異常終了を検知して job を `failed` へ確実に reconcile する（現状 dispatch.py 側の `_dispatch_one` は起動時失敗のみ `failed` へ書き込み、起動後のコンテナ消失は未検知）、または
+   - (b) 少なくとも「per-job コンテナが落ちたら自動再試行はしない」ことを明示の運用制約として決定ログに残し、オペレーターへの通知（Slack等）だけは確実に届く設計にする。
+3. `--rm` フラグは per-job コンテナ自身の内部プロセス（`claude --bg`）終了時のみコンテナを破棄する用途であり、「per-job コンテナを外部から kill する」シナリオとは無関係。per-job コンテナが `hermes.config.yaml` の `terminal.lifetime_seconds` (S2で1800秒→本ドキュメント下記の通り21600秒に引き上げ済み) より長く実行される場合に途中で強制終了されないことは、実測で別途確認が必要（未着手）。
 
 ## config.yaml への反映
 
@@ -72,13 +104,13 @@ CLAUDE.md 運用ルール（sandbox で docker/gh 等が塞がれた場合は `d
 - GO（per-job コンテナが呼び出し元から独立して生存する）の場合でも、hermes 自身の対話ターミナル（`terminal:` backend、dispatch_job 呼び出し元を含む）が長時間の ChatOps セッション中に途中で recycle されないマージンを確保する。
 - NO-GO（長寿命 per-job コンテナモデルが必須、と確定した場合）でも、より長い lifetime は前提条件として必要になる。
 
-`terminal.container_persistent` は変更していない（現状 `false` のまま）。これは hermes 自身の対話ターミナルの再利用可否に関する設定であり、per-job dispatch コンテナ（`dispatch.py` が `docker run -d` で都度新規作成するモデル）とは独立した設定項目のため、AC-2 の実測確認（上記フォローアップ 1）が完了してから、必要であれば別途調整する。
+`terminal.container_persistent` は変更していない（現状 `false` のまま）。これは hermes 自身の対話ターミナルの再利用可否に関する設定であり、per-job dispatch コンテナ（`dispatch.py` が `docker run -d` で都度新規作成するモデル）とは独立した設定項目である。AC-2 が NO-GO で確定した以上、`container_persistent` を導入して per-job コンテナ側にも何らかの持続性/再起動機構を持たせるべきかは、フォローアップ2 (S5 watchdog 設計) の検討時に合わせて再評価する。
 
 ## まとめ
 
 | AC | 判定 | 根拠 |
 |----|------|------|
-| AC-2 | 暫定 GO（要実機再確認） | Docker `-d` detach セマンティクスに基づく分析。実機 `docker kill` 実験は sandbox 制約 (`permission denied ... docker.sock`) により本セッションでは未実施 |
+| AC-2 | **NO-GO（実機確認済み）** | オペレーターが sandbox 外 host shell で `tests/hermes-phaseB-gate.sh` を実行し、per-job コンテナ (`hermes-claude-<job_id>`) を明示 kill 後、120秒のポーリング窓内で manifest.status=done にも PR 生成にも至らないことを実測。S5 watchdog（reconcile/再起動機構）未実装のため、per-job コンテナの異常終了に対してジョブは前進しないことが確定。長寿命 per-job コンテナモデルへの移行（フォローアップ2参照）が Phase C 着手前の確定要件となった |
 | AC-3 | GO（実機確認済み） | `tests/hermes-phaseB-gate.sh` を host 非root (`uid=502`) で実行し、`CLAUDE_CONFIG_DIR` 越しの `claude agents --json --cwd` が exit 0 + JSON 配列を返し、状態ファイルが指定ディレクトリに作成されることを確認 |
 
-**フォローアップ (blocking Phase C 着手前ではないが、production 信頼前に必須)**: `tests/hermes-phaseB-gate.sh` を実 docker ソケットにアクセス可能な環境（agent sandbox 外）で再実行し、AC-2 の実測結果を本ファイルに追記すること。
+**フォローアップ (Phase C 着手前の blocking 要件に格上げ)**: 上記「未確定事項・要フォローアップ」2. のとおり、S5 watchdog/reconcile 機構（または最低限の異常終了検知＋通知）を Phase C 着手前に設計・実装すること。
