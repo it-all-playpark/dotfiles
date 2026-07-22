@@ -169,8 +169,24 @@ PYEOF
     if docker kill "${CONTAINER_NAME}" >/dev/null 2>&1; then
       pass "ac2_explicit_kill_of_dispatch_container"
     else
+      # Debug aid (issue #122 follow-up): the container can only fail this
+      # kill by having already exited on its own between the running-check
+      # above and here, which means the underlying claude bg session died/
+      # completed for some reason unrelated to this gate's explicit kill.
+      # Capture its exit state and last output so that reason is diagnosable
+      # instead of silently discarded when WORK_DIR is removed on exit.
+      DIAG_FILE="${WORK_DIR}/container_diag.txt"
+      {
+        echo "--- docker inspect state ---"
+        docker inspect -f 'Status={{.State.Status}} ExitCode={{.State.ExitCode}} Error={{.State.Error}} OOMKilled={{.State.OOMKilled}}' \
+          "${CONTAINER_NAME}" 2>&1 || echo "(inspect failed — container may already be --rm'd)"
+        echo "--- docker logs (last 100 lines) ---"
+        docker logs --tail 100 "${CONTAINER_NAME}" 2>&1 || echo "(logs unavailable)"
+      } >"${DIAG_FILE}" 2>&1
       fail "ac2_explicit_kill_of_dispatch_container" \
-        "docker kill ${CONTAINER_NAME} failed (container may have already exited)"
+        "docker kill ${CONTAINER_NAME} failed (container may have already exited); diagnostics: ${DIAG_FILE}"
+      echo "  --- container diagnostics (${DIAG_FILE}) ---"
+      cat "${DIAG_FILE}" | sed 's/^/    /'
     fi
 
     MANIFEST_FILE="${HERMES_HOME}/jobs/${JOB_ID}.json"
