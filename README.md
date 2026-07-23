@@ -44,7 +44,6 @@ dotconfig/
 ├── lib/                   # Flake 内ヘルパー（cli-packages.nix など）
 ├── claude-code/           # Claude Code 設定（settings.json / hooks / PRINCIPLES.md / RULES.md）
 ├── codex/                 # Codex CLI 設定（config / prompts / policy / rules）
-├── hermes/                # hermes-agent 設定（config / .env template / path_guard plugin）
 └── scripts/
     └── setup-skills.sh    # Agent Skills セットアップスクリプト
 ```
@@ -57,7 +56,11 @@ dotconfig/
 |------------|------|------------|
 | `claude-code/` | Claude Code 用の `settings.json`（permissions / hooks）・guardrail hooks・`PRINCIPLES.md` / `RULES.md` | [claude-code/README.md](claude-code/README.md) |
 | `codex/` | Codex CLI の base config・prompts・policy・rules を dotfiles で管理し、`~/.codex/` へ展開 | [codex/README.md](codex/README.md) |
-| `hermes/` | hermes-agent の config / `.env` template / `path_guard` plugin。launchd agent で gateway を自動起動 | [hermes/README.md](hermes/README.md) |
+
+hermes-agent (全社横断 ChatOps 基盤) は個人PC設定とは性質が異なるため、
+[playpark-llc/hermes](https://github.com/playpark-llc/hermes) として独立リポジトリで管理する。
+本リポジトリの `home-manager/home/default.nix` の `activation.setupHermes` が、
+その `hermes` リポジトリの checkout から `~/.hermes/` へ symlink を張る。
 
 ## セットアップ手順
 

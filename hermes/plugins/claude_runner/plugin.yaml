@@ -1,3 +1,0 @@
-name: claude_runner
-version: 0.1.0
-description: Dispatch ChatOps jobs to per-job claude --bg containers, tracked via job manifests and repo_bindings.yaml (fail-closed).
