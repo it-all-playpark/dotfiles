@@ -15,6 +15,50 @@ let
     # 注: cliPackages の common には commonPackages と重複する coreutils/curl/git を含む。
     # Nix store の dedup によりインストール上の重複は発生しない (behavior-preserving)。
   };
+
+  # 切断後も居座り続ける stale な mosh-server (起動から長時間経過 かつ CPU 使用時間が
+  # ほぼゼロ = 接続が来ていない) を検出し通知するだけの watchdog。
+  # 自動 kill は「本当に使われていないか」の誤判定リスクがあるため行わない。
+  moshWatchdogScript = pkgs.writeShellApplication {
+    name = "mosh-watchdog";
+    runtimeInputs = [ pkgs.gawk ];
+    text = ''
+      # 1 時間以上起動していて累積 CPU 時間が 2 分未満のプロセスを stale 候補とみなす。
+      ETIME_THRESHOLD_SECS=3600
+      CPU_THRESHOLD_SECS=120
+
+      /bin/ps -axo pid=,etime=,time=,command= \
+        | awk -v etime_threshold="$ETIME_THRESHOLD_SECS" -v cpu_threshold="$CPU_THRESHOLD_SECS" '
+          function to_sec(t,    days, rest, n, parts, dparts) {
+            days = 0
+            if (index(t, "-") > 0) {
+              split(t, dparts, "-")
+              days = dparts[1]
+              rest = dparts[2]
+            } else {
+              rest = t
+            }
+            n = split(rest, parts, ":")
+            if (n == 3) {
+              return days * 86400 + parts[1] * 3600 + parts[2] * 60 + parts[3]
+            }
+            return days * 86400 + parts[1] * 60 + parts[2]
+          }
+          /mosh-server/ {
+            etime_s = to_sec($2)
+            cpu_s = to_sec($3)
+            if (etime_s >= etime_threshold && cpu_s <= cpu_threshold) {
+              printf "pid=%s etime=%s cpu=%s\n", $1, $2, $3
+            }
+          }
+        ' \
+        | while IFS= read -r hit; do
+            [ -n "$hit" ] || continue
+            echo "$(date '+%Y-%m-%d %H:%M:%S') stale mosh-server candidate: $hit"
+            /usr/bin/osascript -e "display notification \"$hit\" with title \"mosh watchdog: stale session?\"" || true
+          done
+    '';
+  };
 in
 {
   home = {
@@ -109,6 +153,23 @@ in
         fi
       else
         echo "Warning: $SKILLS_AGENTS does not exist. Skipping agents symlink."
+      fi
+
+      # ~/.claude/skills/hunk-review → hunk 同梱スキル（upstream 推奨の symlink 方式）
+      # `hunk skill path` の store path は hunk 更新 + GC で消えるため、
+      # rebuild ごとに現行世代の pkgs.hunk へ貼り直して同期を保つ。
+      # ~/.claude/skills は skills repo への symlink なので実体は repo 内に作られる
+      # （store path は環境依存のため skills repo 側で gitignore する）。
+      CLAUDE_SKILLS="$CLAUDE_DIR/skills"
+      HUNK_SKILL="$CLAUDE_SKILLS/hunk-review"
+      if [ -d "$CLAUDE_SKILLS" ]; then
+        if [ -L "$HUNK_SKILL" ] || [ ! -e "$HUNK_SKILL" ]; then
+          ln -sfn "${pkgs.hunk}/skills/hunk-review" "$HUNK_SKILL"
+        else
+          echo "Warning: $HUNK_SKILL exists and is not a symlink. Skipping (manual review needed)."
+        fi
+      else
+        echo "Warning: $CLAUDE_SKILLS does not exist. Skipping hunk-review skill symlink."
       fi
 
       # settings.json へのシンボリックリンク
@@ -504,6 +565,58 @@ in
         ProcessType = "Background";
         StandardOutPath = "${config.home.homeDirectory}/.hermes/logs/watchdog.out.log";
         StandardErrorPath = "${config.home.homeDirectory}/.hermes/logs/watchdog.err.log";
+      };
+    };
+
+    # mise 管理ツールを毎日自動更新する。
+    # minimum_release_age_excludes (mise/config.toml) と組で、claude-code 等の
+    # 高頻度リリースツールへの即日追随を宣言的に実現する。
+    # 04:30 (ローカルタイム) にスリープ中だった場合は launchd が復帰時にまとめて実行する。
+    mise-upgrade = {
+      enable = true;
+      config = {
+        Label = "com.playpark.mise-upgrade";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''
+            /bin/wait4path "${pkgs.mise}/bin/mise" \
+              && exec "${pkgs.mise}/bin/mise" upgrade --yes
+          ''
+        ];
+        EnvironmentVariables = {
+          # npm backend が node/npm を解決できるよう mise shims を先頭に置く
+          PATH = "${config.home.homeDirectory}/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+          HOME = config.home.homeDirectory;
+        };
+        StartCalendarInterval = [
+          {
+            Hour = 4;
+            Minute = 30;
+          }
+        ];
+        RunAtLoad = false;
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/mise-upgrade.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/mise-upgrade.log";
+      };
+    };
+
+    # 30 分おきに stale な mosh-server プロセスを検出し macOS 通知するだけの watchdog。
+    # 自動 kill はしない（誤検知時に稼働中セッションを壊すリスクがあるため）。
+    mosh-watchdog = {
+      enable = true;
+      config = {
+        Label = "com.playpark.mosh-watchdog";
+        ProgramArguments = [ "${moshWatchdogScript}/bin/mosh-watchdog" ];
+        EnvironmentVariables = {
+          PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+        };
+        StartInterval = 1800;
+        RunAtLoad = false;
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/mosh-watchdog.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/mosh-watchdog.log";
       };
     };
   };
