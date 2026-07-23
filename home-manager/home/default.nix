@@ -7,12 +7,10 @@
 }:
 let
   packages = import ../../common/packages.nix { inherit pkgs; };
-  # CLI tool 一覧は lib/cli-packages.nix に集約 (mode=host で hostOnly 込みのフルセット)
-  # hermes-agent 用 container image (mode=container) と単一ソースを共有する。
+  # CLI tool 一覧は lib/cli-packages.nix に集約
   cliPackages = import ../../lib/cli-packages.nix {
     inherit pkgs;
-    mode = "host";
-    # 注: cliPackages の common には commonPackages と重複する coreutils/curl/git を含む。
+    # 注: cliPackages には commonPackages と重複する coreutils/curl/git を含む。
     # Nix store の dedup によりインストール上の重複は発生しない (behavior-preserving)。
   };
 
@@ -403,22 +401,23 @@ in
       chmod 600 "$CODEX_DIR/config.toml"
     '';
 
-    # Hermes-agent 設定を dotfiles/hermes/ からシンボリックリンクで参照
+    # Hermes-agent 設定を hermes リポジトリ (playpark-llc/hermes、独立repo) から
+    # シンボリックリンクで参照
     # - config.yaml と plugins/* は symlink (上書き不可ファイルは事前削除)
     # - .env は初回のみ template から copy。既存があれば tokens 保護のため触らない
     activation.setupHermes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      DOTFILES_HERMES="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/hermes"
+      HERMES_REPO="${config.home.homeDirectory}/ghq/github.com/playpark-llc/hermes"
       HERMES_DIR="${config.home.homeDirectory}/.hermes"
 
-      if [ ! -d "$DOTFILES_HERMES" ]; then
-        echo "Warning: $DOTFILES_HERMES does not exist. Skipping hermes setup."
+      if [ ! -d "$HERMES_REPO" ]; then
+        echo "Warning: $HERMES_REPO does not exist. Skipping hermes setup."
         exit 0
       fi
 
       mkdir -p "$HERMES_DIR/plugins" "$HERMES_DIR/logs"
 
       # claude_runner (S2) — per-job dispatch state dirs. workspaces/claude-state
-      # are bind-mounted into the per-job container (see hermes/config.yaml
+      # are bind-mounted into the per-job container (see config.yaml
       # docker_volumes); jobs holds the host-side job manifests.
       mkdir -p "$HERMES_DIR/workspaces" "$HERMES_DIR/jobs" "$HERMES_DIR/claude-state"
 
@@ -426,34 +425,34 @@ in
       if [ -f "$HERMES_DIR/config.yaml" ] && [ ! -L "$HERMES_DIR/config.yaml" ]; then
         rm "$HERMES_DIR/config.yaml"
       fi
-      ln -sf "$DOTFILES_HERMES/config.yaml" "$HERMES_DIR/config.yaml"
+      ln -sf "$HERMES_REPO/config.yaml" "$HERMES_DIR/config.yaml"
 
       # repo_bindings.yaml — symlink (上書き不可ファイルは事前削除)
       if [ -f "$HERMES_DIR/repo_bindings.yaml" ] && [ ! -L "$HERMES_DIR/repo_bindings.yaml" ]; then
         rm "$HERMES_DIR/repo_bindings.yaml"
       fi
-      ln -sf "$DOTFILES_HERMES/repo_bindings.yaml" "$HERMES_DIR/repo_bindings.yaml"
+      ln -sf "$HERMES_REPO/repo_bindings.yaml" "$HERMES_DIR/repo_bindings.yaml"
 
       # hermes-wrapper.sh — symlink。~/.hermes/.env を load してから real hermes を exec する。
       # launchd agent と手動起動の双方で同じ env 注入経路を提供する。
       if [ -f "$HERMES_DIR/hermes-wrapper.sh" ] && [ ! -L "$HERMES_DIR/hermes-wrapper.sh" ]; then
         rm "$HERMES_DIR/hermes-wrapper.sh"
       fi
-      ln -sf "$DOTFILES_HERMES/hermes-wrapper.sh" "$HERMES_DIR/hermes-wrapper.sh"
+      ln -sf "$HERMES_REPO/hermes-wrapper.sh" "$HERMES_DIR/hermes-wrapper.sh"
 
       # watchdog.sh (S5) — symlink。~/.hermes/jobs/*.json を定期 reconcile する
       # launchd agent (com.playpark.hermes-watchdog) から起動される。
       if [ -f "$HERMES_DIR/watchdog.sh" ] && [ ! -L "$HERMES_DIR/watchdog.sh" ]; then
         rm "$HERMES_DIR/watchdog.sh"
       fi
-      ln -sf "$DOTFILES_HERMES/watchdog.sh" "$HERMES_DIR/watchdog.sh"
+      ln -sf "$HERMES_REPO/watchdog.sh" "$HERMES_DIR/watchdog.sh"
 
       # plugins — 各 plugin ディレクトリを symlink
       # NOTE: 末尾 / 付き plugin_dir + 既存 directory symlink に対する ln -sf は、
       # BSD ln (macOS) で symlink を dereference してその中に link を作る挙動を取り、
-      # dotfiles/hermes/plugins/<name>/<name> という循環 symlink を量産する。
+      # hermes/plugins/<name>/<name> という循環 symlink を量産する。
       # 末尾 / を剥がし、既存 symlink を rm -f で必ず消してから ln することで回避。
-      for plugin_dir in "$DOTFILES_HERMES/plugins/"*/; do
+      for plugin_dir in "$HERMES_REPO/plugins/"*/; do
         [ -d "$plugin_dir" ] || continue
         plugin_dir="''${plugin_dir%/}"
         plugin_name="$(basename "$plugin_dir")"
@@ -466,7 +465,7 @@ in
 
       # .env — 初回のみ copy。既存があれば触らない (tokens 保持のため)
       if [ ! -f "$HERMES_DIR/.env" ]; then
-        cp "$DOTFILES_HERMES/.env.template" "$HERMES_DIR/.env"
+        cp "$HERMES_REPO/.env.template" "$HERMES_DIR/.env"
         chmod 600 "$HERMES_DIR/.env"
         echo "hermes: created ~/.hermes/.env from template — fill in tokens before running"
       fi
