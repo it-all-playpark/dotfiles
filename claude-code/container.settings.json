@@ -173,6 +173,7 @@
     ],
     "defaultMode": "auto",
     "deny": [
+      "Bash(gh pr merge:*)",
       "Bash(gh repo delete:*)",
       "Bash(gh repo rename:*)",
       "Bash(gh repo transfer:*)",

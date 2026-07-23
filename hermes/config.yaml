@@ -24,7 +24,9 @@ terminal:
   container_persistent: false
   container_memory: 4096
   timeout: 600
-  lifetime_seconds: 1800
+  # フェーズB go/no-go ゲート (S4, AC-2) を受けての調整。詳細・根拠は
+  # claudedocs/hermes-phaseB-execution-model-decision.md を参照。
+  lifetime_seconds: 21600
   docker_forward_env:
   - GIT_AUTHOR_NAME
   - GIT_AUTHOR_EMAIL
@@ -34,6 +36,8 @@ terminal:
   - /Users/naramotoyuuji/ghq:/workspace/repos:ro
   - /Users/naramotoyuuji/Documents/hermes-out:/workspace/out:rw
   - /Users/naramotoyuuji/.config/gws:/root/.config/gws:rw
+  - /Users/naramotoyuuji/.hermes/workspaces:/workspace/jobs:rw
+  - /Users/naramotoyuuji/.hermes/claude-state:/root/.claude-hermes:rw
   - /Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/container.settings.json:/root/.claude/settings.json:ro
   - /Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks:/root/.claude/hooks:ro
   - /Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/claude-code/CLAUDE.md:/root/.claude/CLAUDE.md:ro
@@ -54,6 +58,53 @@ platforms:
       reply_in_thread: true
       reply_broadcast: false
       strict_mention: false
+  # フェーズE (S7/E2, AC-12): Discord は hermes 内蔵 native adapter
+  # (gateway/platforms/discord.py) を有効化する。allowlist は config ではなく
+  # env DISCORD_ALLOWED_USERS / DISCORD_ALLOWED_ROLES (.env.template) で
+  # 駆動される — discord.py:2166-2205 の _is_allowed_user は両方空だと
+  # 全員許可(fail-open)になる仕様のため、fail-closed のため .env で許可
+  # ユーザ/ロールを必ず設定すること(未設定のままではこの block は
+  # allowlist を強制しない)。
+  discord:
+    reply_to_mode: first
+    extra:
+      # require_mention (strict_mention 相当): mention なしメッセージを
+      # dispatch させない mention gating を明示的に有効化する(AC-12)。
+      require_mention: true
+    # discord.dm_role_auth_guild は意図的に未設定のまま(DM role auth 無効)。
+    # 設定すると DM でのロール認証が有効になり、共有 guild 経由の
+    # cross-guild 権限昇格リスクがあるため、フェーズE ではこの経路を
+    # 使わない(architecture_decisions 参照)。
+  # フェーズE (S7/E2, AC-12): Google Chat には native adapter が存在しない
+  # (gateway/platforms/ に google_chat.py は無い)ため、generic webhook 経路
+  # (gateway/platforms/webhook.py, token/HMAC secret 認証)で受ける。secret
+  # は ${VAR} 形式で .env 側の値を参照する(hermes_cli/config.py
+  # _expand_env_vars が config.yaml ロード時に展開する)。channel は
+  # repo_bindings.yaml 側の bind key と一致させること(README 参照)。
+  #
+  # 重要(accountability, AC-12): この secret は route(space)単位の shared
+  # secret 認証であって、送信者個人の allowlist/mention 認可ではない。
+  # bound space に参加できる全メンバのメッセージが正しい secret を伴って
+  # webhook.py に到達しうるため、Discord の env
+  # DISCORD_ALLOWED_USERS/ROLES + require_mention のような per-user 粒度の
+  # AC-12 充足を config だけでは実現できない(gateway adapter 側=本 repo
+  # 管理外の editable install に per-user gating が無い構造的 gap)。
+  # 受容可否は要決定(人間へ escalate)。詳細・選択肢は
+  # claudedocs/hermes-phaseE-googlechat-user-gating-decision.md を参照。
+  webhook:
+    extra:
+      routes:
+        google-chat:
+          secret: "${GOOGLE_CHAT_WEBHOOK_SECRET}"
+          deliver: "log"
+# claude_runner plugin (フェーズD, AC-7): グローバル同時 job 数上限。
+# ~/.hermes/jobs/ 配下の status=pending/running なマニフェスト数がこの値に
+# 達すると、新規 dispatch_job は clone/container 起動を行わず「混雑中」応答を
+# 返す(hermes/plugins/claude_runner/dispatch.py の _reserve_job_slot / AC-7)。
+# config.yaml は起動時のみ load されるため、変更後は hermes-gateway の
+# kickstart 再起動が必要(README.md 参照)。
+claude_runner:
+  max_concurrent_jobs: 3
 onboarding:
   seen:
     busy_input_prompt: true
