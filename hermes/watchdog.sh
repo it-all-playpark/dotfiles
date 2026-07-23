@@ -109,6 +109,47 @@
 #                             the only way to reclaim its slot/workspace,
 #                             since notify for that platform can never
 #                             succeed. Default 5400 (90 minutes).
+#   HERMES_WATCHDOG_CONTAINER_DEAD_CONFIRM_COUNT
+#                             Per-job container 死活検知 (issue #122 / AC-2):
+#                             `poll_bg_status` alone only reflects what the
+#                             bg session's own listing reports — if the
+#                             per-job Docker container is killed/OOM-killed
+#                             or vanishes on a daemon restart while that
+#                             listing still says `running`, reconcile_job
+#                             would otherwise poll the job forever with no
+#                             path to `failed`. When a manifest's
+#                             `container_id` is non-empty and `poll_bg_status`
+#                             returns `running`, `poll_container_state` runs
+#                             `docker inspect -f '{{.State.Running}}'` against
+#                             it and classifies the result:
+#                               - alive   -> `container_dead_streak` is reset
+#                                 to 0 (guards against a transient dead
+#                                 observation right before a legitimate
+#                                 `--rm` completion race).
+#                               - unknown (docker missing from PATH, or a
+#                                 daemon-connect error not matching "no such
+#                                 object") -> `container_dead_streak` is left
+#                                 completely unchanged — a daemon restart
+#                                 must never manufacture a false failure NOR
+#                                 silently erase dead passes already observed.
+#                               - dead (inspect reports Running=false, or
+#                                 fails with a "no such object" error, i.e.
+#                                 the container was --rm'd) -> increments
+#                                 `container_dead_streak`; once it reaches
+#                                 this threshold for CONSECUTIVE passes,
+#                                 `status` is forced to `failed` and falls
+#                                 through into the normal notify/cleanup
+#                                 pipeline below (same shape as the existing
+#                                 reap paths). This script never restarts the
+#                                 container nor re-dispatches the job on its
+#                                 own — that is a deliberate operational
+#                                 constraint (see
+#                                 claudedocs/hermes-phaseB-execution-model-decision.md),
+#                                 an operator must re-run the ChatOps command
+#                                 manually after being notified. A manifest
+#                                 with no `container_id` (pre-#122 dispatch)
+#                                 skips this check entirely for backward
+#                                 compatibility. Default 2.
 #
 # notify dispatch (manifest.platform):
 #   `notify_slack` and `notify_discord` are the only real network sends;
@@ -155,6 +196,7 @@ acquire_lock_or_exit() {
 ABSENT_GRACE_SECONDS="${HERMES_WATCHDOG_ABSENT_GRACE_SECONDS:-60}"
 ABSENT_CONFIRM_COUNT="${HERMES_WATCHDOG_ABSENT_CONFIRM_COUNT:-3}"
 REAP_TIMEOUT_SECONDS="${HERMES_WATCHDOG_REAP_TIMEOUT_SECONDS:-5400}"
+CONTAINER_DEAD_CONFIRM_COUNT="${HERMES_WATCHDOG_CONTAINER_DEAD_CONFIRM_COUNT:-2}"
 
 # manifest.created_at is a float (Python time.time()); compute integer age
 # with awk rather than bash arithmetic (no float support) or `awk systime()`
@@ -234,6 +276,57 @@ poll_bg_status() {
       echo "done"
       ;;
   esac
+}
+
+# Per-job container liveness check (issue #122 / AC-2). Echoes one of:
+# alive | dead | unknown
+#
+# `docker` missing from PATH -> unknown (can't tell either way, never
+# manufacture a false failure just because this host has no docker CLI).
+# `docker inspect -f '{{.State.Running}}' <container_id>` exit 0:
+#   - stdout == "true"  -> alive
+#   - stdout != "true"  -> dead (exited but not yet --rm'd)
+# `docker inspect` non-zero exit:
+#   - stderr matches "no such object" (case-insensitive) -> dead (the
+#     container was --rm'd, the expected shape for a normal completion too,
+#     which is why the CONTAINER_DEAD_CONFIRM_COUNT streak — not a single
+#     observation — is what actually forces `failed`, see reconcile_job).
+#   - anything else (daemon unreachable, permission error, etc.) -> unknown.
+#
+# stdout and stderr are captured separately (never `2>&1`): `docker inspect`
+# can exit 0 while still writing warnings to stderr (e.g. config-file parse
+# warnings), which would otherwise land in `out` ahead of the `true`/`false`
+# line and make the `[ "$out" = "true" ]` comparison fail for a container
+# that is actually still running -- misclassifying it as `dead`. On the
+# `dead`-streak path (CONTAINER_DEAD_CONFIRM_COUNT consecutive `dead`
+# passes) that would eventually flip a live job to `failed`, trigger the
+# notify path, and let `cleanup_job` `rm -rf` its still-in-use workspace.
+# stderr is only ever consulted on a non-zero exit, to match it against
+# "no such object".
+poll_container_state() {
+  local container_id="$1"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "unknown"
+    return
+  fi
+  local out stderr_file
+  stderr_file=$(mktemp)
+  if out=$(docker inspect -f '{{.State.Running}}' "$container_id" 2>"$stderr_file"); then
+    rm -f -- "$stderr_file"
+    if [ "$out" = "true" ]; then
+      echo "alive"
+    else
+      echo "dead"
+    fi
+    return
+  fi
+  if grep -qi 'no such object' "$stderr_file" 2>/dev/null; then
+    rm -f -- "$stderr_file"
+    echo "dead"
+  else
+    rm -f -- "$stderr_file"
+    echo "unknown"
+  fi
 }
 
 # Slack's chat.postMessage returns HTTP 200 + body `{"ok":false,"error":...}`
@@ -393,11 +486,50 @@ reconcile_job() {
       local polled
       polled=$(poll_bg_status "$manifest_path" "$claude_config_host_dir" "$workspace_host_dir" "$bg_job_id" "$created_at")
       if [ "$polled" = "running" ]; then
-        log "job $job_id still running — skipping"
-        return
+        # bg session listing still says running — cross-check the per-job
+        # container's own liveness (issue #122 / AC-2): a killed/OOM'd/
+        # daemon-restart-vanished container can otherwise be polled forever
+        # since poll_bg_status alone never observes it.
+        local container_id
+        container_id=$(jq -r '.container_id // empty' "$manifest_path")
+        if [ -z "$container_id" ]; then
+          # Pre-#122 manifest with no container_id recorded — skip the
+          # check entirely, preserving prior behavior.
+          log "job $job_id still running — skipping"
+          return
+        fi
+        local cstate
+        cstate=$(poll_container_state "$container_id")
+        case "$cstate" in
+          alive)
+            if [ "$(jq -r '.container_dead_streak // 0' "$manifest_path" 2>/dev/null || echo 0)" != "0" ]; then
+              set_manifest_field "$manifest_path" "container_dead_streak" "0"
+            fi
+            log "job $job_id still running — skipping"
+            return
+            ;;
+          unknown)
+            log "job $job_id container state unknown (docker unavailable) — leaving container_dead_streak unchanged"
+            return
+            ;;
+          dead)
+            local streak
+            streak=$(jq -r '.container_dead_streak // 0' "$manifest_path" 2>/dev/null || echo 0)
+            streak=$((streak + 1))
+            set_manifest_field "$manifest_path" "container_dead_streak" "$streak"
+            if [ "$streak" -lt "$CONTAINER_DEAD_CONFIRM_COUNT" ]; then
+              log "job $job_id per-job container $container_id observed dead ($streak/$CONTAINER_DEAD_CONFIRM_COUNT consecutive passes) — not yet reconciling"
+              return
+            fi
+            log "job $job_id per-job container $container_id dead for $streak consecutive passes while bg session still listed running — reconciling status to failed (issue #122)"
+            status="failed"
+            set_manifest_field "$manifest_path" "status" '"failed"'
+            ;;
+        esac
+      else
+        status="$polled"
+        set_manifest_field "$manifest_path" "status" "\"$status\""
       fi
-      status="$polled"
-      set_manifest_field "$manifest_path" "status" "\"$status\""
     fi
   fi
 

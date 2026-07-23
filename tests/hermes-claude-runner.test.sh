@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # tests/hermes-claude-runner.test.sh
-# Runs the claude_runner plugin scaffold's pytest suite using the installed
-# hermes-agent venv Python. `tools.registry`, `hermes_cli.plugins`, etc. are
-# only importable from that venv/checkout — this repo does not vendor a
-# second hermes-agent dependency set.
+# Runs the claude_runner plugin's full pytest suite (hermes/plugins/claude_runner/tests)
+# using the installed hermes-agent venv Python. `tools.registry`, `hermes_cli.plugins`,
+# etc. are only importable from that venv/checkout — this repo does not vendor a
+# second hermes-agent dependency set. Every test file in that directory self-guards
+# via `pytest.importorskip("tools.registry", ...)` when the venv/checkout is absent,
+# and mocks out docker/git/network via subprocess.run monkeypatching, so running the
+# whole directory is safe even without a full hermes-agent environment.
 #
 # Usage:
 #   bash tests/hermes-claude-runner.test.sh
@@ -31,4 +34,4 @@ fi
 
 export HERMES_AGENT_ROOT
 cd "${REPO_ROOT}"
-exec "${VENV_PYTHON}" -m pytest hermes/plugins/claude_runner/tests/test_registration.py -v
+exec "${VENV_PYTHON}" -m pytest hermes/plugins/claude_runner/tests -v

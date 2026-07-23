@@ -3,9 +3,9 @@
 # Real (docker + git + claude CLI) go/no-go GATE for the フェーズB execution
 # model decision (S4, AC-2, AC-3):
 #
-#   AC-2: "dispatch コンテナを明示 kill してもジョブが前進し PR が生成される、
-#          または no-go と判定され長寿命 per-job コンテナモデルが確定要件と
-#          して記録される (フェーズB go/no-go ゲート)"
+#   AC-2: per-job コンテナを明示 kill した後、watchdog がコンテナ死を検知して
+#          ジョブを status=failed へ reconcile し、既存 notify 経路で通知する
+#          ことを実機確認する (自動再試行はしない設計決定、issue #122)
 #   AC-3: "per-job `CLAUDE_CONFIG_DIR` を host 非root から `claude agents` で
 #          読み取れることを実機確認できる (フェーズB)"
 #
@@ -37,8 +37,6 @@ HERMES_AGENT_ROOT="${HERMES_AGENT_ROOT:-${HOME}/.hermes/hermes-agent}"
 VENV_PYTHON="${HERMES_AGENT_ROOT}/venv/bin/python"
 TARGET_REPO="${1:-it-all-playpark/dotfiles}"
 KILL_DELAY_SECONDS="${KILL_DELAY_SECONDS:-5}"
-POLL_TIMEOUT_SECONDS="${POLL_TIMEOUT_SECONDS:-120}"
-POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-5}"
 
 PASS=0
 FAIL=0
@@ -85,7 +83,22 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
 fi
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hermes-phaseB-gate.XXXXXX")"
-trap 'rm -rf "${WORK_DIR}"' EXIT
+_cleanup_work_dir() {
+  # Debug aid (issue #122 follow-up): on failure, keep WORK_DIR (watchdog.err,
+  # container_diag.txt, dispatch.err, etc.) around instead of silently
+  # deleting the only evidence of what actually happened.
+  if [ "${FAIL:-0}" -gt 0 ]; then
+    echo "" >&2
+    echo "NOTE: FAIL>0 -- preserving WORK_DIR for debugging: ${WORK_DIR}" >&2
+    if [ -f "${WORK_DIR}/watchdog.err" ]; then
+      echo "--- ${WORK_DIR}/watchdog.err (full contents) ---" >&2
+      cat "${WORK_DIR}/watchdog.err" >&2
+    fi
+  else
+    rm -rf "${WORK_DIR}"
+  fi
+}
+trap _cleanup_work_dir EXIT
 
 HERMES_HOME="${WORK_DIR}/hermes-home"
 mkdir -p "${HERMES_HOME}"
@@ -101,7 +114,8 @@ platforms:
 EOF
 
 # ---------------------------------------------------------------------------
-# AC-2: dispatch container を明示 kill -> ジョブ前進 (PR生成) するか観測
+# AC-2: per-job container を明示 kill -> watchdog が failed へ reconcile し
+#       通知経路を実行するか観測 (issue #122)
 # ---------------------------------------------------------------------------
 JOB_ID=""
 WORKSPACE_HOST_DIR=""
@@ -155,6 +169,7 @@ PYEOF
 
   if [ -n "${JOB_ID}" ]; then
     CONTAINER_NAME="hermes-claude-${JOB_ID}"
+    MANIFEST_FILE="${HERMES_HOME}/jobs/${JOB_ID}.json"
 
     echo "- ac2_dispatch_container_running_before_kill"
     if docker inspect -f '{{.State.Running}}' "${CONTAINER_NAME}" 2>/dev/null | grep -q true; then
@@ -170,40 +185,100 @@ PYEOF
     if docker kill "${CONTAINER_NAME}" >/dev/null 2>&1; then
       pass "ac2_explicit_kill_of_dispatch_container"
     else
+      # Debug aid (issue #122 follow-up): the container can only fail this
+      # kill by having already exited on its own between the running-check
+      # above and here, which means the underlying claude bg session died/
+      # completed for some reason unrelated to this gate's explicit kill.
+      # Capture its exit state and last output so that reason is diagnosable
+      # instead of silently discarded when WORK_DIR is removed on exit.
+      DIAG_FILE="${WORK_DIR}/container_diag.txt"
+      {
+        echo "--- docker inspect state ---"
+        docker inspect -f 'Status={{.State.Status}} ExitCode={{.State.ExitCode}} Error={{.State.Error}} OOMKilled={{.State.OOMKilled}}' \
+          "${CONTAINER_NAME}" 2>&1 || echo "(inspect failed — container may already be --rm'd)"
+        echo "--- docker logs (last 100 lines) ---"
+        docker logs --tail 100 "${CONTAINER_NAME}" 2>&1 || echo "(logs unavailable)"
+        echo "--- claude agents --json --all (bg session's own reported status) ---"
+        if [ -f "${MANIFEST_FILE}" ]; then
+          BG_JOB_ID="$(jq -r '.bg_job_id // empty' "${MANIFEST_FILE}" 2>/dev/null || true)"
+          CFG_DIR="$(jq -r '.claude_config_host_dir // empty' "${MANIFEST_FILE}" 2>/dev/null || true)"
+          WS_DIR="$(jq -r '.workspace_host_dir // empty' "${MANIFEST_FILE}" 2>/dev/null || true)"
+          if [ -n "${CFG_DIR}" ] && [ -n "${WS_DIR}" ]; then
+            RAW_JSON="$(CLAUDE_CONFIG_DIR="${CFG_DIR}" claude agents --json --all --cwd "${WS_DIR}" 2>&1 || echo '(claude agents invocation failed)')"
+            echo "bg_job_id=${BG_JOB_ID}"
+            echo "matching entry: $(printf '%s' "${RAW_JSON}" | jq -c --arg id "${BG_JOB_ID}" '[.[] | select((.id // .sessionId // .taskId // .job_id) == $id)] | .[0]' 2>/dev/null || echo '(jq parse failed)')"
+            echo "full listing: ${RAW_JSON}"
+          else
+            echo "(manifest missing claude_config_host_dir/workspace_host_dir)"
+          fi
+        else
+          echo "(manifest ${MANIFEST_FILE} not found yet)"
+        fi
+      } >"${DIAG_FILE}" 2>&1
       fail "ac2_explicit_kill_of_dispatch_container" \
-        "docker kill ${CONTAINER_NAME} failed (container may have already exited)"
+        "docker kill ${CONTAINER_NAME} failed (container may have already exited); diagnostics: ${DIAG_FILE}"
+      echo "  --- container diagnostics (${DIAG_FILE}) ---"
+      cat "${DIAG_FILE}" | sed 's/^/    /'
     fi
 
-    echo "- ac2_job_progress_after_kill (poll up to ${POLL_TIMEOUT_SECONDS}s)"
-    ELAPSED=0
-    PROGRESSED=false
-    while [ "${ELAPSED}" -lt "${POLL_TIMEOUT_SECONDS}" ]; do
-      MANIFEST_FILE="${HERMES_HOME}/jobs/${JOB_ID}.json"
-      if [ -f "${MANIFEST_FILE}" ] && jq -e '.status == "done"' "${MANIFEST_FILE}" >/dev/null 2>&1; then
-        PROGRESSED=true
-        break
-      fi
-      if gh pr list --repo "${TARGET_REPO}" --search "hermes-phaseB-gate ${JOB_ID}" --json number \
-        --jq 'length > 0' 2>/dev/null | grep -q true; then
-        PROGRESSED=true
-        break
-      fi
-      sleep "${POLL_INTERVAL_SECONDS}"
-      ELAPSED=$((ELAPSED + POLL_INTERVAL_SECONDS))
+    echo "- ac2b_watchdog_reconciles_killed_container_to_failed (up to 6 watchdog passes)"
+    RECONCILED=false
+    for _ in 1 2; do
+      HERMES_HOME="${HERMES_HOME}" HERMES_WATCHDOG_SKIP_LOCK=1 \
+        bash "${REPO_ROOT}/hermes/watchdog.sh" 2>>"${WORK_DIR}/watchdog.err" || true
     done
-
-    if [ "${PROGRESSED}" = "true" ]; then
-      pass "ac2_job_progress_after_kill"
-      echo "  AC-2 RESULT: GO -- job progressed (manifest done / PR found) after"
-      echo "               the dispatch container was explicitly killed."
-      echo "               -> record 長寿命 per-job container モデル as confirmed"
-      echo "                  required design in the decision-log."
+    if [ -f "${MANIFEST_FILE}" ] && jq -e '.status == "failed"' "${MANIFEST_FILE}" >/dev/null 2>&1; then
+      RECONCILED=true
     else
-      fail "ac2_job_progress_after_kill" \
-        "no manifest status=done and no matching PR within ${POLL_TIMEOUT_SECONDS}s of killing ${CONTAINER_NAME}"
-      echo "  AC-2 RESULT: NO-GO -- job did not progress after the dispatch"
-      echo "               container was killed within the poll window."
-      echo "               -> record no-go in the decision-log."
+      # HERMES_WATCHDOG_CONTAINER_DEAD_CONFIRM_COUNT default is 2, but real
+      # environments may have claude agents session-state lag or race with
+      # the bg_absent_streak path, so allow up to 6 total passes before
+      # judging.
+      for _ in 3 4 5 6; do
+        sleep 2
+        HERMES_HOME="${HERMES_HOME}" HERMES_WATCHDOG_SKIP_LOCK=1 \
+          bash "${REPO_ROOT}/hermes/watchdog.sh" 2>>"${WORK_DIR}/watchdog.err" || true
+        if [ -f "${MANIFEST_FILE}" ] && jq -e '.status == "failed"' "${MANIFEST_FILE}" >/dev/null 2>&1; then
+          RECONCILED=true
+          break
+        fi
+      done
+    fi
+
+    if [ "${RECONCILED}" = "true" ]; then
+      pass "ac2b_watchdog_reconciles_killed_container_to_failed"
+    else
+      fail "ac2b_watchdog_reconciles_killed_container_to_failed" \
+        "manifest ${MANIFEST_FILE} did not reach status=failed after up to 6 watchdog.sh passes; see ${WORK_DIR}/watchdog.err"
+    fi
+
+    # notify_dispatch/notify_slack in watchdog.sh logs one of four distinct
+    # outcomes, all of which prove the notify path was actually invoked
+    # (the gate's fake C_PHASEB_GATE Slack channel realistically only ever
+    # hits the "no token" or "rejected" cases, never real success):
+    #   1. SLACK_BOT_TOKEN unset         -> "skipping notify for channel ..."
+    #   2. curl/network error           -> "Slack notify failed for channel ..."
+    #   3. Slack API-level rejection    -> "Slack notify rejected for channel ..."
+    #   4. success                      -> "notified (status=failed ..."
+    NOTIFY_PATTERN='skipping notify for channel|Slack notify failed for channel|Slack notify rejected for channel|notified \(status=failed'
+    echo "- ac2b_notify_path_exercised"
+    if grep -q 'reconciling status to failed (issue #122)' "${WORK_DIR}/watchdog.err" &&
+      grep -qE "${NOTIFY_PATTERN}" "${WORK_DIR}/watchdog.err"; then
+      pass "ac2b_notify_path_exercised"
+    else
+      fail "ac2b_notify_path_exercised" \
+        "expected watchdog.err to contain both the 'reconciling status to failed (issue #122)' reconcile line and a notify-path line (skipping/failed/rejected/notified); see ${WORK_DIR}/watchdog.err"
+    fi
+
+    if [ "${RECONCILED}" = "true" ] && grep -qE "${NOTIFY_PATTERN}" "${WORK_DIR}/watchdog.err"; then
+      echo "  AC-2 RESULT: RECONCILED -- per-job container killed -> watchdog"
+      echo "               reconciled job to failed and notify path was"
+      echo "               exercised (no auto-retry by design, issue #122)."
+    else
+      echo "  AC-2 RESULT: FAIL -- watchdog did not reconcile the killed"
+      echo "               container's job to failed and/or the notify path"
+      echo "               was not exercised within the poll window."
+      echo "               -> record in the decision-log."
     fi
 
     docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
