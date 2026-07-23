@@ -58,6 +58,20 @@ in
       cleanup = "uninstall"; # Brewfileにないものをアンインストール
       extraFlags = [ "--force-cleanup" ]; # cleanup実行時の確認を明示的に許可
     };
+    taps = [
+      "rjyo/moshi" # moshi-hook 配布用 tap
+    ];
+    brews = [
+      {
+        # コーディングエージェント(Claude Code等)のイベントを iOS アプリ Moshi に中継する常駐デーモン
+        # brew の tap trust は完全修飾名の formula にしか効かない (非修飾名だと
+        # trusted: true が無視され、bundle cleanup が trust store を Brewfile 由来で
+        # 全置換するため手動 `brew trust` も activation の度に消される)。
+        name = "rjyo/moshi/moshi-hook";
+        start_service = true;
+        restart_service = "changed";
+      }
+    ];
     casks = [
       # インストールするCaskアプリケーションのリスト
       "antigravity"
@@ -109,6 +123,21 @@ in
     trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
   };
 
+  # Nix store の自動 GC（毎週日曜 5:00、mise upgrade の 04:30 と競合しない時間帯）
+  # --delete-older-than 14d により直近 2 週間の generation は保持し、rollback 可能性を確保
+  nix.gc = {
+    automatic = true;
+    interval = {
+      Weekday = 0;
+      Hour = 5;
+      Minute = 0;
+    };
+    options = "--delete-older-than 14d";
+  };
+
+  # store 内の同一内容ファイルを hardlink 化してディスク使用量を削減
+  nix.optimise.automatic = true;
+
   # Linux builder（macOS 上で linux 用 derivation を build する VM）
   # hermes-agent 用 Docker image (dockerTools.buildLayeredImage) は Linux 専用のため
   # darwin から build するには linux-builder が必須。
@@ -143,4 +172,19 @@ in
   # Tailscale VPN（CLIのみ、インターネット越しSSH用）
   services.tailscale.enable = true;
   documentation.enable = false;
+
+  # 24/7 稼働のリモートアクセスサーバー (Mac Studio) でのみ sleep を無効化する。
+  # 同一 dotfiles を MacBook にも適用するため host 判定はハードコードせず、
+  # hermes-gateway の二重起動防止と同じ opt-in マーカーファイル方式にする。
+  # 有効化: touch /Users/${username}/.config/dotfiles/.no-sleep-server
+  # 無効化 (通常運用に戻す): rm /Users/${username}/.config/dotfiles/.no-sleep-server && sudo darwin-rebuild switch
+  system.activationScripts.pmsetServerConfig.text = ''
+    MARKER="/Users/${username}/.config/dotfiles/.no-sleep-server"
+    if [ -f "$MARKER" ]; then
+      echo "pmsetServerConfig: $MARKER found — disabling sleep for 24/7 remote access"
+      /usr/bin/pmset -a sleep 0
+      /usr/bin/pmset -a disksleep 0
+      /usr/bin/pmset -a womp 1
+    fi
+  '';
 }
