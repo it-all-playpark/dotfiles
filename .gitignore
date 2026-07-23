@@ -37,3 +37,6 @@ result-*
 
 # macOS
 .DS_Store
+
+# no sleep marker
+.no-sleep-server
