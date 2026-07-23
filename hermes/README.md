@@ -399,10 +399,11 @@ Google Chat 用の native adapter は存在しない (`gateway/platforms/` に `
    > 管理外のため、`hermes/config.yaml`/`hermes/repo_bindings.yaml` の config 変更だけでは
    > per-user gating を追加できない。したがって **Google Chat は AC-12 (allowlist 外ユーザー/
    > mention なしの dispatch 拒否) を per-user 粒度では config だけで満たさない**。
-   > 受容可否は人間判断への escalate 事項として
+   > **決定: 案B（保留、追跡先 [issue #120](https://github.com/it-all-playpark/dotfiles/issues/120)）**。
+   > gateway adapter 側の per-user gating 追加が完了するまで、Google Chat の production bind
+   > （`GOOGLE_CHAT_WEBHOOK_SECRET` の設定・下記 binding の有効化）は行わないこと。詳細は
    > [`claudedocs/hermes-phaseE-googlechat-user-gating-decision.md`](../claudedocs/hermes-phaseE-googlechat-user-gating-decision.md)
-   > (要決定・決定保留) に記録している。決定前に Google Chat を production bind する場合は
-   > このリスクを踏まえた上で行うこと。
+   > を参照。初回展開は per-user gating が機能する Discord から行う。
 
 ### 重複配送 (dedupe) は platform adapter 層の責務 (AC-13)
 
@@ -435,20 +436,17 @@ Discord / Google Chat は保証レベルが異なる (per-user allowlist vs rout
   - `require_mention: true` の bind channel に bot を mention せず通常メッセージを送り、
     dispatch_job が呼ばれないことを確認する
 
-#### [Google Chat・route/space 境界のみ] AC-12
+#### [Google Chat・保留中 (issue #120)] AC-12
 
-> per-user 粒度の allowlist・mention gating は存在しない。以下は「未認証源 (誤った secret)
-> の遮断」の確認であり、「allowlist 外の個人・mention なしの拒否」ではない。受容可否は
+> **決定: 案B（保留）**。gateway adapter 側の per-user gating 追加が完了する（[issue #120](https://github.com/it-all-playpark/dotfiles/issues/120)）まで、
+> Google Chat の production bind は行わない。以下のチェックリストは #120 完了後、per-user
+> gating が実装されてから実施する。詳細は
 > [`claudedocs/hermes-phaseE-googlechat-user-gating-decision.md`](../claudedocs/hermes-phaseE-googlechat-user-gating-decision.md)
-> の決定 (要決定・決定保留) に依存する。
+> を参照。
 
-- [ ] **誤った/未知の secret を伴う POST が拒否されること (route/space 境界の確認、per-user
-      allowlist の確認ではない)**
-  - `GOOGLE_CHAT_WEBHOOK_SECRET` を知らない送信元、または誤った secret で webhook route に
-    POST し、`webhook.py` の signature 検証で拒否され dispatch されないことを確認する
-  - **per-user 制御の確認ではない**: bound space に在籍する正規メンバーが secret を伴って
-    送信した場合の per-user 絞り込み・mention gating は E3 決定 (上記リンク) が案A/案B の
-    どちらかに定まるまで検証対象外
+- [ ] **(#120 完了後) allowlist 外ユーザ・mention なしメッセージが dispatch されないこと**
+  - 未認証源 (誤った secret) の遮断だけでなく、per-user allowlist・mention 相当の gating が
+    機能することを実機確認する
 
 #### [dedupe・AC-13] 全 platform 共通
 

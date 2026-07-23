@@ -93,13 +93,17 @@ route/space 境界の保証は満たすが、「allowlist 外の個人・mention
 
 ## 決定
 
-**要決定（人間判断へ escalate、決定保留）**
+**決定: 案B（保留、追跡先 issue: [#120](https://github.com/it-all-playpark/dotfiles/issues/120)）**
 
-- planner/implementer は本 gap の受容可否（案Aで受容するか、案Bで production bind を保留するか）
-  を代行して決定しない。evaluator の `escalate_reason: accountability` の要請どおり、これは
-  人間が選ぶべき決定点として提示するに留める。
-- 決定後の手順: 人間が案A（受容）または案B（保留/gateway adapter 改修待ち）のいずれかを選んだ
-  時点で、本ドキュメントの本節を「決定: 案A（受容）」または「決定: 案B（保留、追跡先 issue: …）」
-  に書き換え、`hermes/README.md` の AC-12 チェックリスト（Google Chat 項）から本ファイルへの
-  参照を維持したまま、選択した案に応じた運用注記（案A: space membership 管理の運用手順明記 /
-  案B: production bind 保留の明記または追跡 issue リンク）を追記すること。
+- Google Chat の production bind（`GOOGLE_CHAT_WEBHOOK_SECRET` の設定・`repo_bindings.yaml` の
+  `platforms.google_chat` binding の有効化）は、gateway adapter 側
+  （`~/.hermes/hermes-agent/gateway/platforms/webhook.py` の送信者識別情報を用いた per-user
+  gating 追加、または専用 `google_chat.py` adapter の新設。詳細は #120）が完了するまで保留する。
+- 理由: (1) Google Chat は現時点で未有効化（opt-in構成、`.env` に secret 未投入）であり保留の
+  実質コストはゼロ、(2) C7（資格情報 blast radius、`hermes-c7-blast-radius-decisions.md`）が
+  未解決のまま残っている状態で、さらに「入口側の個人認可なし」というリスクを重ねて受容する
+  合理性がないため。
+- 初回展開は Discord から行う（Discord は `DISCORD_ALLOWED_USERS`/`DISCORD_ALLOWED_ROLES` +
+  `require_mention: true` により per-user 粒度で AC-12 を満たす）。
+- #120 の実装が完了し AC-12 が Google Chat 側でも per-user 粒度で充足された時点で、本節を
+  再度更新し production bind を解禁する。
