@@ -10,16 +10,18 @@
   "enabledMcpjsonServers": [
   ],
   "enabledPlugins": {
-    "rust-analyzer-lsp@claude-plugins-official": true,
+    "playwright@claude-plugins-official": false,
+    "rust-analyzer-lsp@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
-    "swift-lsp@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": false,
+    "telegram@claude-plugins-official": false,
     "vercel@claude-plugins-official": true
   },
   "env": {
     "API_TIMEOUT_MS": "900000",
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "DISABLE_AUTOUPDATER": "1"
   },
   "extraKnownMarketplaces": {
   },
@@ -210,16 +212,6 @@
           }
         ],
         "matcher": "resume"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash '/Users/naramotoyuuji/.claude/hooks/herdr-agent-state.sh' session",
-            "timeout": 10,
-            "type": "command"
-          }
-        ],
-        "matcher": "*"
       }
     ],
     "Stop": [
@@ -561,6 +553,29 @@
         "fonts.googleapis.com"
       ]
     }
+  },
+  "skillOverrides": {
+    "api-contract-testing": "off",
+    "building-sales-team": "off",
+    "enterprise-sales": "off",
+    "fastify-best-practices": "off",
+    "founder-sales": "off",
+    "frontend-design": "off",
+    "gsc": "off",
+    "gws-calendar": "off",
+    "gws-calendar-insert": "off",
+    "gws-docs": "off",
+    "gws-docs-write": "off",
+    "neon-postgres": "off",
+    "playwright-cli": "off",
+    "prisma-cli": "off",
+    "remotion-best-practices": "off",
+    "rust-best-practices": "off",
+    "sales-enablement": "off",
+    "strategy-and-competitive-analysis": "off",
+    "ui-ux-pro-max": "off",
+    "vercel-react-best-practices": "off",
+    "youtube-channels": "off"
   },
   "skipAutoPermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
