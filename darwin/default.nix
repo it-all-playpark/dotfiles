@@ -59,6 +59,7 @@ in
       extraFlags = [ "--force-cleanup" ]; # cleanup実行時の確認を明示的に許可
     };
     taps = [
+      "deskflow/tap" # Deskflow公式Homebrew tap
       "rjyo/moshi" # moshi-hook 配布用 tap
     ];
     brews = [
@@ -81,6 +82,7 @@ in
       "chatgpt"
       "claude"
       "deepl"
+      "deskflow/tap/deskflow" # Mac間でキーボード・マウスを共有するソフトウェアKVM
       "font-hack-nerd-font"
       "google-chrome"
       "google-drive"
