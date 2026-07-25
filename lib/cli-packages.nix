@@ -7,7 +7,8 @@
   pkgs,
 }:
 
-with pkgs; [
+with pkgs;
+[
   ast-grep # 構文認識の検索・一括書き換え (codemod)。AI agent がコンテキスト外で安全に一括変更するための道具
   bat
   bun

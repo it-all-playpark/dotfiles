@@ -511,6 +511,7 @@
         "~/.claude/logs",
         "~/.claude/memory",
         "~/.claude/jobs",
+        "~/.claude/channels",
         "~/Documents/meetings",
         "~/Library/CloudStorage/Box-Box",
         "~/ghq/**/.claude/scheduled_tasks.json",
