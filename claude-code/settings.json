@@ -257,7 +257,6 @@
     ]
   },
   "language": "ja",
-  "model": "sonnet",
   "permissions": {
     "additionalDirectories": [
       "~/ghq/github.com/playpark-llc",

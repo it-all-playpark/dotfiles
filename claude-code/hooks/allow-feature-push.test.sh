@@ -162,7 +162,7 @@ echo "[Unknown/unrecognized global option before push — fail-closed to ask, no
 run_case "git --totally-unknown-option value push origin main" "git --totally-unknown-option value push origin main" "ask"
 run_case "git --totally-unknown-option value status (non-push stays noop)" "git --totally-unknown-option value status" "noop"
 
-echo "[Confirmed subcommand (non-option token right after git/known-global-value) — literal later \"push\" token must NOT trigger ask (regression for PR #129 review)]"
+echo '[Confirmed subcommand (non-option token right after git/known-global-value) — literal later "push" token must NOT trigger ask (regression for PR #129 review)]'
 run_case "git stash push (subcommand confirmed, not global-push)" 'git stash push' "noop"
 run_case "git stash push -m wip (subcommand confirmed, not global-push)" 'git stash push -m wip' "noop"
 run_case "git log --grep push (subcommand confirmed, not global-push)" 'git log --grep push' "noop"
