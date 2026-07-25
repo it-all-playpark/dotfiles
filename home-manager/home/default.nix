@@ -81,6 +81,12 @@ in
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
+      # Deskflow (ソフトウェアKVM) のサーバ設定。GUI の Server タブで「外部設定ファイル
+      # を使う」を有効にし、このパスを指定する。外部設定が有効な間 Deskflow はこのファイル
+      # を読むだけで書き戻さない (CoreProcess::persistServerConfig) ため、home-manager の
+      # read-only symlink で問題ない。デフォルトの ~/Library/Deskflow/ 側は書き込み可能の
+      # まま残すので、外部設定を切っても GUI が壊れない。
+      ".config/deskflow/deskflow-server.conf".source = ./file/deskflow/deskflow-server.conf;
       ".config/nvim" = {
         source = ./file/nvim;
         recursive = true;
