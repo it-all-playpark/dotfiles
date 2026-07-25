@@ -112,18 +112,36 @@ for ((i = 1; i < ${#CMD_TOKENS[@]}; i++)); do
     break
     ;;
   *)
-    # push 以外のサブコマンド（status/commit/...）か、未知の値取り
-    # グローバルオプションの値トークンの可能性がある。後者を前者と
-    # 誤認して無条件 exit 0（fail-open）すると、本スクリプトが未知の
-    # 値取りグローバルオプション（将来の git バージョンで追加される
-    # ものを含む）を素通りさせてしまう（--attr-source が過去にこの
-    # 経路で抜けていた）。残りのトークンに "push" が実在する場合は
+    # push 以外のサブコマンド（status/commit/stash/log/help/...）か、未知の
+    # 値取りグローバルオプションの値トークンの可能性がある。
+    #
+    # 直前トークン（CMD_TOKENS[i-1]）が非オプション（"git" 直後、または
+    # 既知グローバルオプションの値を消費済みの後）であれば、このトークン
+    # 自体が実サブコマンドとして確定する（例: `git stash push` の
+    # "stash"、`git commit -m push` の "commit"、`git log --grep push` の
+    # "log"、`git help push` の "help"）。この場合、後続に literal な
+    # "push" が現れても、それは確定済みサブコマンドへの引数（stash の
+    # サブコマンド名／コミットメッセージ／grep パターン等）であり
+    # git push ではないため、ask に倒さず即 exit 0 する。
+    #
+    # 一方、直前トークンが '-' で始まる未知オプション（上の -*) 分岐で
+    # 値を消費されずに通過したもの）である場合のみ、このトークンは
+    # そのオプションの値なのか実サブコマンドなのか区別できない。誤認して
+    # 無条件 exit 0（fail-open）すると、本スクリプトが未知の値取り
+    # グローバルオプション（将来の git バージョンで追加されるものを含む）
+    # を素通りさせてしまう（--attr-source が過去にこの経路で抜けていた）。
+    # この曖昧なケースに限り、残りのトークンに "push" が実在する場合は
     # 判定を確定できないため ask に倒す。
-    for ((j = i + 1; j < ${#CMD_TOKENS[@]}; j++)); do
-      if [ "${CMD_TOKENS[$j]}" = "push" ]; then
-        ask "未知のグローバルオプションを含む git コマンドのため push 判定を確定できません"
-      fi
-    done
+    prev_tok="${CMD_TOKENS[$((i - 1))]}"
+    case "$prev_tok" in
+    -*)
+      for ((j = i + 1; j < ${#CMD_TOKENS[@]}; j++)); do
+        if [ "${CMD_TOKENS[$j]}" = "push" ]; then
+          ask "未知のグローバルオプションを含む git コマンドのため push 判定を確定できません"
+        fi
+      done
+      ;;
+    esac
     exit 0
     ;;
   esac
