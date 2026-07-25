@@ -138,11 +138,29 @@ run_case "git --git-dir=<path> push origin main" "git --git-dir=$SCRIPT_DIR/.git
 run_case "git -c user.name=x push origin main" "git -c user.name=x push origin main" "deny"
 run_case "git -c user.name=x -C <dir> push origin main (combined globals)" "git -c user.name=x -C $SCRIPT_DIR push origin main" "deny"
 run_case "git -C <dir> status (non-push subcommand stays noop)" "git -C $SCRIPT_DIR status" "noop"
-# -C と hook 実行時の cwd(workdir 引数)を同じリポジトリに揃えたケース。
-# -C が指すリポジトリと cwd が異なる場合の fallback ブランチ解決までは
-# 対応しない(現状の実装は git rev-parse を常に cwd 基準で呼ぶ)。
+# -C と hook 実行時の cwd(workdir 引数)を同じリポジトリに揃えたケース(sanity)。
 run_case "git -C <dir> push (bare, fallback) on main repo" "git -C $TMP_MAIN_REPO push" "deny" "$TMP_MAIN_REPO"
 run_case "git -C <dir> push (bare, fallback) on feature repo" "git -C $TMP_FEATURE_REPO push" "allow" "$TMP_FEATURE_REPO"
+
+echo "[-C destination differs from hook cwd — fallback must resolve via -C, not cwd]"
+# -C が指すリポジトリと hook 実行時の cwd が異なるケース。fallback のブランチ
+# 解決は cwd ではなく -C の指すリポジトリを基準にしなければならない
+# (cwd 基準のままだと、main への push を feature ブランチとして誤って
+# allow したり、逆に feature ブランチへの push を main として誤って
+# deny したりする)。
+run_case "git -C <main repo> push (bare) from feature repo cwd -> resolves via -C to main -> deny" "git -C $TMP_MAIN_REPO push" "deny" "$TMP_FEATURE_REPO"
+run_case "git -C <feature repo> push (bare) from main repo cwd -> resolves via -C to feature/x -> allow" "git -C $TMP_FEATURE_REPO push" "allow" "$TMP_MAIN_REPO"
+run_case "git -C <main repo> push origin HEAD from feature repo cwd -> resolves via -C to main -> deny" "git -C $TMP_MAIN_REPO push origin HEAD" "deny" "$TMP_FEATURE_REPO"
+run_case "git -C <feature repo> push origin HEAD from main repo cwd -> resolves via -C to feature/x -> allow" "git -C $TMP_FEATURE_REPO push origin HEAD" "allow" "$TMP_MAIN_REPO"
+
+echo "[--attr-source global option (git 2.40+) — must still be detected as push, not fail-open]"
+run_case "git --attr-source HEAD push origin main" "git --attr-source HEAD push origin main" "deny"
+run_case "git --attr-source=HEAD push origin main" "git --attr-source=HEAD push origin main" "deny"
+run_case "git --attr-source HEAD push origin feature/x" "git --attr-source HEAD push origin feature/x" "allow"
+
+echo "[Unknown/unrecognized global option before push — fail-closed to ask, not silent allow]"
+run_case "git --totally-unknown-option value push origin main" "git --totally-unknown-option value push origin main" "ask"
+run_case "git --totally-unknown-option value status (non-push stays noop)" "git --totally-unknown-option value status" "noop"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

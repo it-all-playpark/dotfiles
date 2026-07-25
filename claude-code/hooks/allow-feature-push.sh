@@ -38,40 +38,6 @@ if [ "${CMD_TOKENS[0]:-}" != "git" ]; then
   exit 0
 fi
 
-PUSH_IDX=-1
-skip_global_next=0
-for ((i = 1; i < ${#CMD_TOKENS[@]}; i++)); do
-  tok="${CMD_TOKENS[$i]}"
-  if [ "$skip_global_next" = "1" ]; then
-    skip_global_next=0
-    continue
-  fi
-  case "$tok" in
-  -C | -c | --git-dir | --work-tree | --namespace | --exec-path | --config-env | --super-prefix)
-    skip_global_next=1
-    continue
-    ;;
-  --git-dir=* | --work-tree=* | --namespace=* | --exec-path=* | --config-env=* | --super-prefix=*)
-    continue
-    ;;
-  -*)
-    continue
-    ;;
-  push)
-    PUSH_IDX=$i
-    break
-    ;;
-  *)
-    # push 以外のサブコマンド（status/commit/...）→ 対象外
-    exit 0
-    ;;
-  esac
-done
-
-if [ "$PUSH_IDX" -lt 0 ]; then
-  exit 0
-fi
-
 deny() {
   local branch="$1"
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"保護/デプロイブランチ ($branch) への push は禁止\"}}"
@@ -99,6 +65,73 @@ is_protected() {
     ;;
   esac
 }
+
+PUSH_IDX=-1
+skip_global_next=0
+skip_location_next=0
+# -C / --git-dir / --work-tree は push 先の解決に使うリポジトリ位置を変える
+# ため、値ごとトークン列を保存しておき、fallback のブランチ解決（後述の
+# git rev-parse 呼び出し）でも同じ位置指定を再現する。これをしないと、
+# `git -C <他リポジトリ> push`（refspec 省略）を hook 実行時の cwd と
+# 異なる cwd から呼んだ場合に、rev-parse が cwd 基準のブランチを返して
+# しまい、-C が指す実際の push 先ブランチと食い違った allow/deny を返す。
+GLOBAL_LOCATION_ARGS=()
+for ((i = 1; i < ${#CMD_TOKENS[@]}; i++)); do
+  tok="${CMD_TOKENS[$i]}"
+  if [ "$skip_location_next" = "1" ]; then
+    skip_location_next=0
+    GLOBAL_LOCATION_ARGS+=("$tok")
+    continue
+  fi
+  if [ "$skip_global_next" = "1" ]; then
+    skip_global_next=0
+    continue
+  fi
+  case "$tok" in
+  -C | --git-dir | --work-tree)
+    GLOBAL_LOCATION_ARGS+=("$tok")
+    skip_location_next=1
+    continue
+    ;;
+  --git-dir=* | --work-tree=*)
+    GLOBAL_LOCATION_ARGS+=("$tok")
+    continue
+    ;;
+  -c | --namespace | --exec-path | --config-env | --super-prefix | --attr-source)
+    skip_global_next=1
+    continue
+    ;;
+  --namespace=* | --exec-path=* | --config-env=* | --attr-source=*)
+    continue
+    ;;
+  -*)
+    continue
+    ;;
+  push)
+    PUSH_IDX=$i
+    break
+    ;;
+  *)
+    # push 以外のサブコマンド（status/commit/...）か、未知の値取り
+    # グローバルオプションの値トークンの可能性がある。後者を前者と
+    # 誤認して無条件 exit 0（fail-open）すると、本スクリプトが未知の
+    # 値取りグローバルオプション（将来の git バージョンで追加される
+    # ものを含む）を素通りさせてしまう（--attr-source が過去にこの
+    # 経路で抜けていた）。残りのトークンに "push" が実在する場合は
+    # 判定を確定できないため ask に倒す。
+    for ((j = i + 1; j < ${#CMD_TOKENS[@]}; j++)); do
+      if [ "${CMD_TOKENS[$j]}" = "push" ]; then
+        ask "未知のグローバルオプションを含む git コマンドのため push 判定を確定できません"
+      fi
+    done
+    exit 0
+    ;;
+  esac
+done
+
+if [ "$PUSH_IDX" -lt 0 ]; then
+  exit 0
+fi
 
 # "push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）。
 # 文字列の prefix 除去ではなく、上のループで確定した PUSH_IDX から配列
@@ -146,8 +179,11 @@ if [ "${#ARGS[@]}" -ge 2 ]; then
 fi
 
 if [ "${#REFSPECS[@]}" -eq 0 ]; then
-  # refspec に宛先ブランチが明示されない → 現在ブランチを fallback 宛先とする
-  DEST_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  # refspec に宛先ブランチが明示されない → 現在ブランチを fallback 宛先とする。
+  # -C / --git-dir / --work-tree が指定されていた場合は GLOBAL_LOCATION_ARGS
+  # 経由で同じ位置指定を rev-parse にも渡し、hook 実行時の cwd ではなく
+  # 実際の push 対象リポジトリのブランチを解決する。
+  DEST_BRANCH=$(git "${GLOBAL_LOCATION_ARGS[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
   if [ -z "$DEST_BRANCH" ] || [ "$DEST_BRANCH" = "HEAD" ]; then
     ask "push 宛先ブランチを検出できません"
   fi
@@ -176,8 +212,9 @@ for REFSPEC in "${REFSPECS[@]}"; do
   # 残る。is_protected は具体的なブランチ名しか知らないため一致せず allow
   # してしまう（main checkout 中の "git push origin HEAD" が push 先 main
   # なのに通ってしまうケース）— 実ブランチへ解決してから判定する。
+  # ここも GLOBAL_LOCATION_ARGS（-C 等）を反映して解決する。
   if [ "$DEST_BRANCH" = "HEAD" ] || [ "$DEST_BRANCH" = "@" ]; then
-    RESOLVED_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    RESOLVED_BRANCH=$(git "${GLOBAL_LOCATION_ARGS[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
     if [ -z "$RESOLVED_BRANCH" ] || [ "$RESOLVED_BRANCH" = "HEAD" ]; then
       ask "push 宛先ブランチを検出できません"
     fi
