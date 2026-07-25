@@ -26,11 +26,51 @@ CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 # Bash allow により保護ブランチ push が deny されず passthrough してしまう
 # ため、read -ra でトークン化してから単一スペース区切りに再結合して判定する。
 read -ra CMD_TOKENS <<<"$CMD"
-NORMALIZED_CMD="${CMD_TOKENS[*]}"
-case "$NORMALIZED_CMD" in
-"git push"*) ;;
-*) exit 0 ;;
-esac
+
+# "git push" という文字列の前方一致だけでは、git と push の間にグローバル
+# オプション（-C <dir> / -c <name>=<value> / --git-dir=<path> 等）が挟まる
+# コマンド（例: `git -C /workspace/jobs/x push origin main`）を素通りさせて
+# しまう（コマンド全体の先頭トークン列が "git" "push" と連続しないため）。
+# トークン列を先頭から辿り、値を取るグローバルオプションはその値ごと
+# スキップして、最初の非オプショントークンが実際に push サブコマンドか
+# どうかで判定する。
+if [ "${CMD_TOKENS[0]:-}" != "git" ]; then
+  exit 0
+fi
+
+PUSH_IDX=-1
+skip_global_next=0
+for ((i = 1; i < ${#CMD_TOKENS[@]}; i++)); do
+  tok="${CMD_TOKENS[$i]}"
+  if [ "$skip_global_next" = "1" ]; then
+    skip_global_next=0
+    continue
+  fi
+  case "$tok" in
+  -C | -c | --git-dir | --work-tree | --namespace | --exec-path | --config-env | --super-prefix)
+    skip_global_next=1
+    continue
+    ;;
+  --git-dir=* | --work-tree=* | --namespace=* | --exec-path=* | --config-env=* | --super-prefix=*)
+    continue
+    ;;
+  -*)
+    continue
+    ;;
+  push)
+    PUSH_IDX=$i
+    break
+    ;;
+  *)
+    # push 以外のサブコマンド（status/commit/...）→ 対象外
+    exit 0
+    ;;
+  esac
+done
+
+if [ "$PUSH_IDX" -lt 0 ]; then
+  exit 0
+fi
 
 deny() {
   local branch="$1"
@@ -60,12 +100,11 @@ is_protected() {
   esac
 }
 
-# "git push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）。
-# 元の $CMD ではなく正規化済み NORMALIZED_CMD から剥がす — 元の $CMD のまま
-# だと連続空白のケースで "git push" prefix が一致せず REST が丸ごと残り、
-# 後続の TOKENS/ARGS 抽出（remote 名/refspec の位置）がずれてしまうため。
-REST="${NORMALIZED_CMD#git push}"
-read -ra TOKENS <<<"$REST"
+# "push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）。
+# 文字列の prefix 除去ではなく、上のループで確定した PUSH_IDX から配列
+# スライスする — グローバルオプション分だけ位置がずれるため、固定長の
+# "git push" prefix 除去では対応できない。
+TOKENS=("${CMD_TOKENS[@]:$((PUSH_IDX + 1))}")
 
 ARGS=()
 HAS_ALL_OR_MIRROR=0

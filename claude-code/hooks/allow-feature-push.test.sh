@@ -131,6 +131,19 @@ echo "[Non-push commands → no hook output]"
 run_case "git status" 'git status' "noop"
 run_case "git push-something (not a real push)" 'echo not-a-push' "noop"
 
+echo "[Global option bypass attempts (-C / --git-dir / -c) — must still be detected as push]"
+run_case "git -C <dir> push origin main" "git -C $SCRIPT_DIR push origin main" "deny"
+run_case "git -C <dir> push origin feature/x" "git -C $SCRIPT_DIR push origin feature/x" "allow"
+run_case "git --git-dir=<path> push origin main" "git --git-dir=$SCRIPT_DIR/.git push origin main" "deny"
+run_case "git -c user.name=x push origin main" "git -c user.name=x push origin main" "deny"
+run_case "git -c user.name=x -C <dir> push origin main (combined globals)" "git -c user.name=x -C $SCRIPT_DIR push origin main" "deny"
+run_case "git -C <dir> status (non-push subcommand stays noop)" "git -C $SCRIPT_DIR status" "noop"
+# -C と hook 実行時の cwd(workdir 引数)を同じリポジトリに揃えたケース。
+# -C が指すリポジトリと cwd が異なる場合の fallback ブランチ解決までは
+# 対応しない(現状の実装は git rev-parse を常に cwd 基準で呼ぶ)。
+run_case "git -C <dir> push (bare, fallback) on main repo" "git -C $TMP_MAIN_REPO push" "deny" "$TMP_MAIN_REPO"
+run_case "git -C <dir> push (bare, fallback) on feature repo" "git -C $TMP_FEATURE_REPO push" "allow" "$TMP_FEATURE_REPO"
+
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
 if ((FAIL > 0)); then
