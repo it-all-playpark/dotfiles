@@ -26,11 +26,17 @@ CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 # Bash allow により保護ブランチ push が deny されず passthrough してしまう
 # ため、read -ra でトークン化してから単一スペース区切りに再結合して判定する。
 read -ra CMD_TOKENS <<<"$CMD"
-NORMALIZED_CMD="${CMD_TOKENS[*]}"
-case "$NORMALIZED_CMD" in
-"git push"*) ;;
-*) exit 0 ;;
-esac
+
+# "git push" という文字列の前方一致だけでは、git と push の間にグローバル
+# オプション（-C <dir> / -c <name>=<value> / --git-dir=<path> 等）が挟まる
+# コマンド（例: `git -C /workspace/jobs/x push origin main`）を素通りさせて
+# しまう（コマンド全体の先頭トークン列が "git" "push" と連続しないため）。
+# トークン列を先頭から辿り、値を取るグローバルオプションはその値ごと
+# スキップして、最初の非オプショントークンが実際に push サブコマンドか
+# どうかで判定する。
+if [ "${CMD_TOKENS[0]:-}" != "git" ]; then
+  exit 0
+fi
 
 deny() {
   local branch="$1"
@@ -60,12 +66,96 @@ is_protected() {
   esac
 }
 
-# "git push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）。
-# 元の $CMD ではなく正規化済み NORMALIZED_CMD から剥がす — 元の $CMD のまま
-# だと連続空白のケースで "git push" prefix が一致せず REST が丸ごと残り、
-# 後続の TOKENS/ARGS 抽出（remote 名/refspec の位置）がずれてしまうため。
-REST="${NORMALIZED_CMD#git push}"
-read -ra TOKENS <<<"$REST"
+PUSH_IDX=-1
+skip_global_next=0
+skip_location_next=0
+# -C / --git-dir / --work-tree は push 先の解決に使うリポジトリ位置を変える
+# ため、値ごとトークン列を保存しておき、fallback のブランチ解決（後述の
+# git rev-parse 呼び出し）でも同じ位置指定を再現する。これをしないと、
+# `git -C <他リポジトリ> push`（refspec 省略）を hook 実行時の cwd と
+# 異なる cwd から呼んだ場合に、rev-parse が cwd 基準のブランチを返して
+# しまい、-C が指す実際の push 先ブランチと食い違った allow/deny を返す。
+GLOBAL_LOCATION_ARGS=()
+for ((i = 1; i < ${#CMD_TOKENS[@]}; i++)); do
+  tok="${CMD_TOKENS[$i]}"
+  if [ "$skip_location_next" = "1" ]; then
+    skip_location_next=0
+    GLOBAL_LOCATION_ARGS+=("$tok")
+    continue
+  fi
+  if [ "$skip_global_next" = "1" ]; then
+    skip_global_next=0
+    continue
+  fi
+  case "$tok" in
+  -C | --git-dir | --work-tree)
+    GLOBAL_LOCATION_ARGS+=("$tok")
+    skip_location_next=1
+    continue
+    ;;
+  --git-dir=* | --work-tree=*)
+    GLOBAL_LOCATION_ARGS+=("$tok")
+    continue
+    ;;
+  -c | --namespace | --exec-path | --config-env | --super-prefix | --attr-source)
+    skip_global_next=1
+    continue
+    ;;
+  --namespace=* | --exec-path=* | --config-env=* | --attr-source=*)
+    continue
+    ;;
+  -*)
+    continue
+    ;;
+  push)
+    PUSH_IDX=$i
+    break
+    ;;
+  *)
+    # push 以外のサブコマンド（status/commit/stash/log/help/...）か、未知の
+    # 値取りグローバルオプションの値トークンの可能性がある。
+    #
+    # 直前トークン（CMD_TOKENS[i-1]）が非オプション（"git" 直後、または
+    # 既知グローバルオプションの値を消費済みの後）であれば、このトークン
+    # 自体が実サブコマンドとして確定する（例: `git stash push` の
+    # "stash"、`git commit -m push` の "commit"、`git log --grep push` の
+    # "log"、`git help push` の "help"）。この場合、後続に literal な
+    # "push" が現れても、それは確定済みサブコマンドへの引数（stash の
+    # サブコマンド名／コミットメッセージ／grep パターン等）であり
+    # git push ではないため、ask に倒さず即 exit 0 する。
+    #
+    # 一方、直前トークンが '-' で始まる未知オプション（上の -*) 分岐で
+    # 値を消費されずに通過したもの）である場合のみ、このトークンは
+    # そのオプションの値なのか実サブコマンドなのか区別できない。誤認して
+    # 無条件 exit 0（fail-open）すると、本スクリプトが未知の値取り
+    # グローバルオプション（将来の git バージョンで追加されるものを含む）
+    # を素通りさせてしまう（--attr-source が過去にこの経路で抜けていた）。
+    # この曖昧なケースに限り、残りのトークンに "push" が実在する場合は
+    # 判定を確定できないため ask に倒す。
+    prev_tok="${CMD_TOKENS[$((i - 1))]}"
+    case "$prev_tok" in
+    -*)
+      for ((j = i + 1; j < ${#CMD_TOKENS[@]}; j++)); do
+        if [ "${CMD_TOKENS[$j]}" = "push" ]; then
+          ask "未知のグローバルオプションを含む git コマンドのため push 判定を確定できません"
+        fi
+      done
+      ;;
+    esac
+    exit 0
+    ;;
+  esac
+done
+
+if [ "$PUSH_IDX" -lt 0 ]; then
+  exit 0
+fi
+
+# "push" 以降のトークンを取り出す（値を取るフラグはその値ごとスキップ）。
+# 文字列の prefix 除去ではなく、上のループで確定した PUSH_IDX から配列
+# スライスする — グローバルオプション分だけ位置がずれるため、固定長の
+# "git push" prefix 除去では対応できない。
+TOKENS=("${CMD_TOKENS[@]:$((PUSH_IDX + 1))}")
 
 ARGS=()
 HAS_ALL_OR_MIRROR=0
@@ -107,8 +197,11 @@ if [ "${#ARGS[@]}" -ge 2 ]; then
 fi
 
 if [ "${#REFSPECS[@]}" -eq 0 ]; then
-  # refspec に宛先ブランチが明示されない → 現在ブランチを fallback 宛先とする
-  DEST_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  # refspec に宛先ブランチが明示されない → 現在ブランチを fallback 宛先とする。
+  # -C / --git-dir / --work-tree が指定されていた場合は GLOBAL_LOCATION_ARGS
+  # 経由で同じ位置指定を rev-parse にも渡し、hook 実行時の cwd ではなく
+  # 実際の push 対象リポジトリのブランチを解決する。
+  DEST_BRANCH=$(git "${GLOBAL_LOCATION_ARGS[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
   if [ -z "$DEST_BRANCH" ] || [ "$DEST_BRANCH" = "HEAD" ]; then
     ask "push 宛先ブランチを検出できません"
   fi
@@ -137,8 +230,9 @@ for REFSPEC in "${REFSPECS[@]}"; do
   # 残る。is_protected は具体的なブランチ名しか知らないため一致せず allow
   # してしまう（main checkout 中の "git push origin HEAD" が push 先 main
   # なのに通ってしまうケース）— 実ブランチへ解決してから判定する。
+  # ここも GLOBAL_LOCATION_ARGS（-C 等）を反映して解決する。
   if [ "$DEST_BRANCH" = "HEAD" ] || [ "$DEST_BRANCH" = "@" ]; then
-    RESOLVED_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    RESOLVED_BRANCH=$(git "${GLOBAL_LOCATION_ARGS[@]}" rev-parse --abbrev-ref HEAD 2>/dev/null)
     if [ -z "$RESOLVED_BRANCH" ] || [ "$RESOLVED_BRANCH" = "HEAD" ]; then
       ask "push 宛先ブランチを検出できません"
     fi
