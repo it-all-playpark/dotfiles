@@ -68,6 +68,26 @@ in
     ];
     stateVersion = "24.05"; # Please read the comment before changing.
 
+    # 全シェル共通の環境変数。fish / zsh のいずれも home-manager が生成する
+    # hm-session-vars を source するため (~/.config/fish/config.fish および
+    # ~/.zshenv)、ここに 1 度書けば両方のシェルに届く。
+    sessionVariables = {
+      # gws (Google Workspace CLI) は既定で macOS Keychain (keyring backend) に
+      # 資格情報を保存しようとするが、保存段階で
+      #   Platform secure storage failure: User interaction is not allowed.
+      # により失敗することがある。この失敗は OAuth 自体が成功した *後* に起きる
+      # ため「login したのに資格情報が一度も更新されない」状態を作り、失効した
+      # refresh_token を掴み続ける。2026-07-26 の hermes gws 障害
+      # (container 内 gws が invalid_grant で全滅) の原因がこれで、Keychain の
+      # 該当エントリは 2 か月以上更新されていなかった。
+      # file backend を既定にして Keychain を経由させない。
+      #
+      # 注: GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE はここに追加しないこと。
+      # credentials.enc より優先されるため、再 login しても古い認証情報を掴み
+      # 続ける状態になる (hermes の container image でも同じ理由で設定していない)。
+      GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND = "file";
+    };
+
     # 共通パッケージ + CLI tool 群 (host モード)
     # pkgs.flock (discoteq/flock, cross-platform flock(1)) — hermes/watchdog.sh
     # (S5) が多重run排除の flock -xn に使う。BSD/macOS には flock(1) が同梱され
