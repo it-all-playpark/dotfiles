@@ -560,6 +560,225 @@ STUB_EOF
 }
 
 # --------------------------------------------------------------------------
+# Helper: build a handoff whose telemetry carries trust keys
+# Usage: make_trust_handoff <outfile> <stub_path> <trust_json_filter>
+# --------------------------------------------------------------------------
+make_trust_handoff() {
+  local outfile="$1" stub="$2" trust_filter="$3"
+  jq -n --arg js "$stub" '{
+    skill: "dev-flow",
+    outcome: "success",
+    issue: 390,
+    journal_sh: $js,
+    telemetry: {
+      merge_tier: "REVIEW",
+      gate_policy: "llm-major-advisory",
+      danger_hits: [],
+      shape: "standard",
+      shape_refloored: false,
+      plan_iter: 1,
+      eval_iter: 1
+    }
+  }' | jq "$trust_filter" >"$outfile"
+}
+
+# --------------------------------------------------------------------------
+# Test 11: valid trust telemetry → --trust-run-id / --trust-receipts /
+#          --trust-surfaceproof are forwarded to journal.sh
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/trust.json" "$stub" \
+    '.telemetry += {
+      trust_run_id: "run-390-abc",
+      trust_receipts: [{layer:"surfaceproof",mode:"shadow",verdict:"pass",stage:"analyze"},
+                       {layer:"evalseal",mode:"shadow",verdict:"inconclusive",stage:"evaluate"}],
+      trust_surfaceproof_shadow: {mode:"shadow",verdict:"pass",reason_code:null,receipt_id:"sha256:deadbeef"}
+    }'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-run-id run-390-abc"; then
+    pass "trust_run_id_forwarded"
+  else
+    fail "trust_run_id_forwarded" "expected --trust-run-id. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- '--trust-receipts \[{"layer":"surfaceproof"'; then
+    pass "trust_receipts_forwarded"
+  else
+    fail "trust_receipts_forwarded" "expected --trust-receipts with compact JSON. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- '--trust-surfaceproof {"mode":"shadow"'; then
+    pass "trust_surfaceproof_forwarded"
+  else
+    fail "trust_surfaceproof_forwarded" "expected --trust-surfaceproof with compact JSON. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/trust.json" ]]; then
+    pass "trust_pending_file_removed"
+  else
+    fail "trust_pending_file_removed" "pending file should be removed after success"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 12: trust keys absent (trust-inactive run) → no trust flags at all
+#          (既存呼び出しと byte 互換。AC-11: shadow/off で挙動不変)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/notrust.json" "$stub" '.'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-"; then
+    fail "trust_absent_no_flags" "no --trust-* flag expected. got: ${captured}"
+  else
+    pass "trust_absent_no_flags"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 13: trust_surfaceproof_shadow が closed-enum 契約違反 (verdict:null —
+#          advisory/blocking 昇格 run の形) → 当該フラグのみ drop し、base entry は記録される
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/badsp.json" "$stub" \
+    '.telemetry += {
+      trust_run_id: "run-390-xyz",
+      trust_surfaceproof_shadow: {mode:"advisory",verdict:null,reason_code:null,receipt_id:null}
+    }'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-surfaceproof"; then
+    fail "bad_surfaceproof_dropped" "invalid --trust-surfaceproof must not be forwarded. got: ${captured}"
+  else
+    pass "bad_surfaceproof_dropped"
+  fi
+  # base entry (と有効な trust_run_id) は失われない
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW" &&
+    echo "$captured" | grep -q -- "--trust-run-id run-390-xyz"; then
+    pass "bad_surfaceproof_base_entry_preserved"
+  else
+    fail "bad_surfaceproof_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/badsp.json" ]]; then
+    pass "bad_surfaceproof_pending_removed"
+  else
+    fail "bad_surfaceproof_pending_removed" "pending file must not be stuck on trust-key drop"
+  fi
+  if grep -q "trust-key-dropped: trust_surfaceproof_shadow" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "bad_surfaceproof_logged"
+  else
+    fail "bad_surfaceproof_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 14: trust_receipts に未知 layer → 当該フラグのみ drop、base entry は記録される
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/badrcpt.json" "$stub" \
+    '.telemetry += {
+      trust_receipts: [{layer:"unknownlayer",mode:"shadow",verdict:"pass"}]
+    }'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-receipts"; then
+    fail "bad_receipts_dropped" "invalid --trust-receipts must not be forwarded. got: ${captured}"
+  else
+    pass "bad_receipts_dropped"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "bad_receipts_base_entry_preserved"
+  else
+    fail "bad_receipts_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if grep -q "trust-key-dropped: trust_receipts" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "bad_receipts_logged"
+  else
+    fail "bad_receipts_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 15 (integration): 実 journal.sh が存在する環境では、trust キーが実際に
+#          journal entry の telemetry へ到達することを確認する（skills repo 側の
+#          --trust-* 受理契約との結合テスト）。未配置環境では skip。
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_trust_handoff "${tmpd}/journal/pending/e2e.json" "$REAL_JOURNAL" \
+      '.telemetry += {
+        trust_run_id: "run-e2e-001",
+        trust_receipts: [{layer:"evalseal",mode:"shadow",verdict:"pass",stage:"evaluate"}],
+        trust_surfaceproof_shadow: {mode:"shadow",verdict:"inconclusive"}
+      }'
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_entry_written"
+      if [[ $(jq -r '.telemetry.trust_run_id' "$entry") == "run-e2e-001" ]] &&
+        [[ $(jq -r '.telemetry.trust_receipts[0].layer' "$entry") == "evalseal" ]] &&
+        [[ $(jq -r '.telemetry.trust_surfaceproof_shadow.verdict' "$entry") == "inconclusive" ]]; then
+        pass "integration_trust_keys_persisted"
+      else
+        fail "integration_trust_keys_persisted" "trust keys missing in entry: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
