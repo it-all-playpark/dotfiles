@@ -68,6 +68,9 @@ for f in "${PENDING_DIR}"/*.json; do
   pr_number=""
   ci_wait_seconds=""
   ci_poll_attempts=""
+  trust_run_id=""
+  trust_receipts_json=""
+  trust_surfaceproof_json=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -87,7 +90,10 @@ for f in "${PENDING_DIR}"/*.json; do
     iterate_status: .telemetry.iterate_status,
     eval_staleness: .telemetry.eval_staleness,
     ci_wait_seconds: .telemetry.ci_wait_seconds,
-    ci_poll_attempts: .telemetry.ci_poll_attempts
+    ci_poll_attempts: .telemetry.ci_poll_attempts,
+    trust_run_id: .telemetry.trust_run_id,
+    trust_receipts: .telemetry.trust_receipts,
+    trust_surfaceproof: .telemetry.trust_surfaceproof_shadow
   }' "$claimed" 2>/dev/null); then
     # JSON parse error
     mkdir -p "${PENDING_DIR}/malformed"
@@ -125,6 +131,9 @@ for f in "${PENDING_DIR}"/*.json; do
   pr_number=$(echo "$parsed" | jq -r '.pr_number // empty')
   ci_wait_seconds=$(echo "$parsed" | jq -r '.ci_wait_seconds // empty')
   ci_poll_attempts=$(echo "$parsed" | jq -r '.ci_poll_attempts // empty')
+  trust_run_id=$(echo "$parsed" | jq -r '.trust_run_id // empty')
+  trust_receipts_json=$(echo "$parsed" | jq -c '.trust_receipts // empty')
+  trust_surfaceproof_json=$(echo "$parsed" | jq -c '.trust_surfaceproof // empty')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -173,6 +182,44 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $ci_poll_attempts && $ci_poll_attempts != "null" ]]; then
     cmd_args+=(--ci-poll-attempts "$ci_poll_attempts")
+  fi
+
+  # --- trust telemetry (epic #390 Phase 5 / issue #413) ---
+  # journal.sh は --trust-receipts / --trust-surfaceproof を closed enum で検証し、契約違反時は
+  # exit 1 する。無検査で転送すると entry 全体が pending へ差し戻され、merge_tier 等の基本
+  # telemetry ごと恒久的に失われる。trust キーは optional な付加情報なので、契約を満たす値だけを
+  # 転送し、満たさない値は drop してログに残す（fail-open — base entry の記録を最優先する）。
+  # 例: SurfaceProof が advisory/blocking へ昇格した run は verdict:null を出すため drop される
+  #     （journal.sh 側 enum の拡張は昇格 PR の責務であり本 hook の責務ではない）。
+  if [[ -n $trust_run_id && $trust_run_id != "null" ]]; then
+    cmd_args+=(--trust-run-id "$trust_run_id")
+  fi
+  if [[ -n $trust_receipts_json && $trust_receipts_json != "null" ]]; then
+    if echo "$trust_receipts_json" | jq -e '
+      type == "array" and length > 0 and all(.[];
+        (.layer // "") as $l | (.mode // "") as $m | (.verdict // "") as $v |
+        (["surfaceproof","evalseal","effectdelta"] | index($l)) != null and
+        (["off","shadow","advisory","blocking"] | index($m)) != null and
+        (["pass","fail","inconclusive"] | index($v)) != null)' >/dev/null 2>&1; then
+      cmd_args+=(--trust-receipts "$trust_receipts_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s trust-key-dropped: trust_receipts (journal.sh closed-enum 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $trust_surfaceproof_json && $trust_surfaceproof_json != "null" ]]; then
+    if echo "$trust_surfaceproof_json" | jq -e '
+      type == "object" and
+      ((.mode // "") as $m | (.verdict // "") as $v |
+       (["off","shadow","advisory","blocking"] | index($m)) != null and
+       (["pass","fail","inconclusive"] | index($v)) != null)' >/dev/null 2>&1; then
+      cmd_args+=(--trust-surfaceproof "$trust_surfaceproof_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s trust-key-dropped: trust_surfaceproof_shadow (journal.sh closed-enum 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
   fi
 
   # --- Execute journal.sh ---
