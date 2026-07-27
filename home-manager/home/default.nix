@@ -459,12 +459,11 @@ in
       fi
       ln -sf "$HERMES_REPO/repo_bindings.yaml" "$HERMES_DIR/repo_bindings.yaml"
 
-      # hermes-wrapper.sh — symlink。~/.hermes/.env を load してから real hermes を exec する。
-      # launchd agent と手動起動の双方で同じ env 注入経路を提供する。
-      if [ -f "$HERMES_DIR/hermes-wrapper.sh" ] && [ ! -L "$HERMES_DIR/hermes-wrapper.sh" ]; then
-        rm "$HERMES_DIR/hermes-wrapper.sh"
-      fi
-      ln -sf "$HERMES_REPO/hermes-wrapper.sh" "$HERMES_DIR/hermes-wrapper.sh"
+      # hermes-wrapper.sh — 廃止。hermes 本体 (hermes_cli/env_loader.py) が
+      # ~/.hermes/.env を override=True で load するため、wrapper による
+      # `set -a; . .env` は二重かつ dotenv とパース結果が食い違う (値の空白・#・
+      # クォートの扱い)。過去に張った symlink が残っていれば消す。
+      rm -f "$HERMES_DIR/hermes-wrapper.sh"
 
       # watchdog.sh (S5) — symlink。~/.hermes/jobs/*.json を定期 reconcile する
       # launchd agent (com.playpark.hermes-watchdog) から起動される。
@@ -495,6 +494,45 @@ in
         chmod 600 "$HERMES_DIR/.env"
         echo "hermes: created ~/.hermes/.env from template — fill in tokens before running"
       fi
+
+      # gateway service — hermes 標準の `hermes gateway install` に一本化する。
+      # 標準側 (hermes_cli/gateway.py) が ai.hermes.gateway.plist を生成し、
+      # PATH 合成・KeepAlive・ThrottleInterval・plist の陳腐化検知と自動更新
+      # (launchd_plist_is_current / refresh_launchd_plist_if_needed) を持つため、
+      # こちらで plist を書く必要がない。install は --force なしでも冪等で、
+      # 既存 plist が古ければ自動で書き直す。
+      #
+      # 二重起動防止の opt-in marker (~/.hermes/.gateway-primary) は標準側に
+      # 無い概念なので、marker の有無で install / uninstall を出し分けて
+      # 従来と同じ「primary 機でだけ起動する」意味を保つ。
+      LEGACY_LABEL="com.playpark.hermes-gateway"
+      LEGACY_PLIST="${config.home.homeDirectory}/Library/LaunchAgents/$LEGACY_LABEL.plist"
+
+      # 旧 plist の残骸を確実に停止・削除する。launchd.agents から定義を消せば
+      # home-manager が plist を消すが、load 済み job が残ると新旧 2 つの gateway が
+      # 同じ App Token で multi-connect し二重応答になるため、明示的に bootout する。
+      if [ -f "$LEGACY_PLIST" ] || launchctl print "gui/$(id -u)/$LEGACY_LABEL" >/dev/null 2>&1; then
+        launchctl bootout "gui/$(id -u)/$LEGACY_LABEL" 2>/dev/null || true
+        rm -f "$LEGACY_PLIST"
+        echo "hermes: removed legacy launchd agent $LEGACY_LABEL"
+      fi
+
+      HERMES_BIN="${config.home.homeDirectory}/.local/bin/hermes"
+      if [ ! -x "$HERMES_BIN" ]; then
+        echo "hermes: $HERMES_BIN not found — skipping gateway service setup"
+      elif [ -f "$HERMES_DIR/.gateway-primary" ]; then
+        # 標準 plist は install 時点の PATH を焼き込むため、docker/node が
+        # 解決できる PATH を明示してから install する (activation の PATH は
+        # nix profile 中心で /opt/homebrew 等を含まないことがある)。
+        PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" \
+          "$HERMES_BIN" gateway install --start-on-login --no-start-now
+        # 未起動なら起動する。稼働中のセッションを毎回落とさないよう restart はしない
+        # (config.yaml 変更の反映は `hermes gateway restart` を明示的に実行する)。
+        "$HERMES_BIN" gateway start >/dev/null 2>&1 || true
+      else
+        echo "hermes: ~/.hermes/.gateway-primary not found on this host — gateway service not installed (opt-in via 'touch ~/.hermes/.gateway-primary')"
+        "$HERMES_BIN" gateway uninstall >/dev/null 2>&1 || true
+      fi
     '';
   };
 
@@ -513,49 +551,11 @@ in
     enable = true;
   };
 
-  # hermes gateway をログイン時に自動起動 (macOS 限定)
-  # Docker Desktop が未起動でも KeepAlive + ThrottleInterval で復旧するまで再試行。
-  #
-  # 同一 user account を複数 Mac で運用する場合の二重起動防止:
-  # opt-in marker `~/.hermes/.gateway-primary` が存在する host でだけ実際に起動する。
-  # marker 不在なら exit 0 で終了 (KeepAlive.SuccessfulExit=false なので restart しない)。
-  # 切り替え時は旧機で `rm`、新機で `touch` + `launchctl kickstart -k gui/$(id -u)/com.playpark.hermes-gateway`。
+  # hermes gateway の launchd agent はここでは定義しない。
+  # hermes 標準の `hermes gateway install` が生成する ai.hermes.gateway に一本化し、
+  # 呼び出しは activation.setupHermes が担う (marker の有無で install/uninstall)。
+  # 標準 plist は PATH 合成・KeepAlive・ThrottleInterval・陳腐化検知を自前で持つ。
   launchd.agents = lib.optionalAttrs pkgs.stdenv.isDarwin {
-    hermes-gateway = {
-      enable = true;
-      config = {
-        Label = "com.playpark.hermes-gateway";
-        ProgramArguments = [
-          "/bin/sh"
-          "-c"
-          ''
-            MARKER="${config.home.homeDirectory}/.hermes/.gateway-primary"
-            if [ ! -f "$MARKER" ]; then
-              echo "hermes-gateway: $MARKER not found on this host — skipping (opt-in via 'touch $MARKER')" >&2
-              exit 0
-            fi
-            /bin/wait4path "${config.home.homeDirectory}/.local/bin/hermes" \
-              && /bin/wait4path "${config.home.homeDirectory}/.hermes/hermes-wrapper.sh" \
-              && exec "${config.home.homeDirectory}/.hermes/hermes-wrapper.sh" gateway
-          ''
-        ];
-        EnvironmentVariables = {
-          PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${config.home.homeDirectory}/.local/bin";
-          HOME = config.home.homeDirectory;
-        };
-        WorkingDirectory = "${config.home.homeDirectory}/.hermes";
-        RunAtLoad = true;
-        KeepAlive = {
-          Crashed = true;
-          SuccessfulExit = false;
-        };
-        ProcessType = "Background";
-        StandardOutPath = "${config.home.homeDirectory}/.hermes/logs/gateway.out.log";
-        StandardErrorPath = "${config.home.homeDirectory}/.hermes/logs/gateway.err.log";
-        ThrottleInterval = 30;
-      };
-    };
-
     # hermes watchdog (S5, AC-4/AC-5) — ~/.hermes/jobs/*.json を定期 reconcile し、
     # 完了ジョブを Slack 通知 (notified dedup 付き) した上で workspace clone +
     # manifest を cleanup する。StartInterval で周期起動 (launchd は毎回新プロセス

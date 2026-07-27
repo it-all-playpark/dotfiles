@@ -62,6 +62,12 @@ hermes-agent (全社横断 ChatOps 基盤) は個人PC設定とは性質が異�
 本リポジトリの `home-manager/home/default.nix` の `activation.setupHermes` が、
 その `hermes` リポジトリの checkout から `~/.hermes/` へ symlink を張る。
 
+gateway の launchd agent は dotfiles では定義せず、hermes 標準の
+`hermes gateway install` (label `ai.hermes.gateway`) に委ねる。`activation.setupHermes`
+が opt-in marker `~/.hermes/.gateway-primary` の有無を見て install / uninstall を
+出し分けるため、marker のある primary 機でだけ gateway が起動する。運用コマンドは
+`hermes gateway {status,start,stop,restart}`。
+
 ## セットアップ手順
 
 1. **ローカル設定ファイルの準備**
