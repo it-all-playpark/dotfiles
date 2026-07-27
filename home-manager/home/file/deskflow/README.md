@@ -51,13 +51,45 @@ GUI のホットキー録音は Qt の macOS ctrl/meta swap により物理 ⌃ 
 
 | 物理キー | 動作 |
 | --- | --- |
-| ⌘⌃T | MacBook Pro (`OMBP-M3P.local`) へ切替 |
-| ⌘⌃S | Mac Studio (`USERnoMac-Studio.local`) へ切替 |
+| F13 | MacBook Pro (`OMBP-M3P.local`) へ切替 |
+| F14 | Mac Studio (`USERnoMac-Studio.local`) へ切替 |
 
-大西配列の t=左 / s=右 に合わせてある。⌘ を含む組み合わせは ghostty が消費して
-zellij・nvim・fish には届かないので、`Alt+t/n/r/s` や `Ctrl+Alt+t/n/r/s` を使う
-zellij とは衝突しない。macOS システムホットキー（⌘⌃ の英字は ⌃⌘D のみ）、
-ghostty デフォルト（⌘⌃ は `f` `=` 矢印 `⇧J`）、Raycast（⌘Space）とも未使用を確認済み。
+ZMK キーボード (`zmk-config-fish`) の `layer_navi` から出している。右親指の
+`&lt 2 ESC` を押しながら、左小指ホーム (position 9) が F13、右小指ホーム
+(position 18) が F14。
+
+**キー名は大文字小文字を区別する**。`kKeyNameMap` にあるのは `F13` であって
+`f13` ではない。`F13`〜`F35` が使える。
+
+## なぜ修飾キーを使わないのか
+
+以前は物理 ⌘⌃T / ⌘⌃S を使っていたが、macOS サーバーでは**修飾キーを含む
+ホットキーは必ず入力状態を壊す**。
+
+ホットキーが押されている最中に画面切替が発動するため、`⌃ up` / `⌘ up` が
+**切替先の機体に飛び、サーバーは release を一度も受け取らない**。結果として
+サーバー側で修飾キーが押しっぱなしになり、
+
+- 長押しが `ctrl+ctrl` / `⌘+⌘` の二重押しとして認識される
+- トラックパッドのクリックが ⌃クリック・⌘クリック扱いになる
+- Bluetooth の接続先を切り替えて戻すと直る（HID 再列挙で状態がリセットされるため）
+
+という症状が出る。修飾キーを含まない単発キーならこの経路が成立しない。ZMK の
+`&lt`（layer-tap）のホールドはレイヤー切替が firmware 内部で完結し**ホストに
+何も送らない**ので、レイヤーキー自体も Deskflow からは見えない。
+
+F13/F14 は英数字の範囲外なので、macOS システムホットキー・ghostty・zellij・
+Raycast のいずれとも原理的に衝突しない。
+
+## 既知の未解決バグ（upstream）
+
+`OSXScreen::leave()` がカーソルを画面中央に warp せず `m_xCursor`/`m_yCursor` を
+更新しないため、baseline が stale になる（deskflow/deskflow#9779、open）。
+`MSWindowsScreen::leave()` と `XWindowsScreen::leave()` は両方 warp するので
+**macOS サーバーだけの欠陥**。ホットキー切替で発火し、エッジ切替では起きない。
+
+サーバー側でカーソルが動かなくなる症状はこれが原因の可能性がある。修飾キーの
+stuck とは独立した問題なので、F13/F14 化しても残るなら upstream 修正が必要。
 
 ## 編集時の注意
 
