@@ -502,6 +502,20 @@ in
       # こちらで plist を書く必要がない。install は --force なしでも冪等で、
       # 既存 plist が古ければ自動で書き直す。
       #
+      # macOS 側の分岐 (`elif is_macos(): launchd_install(force)`) は force しか
+      # 見ない。`--start-on-login` / `--no-start-now` は systemd (Linux) /
+      # gateway_windows 専用の実装で、macOS では無視される — このリポジトリは
+      # macOS 専用なので付けても意味がなく、渡さない。
+      # install (force なし) の実際の挙動:
+      #   - plist 未設置 (初回 install): 新規生成して bootstrap。生成される plist は
+      #     RunAtLoad=true なので、フラグの有無に関わらずここで即起動する。
+      #   - plist が現行生成物と一致: 「既にインストール済み」で早期 return し、
+      #     bootout/bootstrap は起きない (稼働中セッションは落ちない)。
+      #   - plist が陳腐化: refresh_launchd_plist_if_needed() が書き直した上で
+      #     bootout → bootstrap するため、稼働中の gateway はここで再起動される。
+      # つまり「稼働中セッションを毎回落とさない」のは launchd_install 自身の
+      # 早期 return によるもので、フラグでは制御できない。
+      #
       # 二重起動防止の opt-in marker (~/.hermes/.gateway-primary) は標準側に
       # 無い概念なので、marker の有無で install / uninstall を出し分けて
       # 従来と同じ「primary 機でだけ起動する」意味を保つ。
@@ -524,10 +538,16 @@ in
         # 標準 plist は install 時点の PATH を焼き込むため、docker/node が
         # 解決できる PATH を明示してから install する (activation の PATH は
         # nix profile 中心で /opt/homebrew 等を含まないことがある)。
+        # macOS では install に渡せる意味のあるフラグは --force のみなので
+        # 付けない (上のコメント参照)。
         PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" \
-          "$HERMES_BIN" gateway install --start-on-login --no-start-now
-        # 未起動なら起動する。稼働中のセッションを毎回落とさないよう restart はしない
-        # (config.yaml 変更の反映は `hermes gateway restart` を明示的に実行する)。
+          "$HERMES_BIN" gateway install
+        # plist 未設置/陳腐化なら install が bootstrap まで済ませているので、
+        # ここは主に「plist は既にあるが launchd job が unload されている」場合の
+        # 保険 (gateway start は自己修復して bootstrap し直す)。稼働中セッションを
+        # 毎回落とさないのは install の早期 return によるもので、start 自体は
+        # 既に動いていれば何もしない (config.yaml 変更の反映は
+        # `hermes gateway restart` を明示的に実行する)。
         "$HERMES_BIN" gateway start >/dev/null 2>&1 || true
       else
         echo "hermes: ~/.hermes/.gateway-primary not found on this host — gateway service not installed (opt-in via 'touch ~/.hermes/.gateway-primary')"
