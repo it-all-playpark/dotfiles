@@ -493,28 +493,367 @@ STUB_EOF
 }
 
 # --------------------------------------------------------------------------
-# Test 9: missing required key (no telemetry.merge_tier) → malformed treatment
+# Test 9: merge_tier absent (no telemetry.merge_tier) → NOT malformed, recorded
+#          without --merge-tier (producer 契約: required key は skill/outcome のみ)
 # --------------------------------------------------------------------------
 {
   tmpd=$(make_tmpdir)
   mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
 
-  # Valid JSON but missing required key
-  echo '{"skill":"dev-flow","outcome":"success","issue":1,"journal_sh":"/bin/true","telemetry":{}}' \
+  jq -n --arg js "$stub" \
+    '{"skill":"dev-flow","outcome":"success","issue":1,"journal_sh":$js,"telemetry":{}}' \
     >"${tmpd}/journal/pending/nokey.json"
 
   run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
 
   if [[ $RUN_EXIT -eq 0 ]]; then
-    pass "missing_key_exits_0"
+    pass "missing_merge_tier_exits_0"
   else
-    fail "missing_key_exits_0" "hook must always exit 0, got ${RUN_EXIT}"
+    fail "missing_merge_tier_exits_0" "hook must always exit 0, got ${RUN_EXIT}"
   fi
 
   if ls "${tmpd}/journal/pending/malformed/" 2>/dev/null | grep -q "nokey.json"; then
-    pass "missing_key_moved_to_malformed"
+    fail "missing_merge_tier_not_malformed" "merge_tier 欠落は malformed 扱いにしてはいけない（producer 契約は skill/outcome のみ必須）"
   else
-    fail "missing_key_moved_to_malformed" "file with missing required key should be in malformed/"
+    pass "missing_merge_tier_not_malformed"
+  fi
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if echo "$captured" | grep -q "log dev-flow success"; then
+      pass "missing_merge_tier_stub_called"
+    else
+      fail "missing_merge_tier_stub_called" "stub not called with expected skill/outcome. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--merge-tier"; then
+      fail "missing_merge_tier_no_flag" "--merge-tier must not appear when telemetry.merge_tier is absent. got: ${captured}"
+    else
+      pass "missing_merge_tier_no_flag"
+    fi
+  else
+    fail "missing_merge_tier_stub_called" "capture file not created (stub not called)"
+  fi
+
+  if [[ ! -f "${tmpd}/journal/pending/nokey.json" ]]; then
+    pass "missing_merge_tier_pending_removed"
+  else
+    fail "missing_merge_tier_pending_removed" "pending file should be removed after successful processing"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9b: skill missing → still malformed treatment (producer 契約違反)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+
+  echo '{"outcome":"success","issue":1,"journal_sh":"/bin/true","telemetry":{"merge_tier":"REVIEW"}}' \
+    >"${tmpd}/journal/pending/noskill.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ $RUN_EXIT -eq 0 ]]; then
+    pass "missing_skill_exits_0"
+  else
+    fail "missing_skill_exits_0" "hook must always exit 0, got ${RUN_EXIT}"
+  fi
+
+  if ls "${tmpd}/journal/pending/malformed/" 2>/dev/null | grep -q "noskill.json"; then
+    pass "missing_skill_moved_to_malformed"
+  else
+    fail "missing_skill_moved_to_malformed" "handoff missing skill must be moved to malformed/"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9c: outcome missing → still malformed treatment (producer 契約違反)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+
+  echo '{"skill":"dev-flow","issue":1,"journal_sh":"/bin/true","telemetry":{"merge_tier":"REVIEW"}}' \
+    >"${tmpd}/journal/pending/nooutcome.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ $RUN_EXIT -eq 0 ]]; then
+    pass "missing_outcome_exits_0"
+  else
+    fail "missing_outcome_exits_0" "hook must always exit 0, got ${RUN_EXIT}"
+  fi
+
+  if ls "${tmpd}/journal/pending/malformed/" 2>/dev/null | grep -q "nooutcome.json"; then
+    pass "missing_outcome_moved_to_malformed"
+  else
+    fail "missing_outcome_moved_to_malformed" "handoff missing outcome must be moved to malformed/"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9d: dev-flow 失敗 run（malformed 実データ系統A を模す）→ error_category /
+#          error_msg (top-level) が --error-category / --error-msg として転送される
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  jq -n --arg js "$stub" \
+    '{
+      skill: "dev-flow",
+      outcome: "failure",
+      issue: 325,
+      repo: "it-all-playpark/skills",
+      journal_sh: $js,
+      error_category: "needs_clarification",
+      error_msg: "analyze: 要件が曖昧で中断",
+      telemetry: {
+        gate_policy: "llm-major-advisory",
+        plan_iter: 0,
+        eval_iter: 0
+      }
+    }' >"${tmpd}/journal/pending/failrun.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if echo "$captured" | grep -q "log dev-flow failure"; then
+      pass "failrun_skill_outcome"
+    else
+      fail "failrun_skill_outcome" "expected 'log dev-flow failure'. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--error-category needs_clarification"; then
+      pass "failrun_error_category"
+    else
+      fail "failrun_error_category" "--error-category needs_clarification not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--error-msg"; then
+      pass "failrun_error_msg"
+    else
+      fail "failrun_error_msg" "--error-msg not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--gate-policy llm-major-advisory"; then
+      pass "failrun_gate_policy"
+    else
+      fail "failrun_gate_policy" "--gate-policy llm-major-advisory not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--merge-tier"; then
+      fail "failrun_no_merge_tier" "--merge-tier must not appear. got: ${captured}"
+    else
+      pass "failrun_no_merge_tier"
+    fi
+  else
+    fail "failrun_stub_called" "capture file not created (stub not called)"
+  fi
+
+  if [[ ! -f "${tmpd}/journal/pending/failrun.json" ]]; then
+    pass "failrun_pending_removed"
+  else
+    fail "failrun_pending_removed" "pending file should be removed after successful processing"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9e: pr-iterate 単体起動 handoff（系統B）→ iterate_status / ci_wait_seconds /
+#          ci_poll_attempts / pr_number が転送され、merge-tier/error-category は無い
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  jq -n --arg js "$stub" \
+    '{
+      skill: "pr-iterate",
+      outcome: "success",
+      repo: "it-all-playpark/skills",
+      pr_number: 99,
+      journal_sh: $js,
+      telemetry: {
+        iterate_status: "converged",
+        ci_wait_seconds: 120,
+        ci_poll_attempts: 3
+      }
+    }' >"${tmpd}/journal/pending/priterate.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if echo "$captured" | grep -q "log pr-iterate success"; then
+      pass "priterate_skill_outcome"
+    else
+      fail "priterate_skill_outcome" "expected 'log pr-iterate success'. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--iterate-status converged"; then
+      pass "priterate_iterate_status"
+    else
+      fail "priterate_iterate_status" "--iterate-status converged not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--ci-wait-seconds 120"; then
+      pass "priterate_ci_wait_seconds"
+    else
+      fail "priterate_ci_wait_seconds" "--ci-wait-seconds 120 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--ci-poll-attempts 3"; then
+      pass "priterate_ci_poll_attempts"
+    else
+      fail "priterate_ci_poll_attempts" "--ci-poll-attempts 3 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--pr-number 99"; then
+      pass "priterate_pr_number"
+    else
+      fail "priterate_pr_number" "--pr-number 99 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--merge-tier"; then
+      fail "priterate_no_merge_tier" "--merge-tier must not appear. got: ${captured}"
+    else
+      pass "priterate_no_merge_tier"
+    fi
+    if echo "$captured" | grep -q -- "--error-category"; then
+      fail "priterate_no_error_category" "--error-category must not appear. got: ${captured}"
+    else
+      pass "priterate_no_error_category"
+    fi
+  else
+    fail "priterate_stub_called" "capture file not created (stub not called)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9f: 最小 payload {skill, outcome, journal_sh}（telemetry object 自体なし）
+#          → 記録成功・pending 削除
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  jq -n --arg js "$stub" '{skill: "pr-iterate", outcome: "success", journal_sh: $js}' \
+    >"${tmpd}/journal/pending/minimal.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ $RUN_EXIT -eq 0 ]]; then
+    pass "minimal_payload_exits_0"
+  else
+    fail "minimal_payload_exits_0" "expected exit 0, got ${RUN_EXIT}. output: ${RUN_OUT}"
+  fi
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if echo "$captured" | grep -q "log pr-iterate success"; then
+      pass "minimal_payload_stub_called"
+    else
+      fail "minimal_payload_stub_called" "expected 'log pr-iterate success'. got: ${captured}"
+    fi
+  else
+    fail "minimal_payload_stub_called" "capture file not created (stub not called)"
+  fi
+
+  if [[ ! -f "${tmpd}/journal/pending/minimal.json" ]]; then
+    pass "minimal_payload_pending_removed"
+  else
+    fail "minimal_payload_pending_removed" "pending file should be removed after successful processing"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9g: telemetry.merge_tier が JSON null → --merge-tier は付与されない
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  jq -n --arg js "$stub" \
+    '{skill:"dev-flow", outcome:"success", issue:5, journal_sh:$js, telemetry:{merge_tier:null}}' \
+    >"${tmpd}/journal/pending/nulltier.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if echo "$captured" | grep -q -- "--merge-tier"; then
+      fail "null_merge_tier_no_flag" "--merge-tier must not appear when telemetry.merge_tier is null. got: ${captured}"
+    else
+      pass "null_merge_tier_no_flag"
+    fi
+  else
+    fail "null_merge_tier_stub_called" "capture file not created (stub not called)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 9h (regression / byte compat): merge_tier を持つ既存 handoff の cmd_args が
+#          exact-match で現状と一致する（--merge-tier の挿入位置が --issue 直後から
+#          動いていないことの証明）
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  jq -n --arg js "$stub" \
+    '{
+      skill: "dev-flow",
+      outcome: "success",
+      issue: 203,
+      journal_sh: $js,
+      telemetry: {
+        merge_tier: "REVIEW",
+        gate_policy: "llm-major-advisory",
+        danger_hits: [],
+        shape: "standard",
+        shape_refloored: false,
+        plan_iter: 1,
+        eval_iter: 1
+      }
+    }' >"${tmpd}/journal/pending/regression.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  expected='log dev-flow success --issue 203 --merge-tier REVIEW --gate-policy llm-major-advisory --danger-hits [] --shape standard --shape-refloored false --plan-iter 1 --eval-iter 1'
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if [[ $captured == "$expected" ]]; then
+      pass "regression_exact_arg_order"
+    else
+      fail "regression_exact_arg_order" "expected: [${expected}] got: [${captured}]"
+    fi
+  else
+    fail "regression_exact_arg_order" "capture file not created (stub not called)"
   fi
 
   rm -rf "$tmpd"

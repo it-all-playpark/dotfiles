@@ -8,6 +8,15 @@
 # 各 *.json を atomic claim（mv + PID suffix）してから処理し、成功なら削除、
 # 失敗なら元のファイル名に戻す（次回 Stop で再試行）。
 #
+# malformed replay runbook（pending/malformed/ に落ちた handoff の回収手順）:
+#   1. mv ~/.claude/journal/pending/malformed/<file>.json ~/.claude/journal/pending/
+#   2. echo '{}' | bash ~/.claude/hooks/stop-devflow-telemetry.sh  # または次の Stop event
+#   3. ~/.claude/logs/stop-devflow-telemetry.log に journal-failed が無いことを確認
+#   注: outcome=failure かつ error_category/error_msg を欠く payload は journal.sh 契約
+#   （outcome != success で両キー必須）で journal-failed → pending/ に残り続ける。
+#   再投入前に payload へ error_category（enum: lint|test|build|runtime|config|env|merge|
+#   type-check|needs_clarification|empty_diff）と error_msg を手で追記すること。
+#
 # 無効化:
 #   - 環境変数 CLAUDE_DEVFLOW_TELEMETRY_HOOK=0（escape hatch）
 #   - pending dir が存在しない
@@ -71,6 +80,8 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_run_id=""
   trust_receipts_json=""
   trust_surfaceproof_json=""
+  error_category=""
+  error_msg=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -79,6 +90,8 @@ for f in "${PENDING_DIR}"/*.json; do
     journal_sh: .journal_sh,
     repo: .repo,
     pr_number: .pr_number,
+    error_category: .error_category,
+    error_msg: .error_msg,
     merge_tier: .telemetry.merge_tier,
     gate_policy: .telemetry.gate_policy,
     danger_hits: (.telemetry.danger_hits // []),
@@ -107,8 +120,10 @@ for f in "${PENDING_DIR}"/*.json; do
   outcome=$(echo "$parsed" | jq -r '.outcome // empty')
   merge_tier=$(echo "$parsed" | jq -r '.merge_tier // empty')
 
-  # Required key check
-  if [[ -z $skill || -z $outcome || -z $merge_tier ]]; then
+  # Required key check（producer 契約 _lib/journal-handoff.mjs と一致: skill/outcome のみ必須。
+  # merge_tier は standard/complex shape 由来で micro shape や pr-iterate 単体起動には存在しない
+  # ため required から除外し、下流で conditional 転送する）
+  if [[ -z $skill || -z $outcome ]]; then
     mkdir -p "${PENDING_DIR}/malformed"
     mv "$claimed" "${PENDING_DIR}/malformed/$(basename "$f")"
     mkdir -p "$(dirname "$LOG_FILE")"
@@ -129,6 +144,8 @@ for f in "${PENDING_DIR}"/*.json; do
   eval_staleness=$(echo "$parsed" | jq -r '.eval_staleness // empty')
   repo=$(echo "$parsed" | jq -r '.repo // empty')
   pr_number=$(echo "$parsed" | jq -r '.pr_number // empty')
+  error_category=$(echo "$parsed" | jq -r '.error_category // empty')
+  error_msg=$(echo "$parsed" | jq -r '.error_msg // empty')
   ci_wait_seconds=$(echo "$parsed" | jq -r '.ci_wait_seconds // empty')
   ci_poll_attempts=$(echo "$parsed" | jq -r '.ci_poll_attempts // empty')
   trust_run_id=$(echo "$parsed" | jq -r '.trust_run_id // empty')
@@ -152,7 +169,16 @@ for f in "${PENDING_DIR}"/*.json; do
   cmd_args=(
     log "$skill" "$outcome"
     --issue "$issue"
-    --merge-tier "$merge_tier"
+  )
+
+  # merge_tier は standard/complex shape 由来の optional field（producer 契約は skill/outcome
+  # のみ必須）。micro shape run や pr-iterate 単体起動には存在しないため conditional 転送とし、
+  # 既存呼び出しとの引数順序 byte 互換のため --issue 直後に挿入する。
+  if [[ -n $merge_tier && $merge_tier != "null" ]]; then
+    cmd_args+=(--merge-tier "$merge_tier")
+  fi
+
+  cmd_args+=(
     --gate-policy "$gate_policy"
     --danger-hits "$danger_hits_json"
     --shape "$shape"
@@ -182,6 +208,14 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $ci_poll_attempts && $ci_poll_attempts != "null" ]]; then
     cmd_args+=(--ci-poll-attempts "$ci_poll_attempts")
+  fi
+  # journal.sh は outcome != success のとき --error-category / --error-msg を必須とする
+  # （journal.sh L128-133）。これを欠くと失敗 run が journal-failed で pending に留まり続ける。
+  if [[ -n $error_category && $error_category != "null" ]]; then
+    cmd_args+=(--error-category "$error_category")
+  fi
+  if [[ -n $error_msg && $error_msg != "null" ]]; then
+    cmd_args+=(--error-msg "$error_msg")
   fi
 
   # --- trust telemetry (epic #390 Phase 5 / issue #413) ---
