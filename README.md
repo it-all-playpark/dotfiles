@@ -62,6 +62,26 @@ hermes-agent (全社横断 ChatOps 基盤) は個人PC設定とは性質が異�
 本リポジトリの `home-manager/home/default.nix` の `activation.setupHermes` が、
 その `hermes` リポジトリの checkout から `~/.hermes/` へ symlink を張る。
 
+gateway の launchd agent は dotfiles では定義せず、hermes 標準の
+`hermes gateway install` (label `ai.hermes.gateway`) に委ねる。`activation.setupHermes`
+が opt-in marker `~/.hermes/.gateway-primary` の有無を見て install / uninstall を
+出し分けるため、marker のある primary 機でだけ gateway が起動する。運用コマンドは
+`hermes gateway {status,start,stop,restart}`。
+
+marker のチェックは `nix run .#update` の activation 実行時のみで、launchd job 自体は
+一度 install されると KeepAlive で起動し続け、marker を消しても uninstall を実行するまで
+止まらない (fail-open)。そのため primary を切り替える際は **必ず旧機を先に止め終えてから**
+新機で marker を立てること。順序を誤ると新旧 2 台が同時に gateway を起動し、同じ App Token
+で multi-connect して二重応答になる (このリポジトリが防ごうとしている状態そのもの)。
+
+**primary 切替手順:**
+
+1. 旧機で `hermes gateway uninstall` を実行するか、`~/.hermes/.gateway-primary` を削除
+   してから `nix run .#update` を実行し、gateway が停止したことを確認する
+   （`hermes gateway status` で non-running を確認）。
+2. 旧機の停止を確認できてから、新機で `touch ~/.hermes/.gateway-primary` を実行し、
+   `nix run .#update` を実行する。
+
 ## セットアップ手順
 
 1. **ローカル設定ファイルの準備**
