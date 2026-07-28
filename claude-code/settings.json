@@ -541,6 +541,8 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
+        "~/.cache/nix",
+        "~/.local/state/nix",
         "~/.claude/journal",
         "~/.claude/logs",
         "~/.claude/memory",

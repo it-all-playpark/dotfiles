@@ -50,7 +50,9 @@ Conflict: Safety > Scope > Quality > Speed
 
 ## Sandbox Hygiene
 🟡 sandbox 有効時（bg/remote 含む）に多発する失敗をコマンド側で回避する:
-- **一時ファイルは `/tmp` 直書き禁止**。`$TMPDIR`（bg では `$CLAUDE_JOB_DIR/tmp`）を使う。素の `/tmp/foo` は書込み不許可で `Operation not permitted`
+- **一時ファイルは `/tmp` 直書き禁止**。bg/remote を含め常に `$TMPDIR` を使う。素の `/tmp/foo` は書込み不許可で `Operation not permitted`
+  - `$CLAUDE_JOB_DIR/tmp` は使わない。`~/.claude/jobs` は Claude Code 組み込みの自己改変ガードで write deny されており、`sandbox.filesystem.allowWrite` に書いても上書きできない（deny が allow 内で優先される）。bg セッションの system prompt は `$CLAUDE_JOB_DIR/tmp` を案内するが実際には書けない
+- **`~/.claude/skills` / `~/.claude/agents` の実体（`it-all-playpark/skills` repo）は repo 丸ごと write deny**。組み込みの自己改変ガードが symlink を解決して効くため、repo 内の `.claude/worktrees/` も書けない。skills repo を編集する作業は **repo 外**に worktree を切る（例: `git worktree add ~/ghq/github.com/it-all-playpark/skills-wt/<branch>`）。settings では緩められない
 - **process substitution `<(…)` を避ける**。`diff <(a) <(b)` 等は sandbox が `/dev/fd/*` を塞ぐため失敗する。一旦 tempfile に落として `diff f1 f2` にする
 - **network は `sandbox.network.allowedDomains` のホストのみ**到達可能。未許可ホストは即失敗 → 必要なら settings.json に追加してから実行（推測で叩かない）
 - sandbox で塞がれても `dangerouslyDisableSandbox` は policy で無効。回避不能なら失敗を報告し、settings 調整を提案する（勝手に緩めない）
