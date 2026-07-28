@@ -96,6 +96,40 @@ run_case() {
   fi
 }
 
+# run_case_relative_cd <name> <process_cwd> <hook_cwd> <relative_cd_dir> <expected: allow|deny>
+# `cd <relative_cd_dir> && git commit` を、hook プロセス自身の起動 cwd
+# (process_cwd) と tool_input の `.cwd`(hook_cwd)をあえて乖離させた状態で
+# 検証する。CD_DIR の解決は process_cwd ではなく hook_cwd 基準であるべき
+# (session の .cwd とプロセス cwd が乖離しても fail-open で skip しない)。
+run_case_relative_cd() {
+  local name="$1"
+  local process_cwd="$2"
+  local hook_cwd="$3"
+  local rel_cd_dir="$4"
+  local expected="$5"
+
+  local cmd="cd ${rel_cd_dir} && git commit -m x"
+  local input
+  input=$(jq -n --arg cmd "$cmd" --arg cwd "$hook_cwd" '{tool_name:"Bash", cwd:$cwd, tool_input:{command:$cmd}}')
+
+  local output
+  output=$(cd "$process_cwd" && echo "$input" | bash "$HOOK" 2>&1 || true)
+
+  local decision="allow"
+  if [[ -n $output ]]; then
+    decision=$(echo "$output" | jq -r '.hookSpecificOutput.permissionDecision // "allow"' 2>/dev/null || echo "allow")
+  fi
+
+  if [[ $decision == "$expected" ]]; then
+    PASS=$((PASS + 1))
+    printf "  \033[32mPASS\033[0m %s\n" "$name"
+  else
+    FAIL=$((FAIL + 1))
+    FAILURES+=("$name: expected=$expected got=$decision cmd=$cmd process_cwd=$process_cwd hook_cwd=$hook_cwd output=$output")
+    printf "  \033[31mFAIL\033[0m %s (expected=%s, got=%s)\n" "$name" "$expected" "$decision"
+  fi
+}
+
 # run_case_no_cwd <name> <tool_name_json> <expected: allow|deny>
 # tool_name が Bash 以外の入力を、cwd フィールドなしで検証する
 run_case_non_bash() {
@@ -128,6 +162,7 @@ echo "[Deny cases — sync-inlines --check fails]"
 run_case "cwd=repoB, git commit" 'git commit -m x' "$REPO_B" "deny"
 run_case "outside cwd, git -C repoB commit" "git -C ${REPO_B} commit -m x" "$OUTSIDE_DIR" "deny"
 run_case "cd repoB && git commit" "cd ${REPO_B} && git commit -m x" "$OUTSIDE_DIR" "deny"
+run_case_relative_cd "process cwd != .cwd, relative cd repoB && git commit" "$OUTSIDE_DIR" "$WORK_DIR" "repoB" "deny"
 
 echo "[Allow (pass-through) cases]"
 run_case "cwd=repoA, git commit (check succeeds)" 'git commit -m x' "$REPO_A" "allow"
@@ -136,6 +171,8 @@ run_case "cwd=repoB, git status" 'git status' "$REPO_B" "allow"
 run_case "cwd=repoB, git push origin main" 'git push origin main' "$REPO_B" "allow"
 run_case "repo外 cwd, git commit" 'git commit -m x' "$OUTSIDE_DIR" "allow"
 run_case "cwd=repoB, git log --grep commit (subcommand=log)" 'git log --grep commit' "$REPO_B" "allow"
+run_case_relative_cd "process cwd != .cwd, relative cd repoA && git commit" "$OUTSIDE_DIR" "$WORK_DIR" "repoA" "allow"
+run_case_relative_cd "process cwd == .cwd, relative cd repoB && git commit (regression)" "$WORK_DIR" "$WORK_DIR" "repoB" "deny"
 run_case_non_bash "tool_name=Edit is pass-through" "allow"
 
 echo ""

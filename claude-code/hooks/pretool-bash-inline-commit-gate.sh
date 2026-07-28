@@ -20,10 +20,14 @@
 #   4. commit segment より前に単純形 `cd <単一トークン>` の segment があれば、
 #      その dir(引用符は外す)を root 解決の基準 cwd として追跡する
 #      (subshell / pushd 等の複雑な cwd 変更には追随しない)
-#   5. commit 検出時、基準 cwd(cd 追跡値があればそれ、無ければ hook 起動時の
-#      cwd)から `git [GLOBAL_LOCATION_ARGS] rev-parse --show-toplevel` で
-#      repo root を解決する。解決できなければ(git repo 外)対象外として次の
-#      segment へ進む
+#   5. commit 検出時、基準 cwd を解決する: cd 追跡値(CD_DIR)があれば、それを
+#      hook 起動時の cwd(HOOK_CWD, = tool_input の `.cwd`)基準で解決した絶対
+#      パスを使う(`cd "$HOOK_CWD" && cd "$CD_DIR"`)。CD_DIR が無ければ
+#      HOOK_CWD をそのまま使う。hook プロセス自身の `$PWD` はセッションの
+#      cwd と乖離しうるため基準にしない。解決した基準 cwd から
+#      `git [GLOBAL_LOCATION_ARGS] rev-parse --show-toplevel` で repo root
+#      を解決する。解決できなければ(git repo 外 / cd 先が存在しない)対象外
+#      として次の segment へ進む
 #   6. repo root に tools/sync-inlines.mjs が存在しなければ他 repo とみなし
 #      対象外(次の segment へ)
 #   7. 存在すれば (cd root && node tools/sync-inlines.mjs --check) を実行する。
@@ -174,7 +178,21 @@ for raw_seg in "${SEGMENTS[@]}"; do
   fi
 
   # --- commit 検出: repo root を解決する ---
-  BASE_CWD="${CD_DIR:-$HOOK_CWD}"
+  # CD_DIR(cd 追跡値)は絶対パスとは限らない。hook プロセス自身の $PWD ではなく
+  # 常に HOOK_CWD(tool_input の `.cwd`)基準で解決する。CD_DIR が絶対パスの
+  # 場合も `cd "$HOOK_CWD" && cd "$CD_DIR"` は最終的に CD_DIR そのものへ
+  # 移動するだけなので挙動は変わらない。
+  if [[ -n $CD_DIR ]]; then
+    BASE_CWD=$(cd "$HOOK_CWD" 2>/dev/null && cd "$CD_DIR" 2>/dev/null && pwd) || true
+  else
+    BASE_CWD="$HOOK_CWD"
+  fi
+
+  if [[ -z $BASE_CWD ]]; then
+    # HOOK_CWD 基準でも cd 先が解決できない(存在しない dir 等) — commit
+    # 自体が失敗するため、このガードで塞ぐ必要はない
+    continue
+  fi
 
   if [[ ${#SEG_GLOBAL_LOCATION_ARGS[@]} -gt 0 ]]; then
     ROOT=$(cd "$BASE_CWD" 2>/dev/null && git "${SEG_GLOBAL_LOCATION_ARGS[@]}" rev-parse --show-toplevel 2>/dev/null) || true
