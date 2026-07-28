@@ -26,6 +26,8 @@ Pre-commit hook (treefmt + shellcheck) auto-installs via `nix develop`.
 
 Always run `nix run .#update` after changes.
 
+> **agent 実行時の注意**: `nix run .#update` は内部で `sudo darwin-rebuild` を呼ぶため sandbox/permission で拒否される。**apply は人間が実行**し、agent は `nix fmt` / `nix flake check` / `nix eval` までを検証範囲とする。
+
 ## Critical Notes
 
 - **大西配列**: Navigation keys are `tnrs` (not `hjkl`) across Neovim, zellij, etc.
