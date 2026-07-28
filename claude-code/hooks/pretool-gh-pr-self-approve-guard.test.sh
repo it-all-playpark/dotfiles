@@ -57,6 +57,9 @@ run_case "pr review -a only" 'gh pr review -a' "deny"
 run_case "pr review with -R global flag" 'gh -R it-all-playpark/dotfiles pr review 137 --approve' "deny"
 run_case "pr review --approve with --body" 'gh pr review 137 --approve --body "LGTM"' "deny"
 run_case "compound command with &&" 'git fetch && gh pr review 137 --approve' "deny"
+run_case "pr review --approve=true (cobra = form)" 'gh pr review 137 --approve=true' "deny"
+run_case "pr review -a=true (cobra = form)" 'gh pr review 137 -a=true' "deny"
+run_case "pr review --approve=false (fail-closed)" 'gh pr review 137 --approve=false' "deny"
 
 # --- Negative cases: should NOT trigger (pass through) ---
 echo "[Negative cases — should pass through]"
