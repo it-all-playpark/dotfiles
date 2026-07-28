@@ -7,11 +7,6 @@
 # tier-1: 静的テキスト検証 (awk/grep のみ, nix daemon 不要, 常時実行)
 # tier-2: nix eval 検証 (builtins.getFlake で flake を評価, nix daemon 到達時のみ実行)
 #
-# NOTE: cli-packages.nix は host (開発マシン) 専用の単一リスト構成。
-# mode=host/container の分岐は hermes を playpark-llc/hermes へ独立repo化した際
-# (commit 21b56f2) に削除され、container 向けパッケージ (nodejs_24 等) は
-# hermes 新repo側で独立管理されている。このテストは単一リストの内容のみ検証する。
-#
 # NOTE: sandbox 等で nix daemon に到達できない環境では tier-2 は SKIP される。
 # 完全検証は sandbox 外で実行すること。
 
@@ -45,29 +40,25 @@ echo ""
 echo "--- tier-1: static text verification (no nix required) ---"
 
 # ---------------------------------------------------------------------------
-# tier-1 (1): package list must NOT include nodejs*
-# (Node.js は host では mise ("node = lts") で管理。PATH 衝突を避けるため
-#  nix パッケージリストには含めない。container 向け nodejs_24 は
-#  playpark-llc/hermes 側で独立管理されており、この repo の対象外)
+# tier-1 (1): the (single, host-only) package list must NOT include nodejs*
+# (PATH collision guard; Node.js is managed by mise, "node = lts")
+#
+# NOTE: commit 21b56f2 (hermes repo separation) intentionally removed the
+# mode = "host" / "container" split from lib/cli-packages.nix — the
+# container-only list (incl. nodejs_24 for the hermes-agent Docker image)
+# now lives and evolves independently in the hermes repo. flake.nix's
+# hermes-image build target was removed in the same commit, so this repo no
+# longer has a "container mode" to test. The former
+# static_containerOnly_includes_nodejs_24 assertion is obsolete and removed;
+# the PATH-collision regression guard below is preserved against the
+# current flat list.
 # ---------------------------------------------------------------------------
-echo "- static_excludes_nodejs"
+echo "- static_hostList_excludes_nodejs"
 if grep -qE '^ +nodejs' "${REPO_ROOT}/lib/cli-packages.nix"; then
-  fail "static_excludes_nodejs" \
-    "'nodejs*' must NOT appear in ${REPO_ROOT}/lib/cli-packages.nix (managed by mise on host)"
+  fail "static_hostList_excludes_nodejs" \
+    "'nodejs*' must NOT appear in ${REPO_ROOT}/lib/cli-packages.nix (managed by mise)"
 else
-  pass "static_excludes_nodejs"
-fi
-
-# ---------------------------------------------------------------------------
-# tier-1 (2): package list must include hunk (git diff review TUI)
-# upstream pname is "hunkdiff" (binary is bin/hunk), so use a prefix match.
-# ---------------------------------------------------------------------------
-echo "- static_includes_hunk"
-if grep -qE '^ +hunk$' "${REPO_ROOT}/lib/cli-packages.nix"; then
-  pass "static_includes_hunk"
-else
-  fail "static_includes_hunk" \
-    "Expected 'hunk' in ${REPO_ROOT}/lib/cli-packages.nix"
+  pass "static_hostList_excludes_nodejs"
 fi
 
 echo ""
@@ -104,34 +95,33 @@ else
 fi
 
 if [ "${NIX_AVAILABLE}" -eq 1 ]; then
-  pkgs="$(eval_pkg_names || true)"
-
   # -------------------------------------------------------------------------
-  # package list must NOT include nodejs (PATH collision guard, managed by mise)
+  # PATH collision guard: the package list must NOT include nodejs
+  # (Node.js is managed by mise, "node = lts")
   # -------------------------------------------------------------------------
-  echo "- eval_excludes_nodejs"
-  if echo "${pkgs}" | jq -e 'map(select(startswith("nodejs"))) | length == 0' >/dev/null 2>&1; then
-    pass "eval_excludes_nodejs"
+  echo "- eval_hostList_excludes_nodejs"
+  host_pkgs="$(eval_pkg_names || true)"
+  if echo "${host_pkgs}" | jq -e 'map(select(startswith("nodejs"))) | length == 0' >/dev/null 2>&1; then
+    pass "eval_hostList_excludes_nodejs"
   else
-    fail "eval_excludes_nodejs" \
-      "nodejs must NOT appear in cli-packages.nix (managed by mise). Got: ${pkgs}"
+    fail "eval_hostList_excludes_nodejs" \
+      "nodejs must NOT appear in cli-packages.nix (managed by mise). Got: ${host_pkgs}"
   fi
-
   # -------------------------------------------------------------------------
-  # package list must include hunk (git diff review TUI)
+  # AC: package list must include hunk (git diff review TUI)
   # upstream pname is "hunkdiff" (binary is bin/hunk), so use a prefix match.
   # -------------------------------------------------------------------------
-  echo "- eval_includes_hunk"
-  if echo "${pkgs}" | jq -e 'map(select(startswith("hunk"))) | length > 0' >/dev/null 2>&1; then
-    pass "eval_includes_hunk"
+  echo "- hostList_includes_hunk"
+  if echo "${host_pkgs}" | jq -e 'map(select(startswith("hunk"))) | length > 0' >/dev/null 2>&1; then
+    pass "hostList_includes_hunk"
   else
-    fail "eval_includes_hunk" \
-      "Expected hunk* in cli-packages.nix packages, got: ${pkgs}"
+    fail "hostList_includes_hunk" \
+      "Expected hunk* in cli-packages.nix, got: ${host_pkgs}"
   fi
 else
-  skip "eval_excludes_nodejs" \
+  skip "eval_hostList_excludes_nodejs" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
-  skip "eval_includes_hunk" \
+  skip "hostList_includes_hunk" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
 fi
 

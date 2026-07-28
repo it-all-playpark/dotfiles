@@ -53,6 +53,7 @@ nix run .#update
 | `PreToolUse` Write (`*/SKILL.md`) | `validate-skill-frontmatter.sh` | skill frontmatter 検証 |
 | `PreToolUse` Bash (`git push*`) | `allow-feature-push.sh` | protected branch への push を抑止 |
 | `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを抑止 |
+| `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
 | `PostToolUse` 系 | `posttool-secret-mask.sh` | 出力中の secret をマスク |

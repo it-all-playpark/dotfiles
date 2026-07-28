@@ -149,6 +149,17 @@
       {
         "hooks": [
           {
+            "command": "bash \"$HOME/.claude/hooks/pretool-gh-pr-self-approve-guard.sh\"",
+            "statusMessage": "PR self-approve チェック中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
             "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
             "if": "Bash(git worktree add*)",
             "statusMessage": ".worktreeinclude 自動生成チェック中...",

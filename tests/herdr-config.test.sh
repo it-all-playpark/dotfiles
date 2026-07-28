@@ -10,9 +10,6 @@
 # NOTE: tier-2 は builtins.getFlake で flake を評価するため untracked の新規ファイルは
 # 実行前に `git add` しておくこと。untracked のままだと dirty tree の flake fetch に
 # 含まれず、path does not exist で eval が失敗する。
-# NOTE: lib/cli-packages.nix は host (開発マシン) 専用の単一リスト構成。
-# mode=host/container の分岐は hermes を playpark-llc/hermes へ独立repo化した際
-# (commit 21b56f2) に削除された。herdr は host 専用ツールとして常にリストに含まれる。
 # NOTE: sandbox 等で nix daemon に到達できない環境では tier-2 は SKIP される。
 # 完全検証は sandbox 外で実行すること。
 
@@ -47,14 +44,24 @@ echo ""
 echo "--- tier-1: static text verification (no nix required) ---"
 
 # ---------------------------------------------------------------------------
-# tier-1 (1): package list in lib/cli-packages.nix includes herdr
+# tier-1 (1): the (single, host-only) package list in lib/cli-packages.nix
+# includes herdr.
+#
+# NOTE: commit 21b56f2 (hermes repo separation) intentionally removed the
+# mode = "host" / "container" split from lib/cli-packages.nix — this repo's
+# list is now a single flat (host-only) list, and flake.nix's hermes-image
+# container build target was removed in the same commit. The former
+# static_hostOnly_includes_herdr (block-scoped) and
+# static_containerSets_exclude_herdr assertions targeted the removed
+# common/hostOnly/containerOnly block structure and are obsolete; replaced
+# with a single presence check against the current flat list.
 # ---------------------------------------------------------------------------
-echo "- static_includes_herdr"
+echo "- static_list_includes_herdr"
 if grep -qE '^ +herdr$' "${REPO_ROOT}/lib/cli-packages.nix"; then
-  pass "static_includes_herdr"
+  pass "static_list_includes_herdr"
 else
-  fail "static_includes_herdr" \
-    "Expected 'herdr' in ${REPO_ROOT}/lib/cli-packages.nix"
+  fail "static_list_includes_herdr" \
+    "Expected 'herdr' inside ${REPO_ROOT}/lib/cli-packages.nix"
 fi
 
 # ---------------------------------------------------------------------------
@@ -200,17 +207,17 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # -------------------------------------------------------------------------
   # tier-2 (a): package list must include herdr
   # -------------------------------------------------------------------------
-  echo "- eval_includes_herdr"
-  pkgs="$(eval_pkg_names || true)"
-  if echo "${pkgs}" | jq -e 'map(select(. == "herdr")) | length > 0' >/dev/null 2>&1; then
-    pass "eval_includes_herdr"
+  echo "- eval_list_includes_herdr"
+  host_pkgs="$(eval_pkg_names || true)"
+  if echo "${host_pkgs}" | jq -e 'map(select(. == "herdr")) | length > 0' >/dev/null 2>&1; then
+    pass "eval_list_includes_herdr"
   else
-    fail "eval_includes_herdr" \
-      "Expected herdr in cli-packages.nix packages, got: ${pkgs}"
+    fail "eval_list_includes_herdr" \
+      "Expected herdr in cli-packages.nix, got: ${host_pkgs}"
   fi
 
   # -------------------------------------------------------------------------
-  # tier-2 (c): home.file ".config/herdr" is wired with recursive = true
+  # tier-2 (b): home.file ".config/herdr" is wired with recursive = true
   # -------------------------------------------------------------------------
   echo "- eval_homeFile_herdr_recursive_true"
   herdr_recursive="$(nix eval --json --impure --expr "
@@ -226,7 +233,7 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
       "Expected homeConfigurations.\"naramotoyuuji-darwin\".config.home.file.\".config/herdr\".recursive == true, got: ${herdr_recursive}"
   fi
 else
-  skip "eval_includes_herdr" \
+  skip "eval_list_includes_herdr" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
   skip "eval_homeFile_herdr_recursive_true" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
