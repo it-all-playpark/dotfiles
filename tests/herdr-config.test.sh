@@ -44,33 +44,24 @@ echo ""
 echo "--- tier-1: static text verification (no nix required) ---"
 
 # ---------------------------------------------------------------------------
-# tier-1 (1): hostOnly list in lib/cli-packages.nix includes herdr
+# tier-1 (1): the (single, host-only) package list in lib/cli-packages.nix
+# includes herdr.
+#
+# NOTE: commit 21b56f2 (hermes repo separation) intentionally removed the
+# mode = "host" / "container" split from lib/cli-packages.nix — this repo's
+# list is now a single flat (host-only) list, and flake.nix's hermes-image
+# container build target was removed in the same commit. The former
+# static_hostOnly_includes_herdr (block-scoped) and
+# static_containerSets_exclude_herdr assertions targeted the removed
+# common/hostOnly/containerOnly block structure and are obsolete; replaced
+# with a single presence check against the current flat list.
 # ---------------------------------------------------------------------------
-echo "- static_hostOnly_includes_herdr"
-if awk '/^  hostOnly = with pkgs; \[/,/^  \];/' "${REPO_ROOT}/lib/cli-packages.nix" |
-  grep -qE '^ +herdr$'; then
-  pass "static_hostOnly_includes_herdr"
+echo "- static_list_includes_herdr"
+if grep -qE '^ +herdr$' "${REPO_ROOT}/lib/cli-packages.nix"; then
+  pass "static_list_includes_herdr"
 else
-  fail "static_hostOnly_includes_herdr" \
-    "Expected 'herdr' inside the hostOnly list in ${REPO_ROOT}/lib/cli-packages.nix"
-fi
-
-# ---------------------------------------------------------------------------
-# tier-1 (2): common / containerOnly lists must NOT include herdr
-# (container mode = common ++ containerOnly, so absence in both proves
-#  herdr is excluded from container images)
-# ---------------------------------------------------------------------------
-echo "- static_containerSets_exclude_herdr"
-if awk '/^  common = with pkgs; \[/,/^  \];/' "${REPO_ROOT}/lib/cli-packages.nix" |
-  grep -qE '^ +herdr$'; then
-  fail "static_containerSets_exclude_herdr" \
-    "'herdr' must NOT appear in the common list of ${REPO_ROOT}/lib/cli-packages.nix"
-elif awk '/^  containerOnly = with pkgs; \[/,/^  \];/' "${REPO_ROOT}/lib/cli-packages.nix" |
-  grep -qE '^ +herdr$'; then
-  fail "static_containerSets_exclude_herdr" \
-    "'herdr' must NOT appear in the containerOnly list of ${REPO_ROOT}/lib/cli-packages.nix"
-else
-  pass "static_containerSets_exclude_herdr"
+  fail "static_list_includes_herdr" \
+    "Expected 'herdr' inside ${REPO_ROOT}/lib/cli-packages.nix"
 fi
 
 # ---------------------------------------------------------------------------
@@ -193,7 +184,6 @@ echo "--- tier-2: nix eval verification (requires nix daemon) ---"
 # 評価する。これにより CI / 開発環境で評価結果が一致する。
 # ---------------------------------------------------------------------------
 eval_pkg_names() {
-  local mode="$1"
   local system
   system="$(nix eval --impure --raw --expr 'builtins.currentSystem' 2>/dev/null || true)"
   nix eval --json --impure --expr "
@@ -202,7 +192,7 @@ eval_pkg_names() {
       pkgs = flake.inputs.nixpkgs.legacyPackages.${system};
     in
       map (p: p.pname or p.name) (
-        import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; mode = \"${mode}\"; }
+        import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; }
       )
   " 2>/dev/null
 }
@@ -215,31 +205,19 @@ fi
 
 if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # -------------------------------------------------------------------------
-  # tier-2 (a): host mode must include herdr
+  # tier-2 (a): package list must include herdr
   # -------------------------------------------------------------------------
-  echo "- eval_hostMode_includes_herdr"
-  host_pkgs="$(eval_pkg_names "host" || true)"
+  echo "- eval_list_includes_herdr"
+  host_pkgs="$(eval_pkg_names || true)"
   if echo "${host_pkgs}" | jq -e 'map(select(. == "herdr")) | length > 0' >/dev/null 2>&1; then
-    pass "eval_hostMode_includes_herdr"
+    pass "eval_list_includes_herdr"
   else
-    fail "eval_hostMode_includes_herdr" \
-      "Expected herdr in host mode packages, got: ${host_pkgs}"
+    fail "eval_list_includes_herdr" \
+      "Expected herdr in cli-packages.nix, got: ${host_pkgs}"
   fi
 
   # -------------------------------------------------------------------------
-  # tier-2 (b): container mode must NOT include herdr (hostOnly, not needed in image)
-  # -------------------------------------------------------------------------
-  echo "- eval_containerMode_excludes_herdr"
-  container_pkgs="$(eval_pkg_names "container" || true)"
-  if echo "${container_pkgs}" | jq -e 'map(select(. == "herdr")) | length == 0' >/dev/null 2>&1; then
-    pass "eval_containerMode_excludes_herdr"
-  else
-    fail "eval_containerMode_excludes_herdr" \
-      "herdr must NOT appear in container mode (hostOnly). Got: ${container_pkgs}"
-  fi
-
-  # -------------------------------------------------------------------------
-  # tier-2 (c): home.file ".config/herdr" is wired with recursive = true
+  # tier-2 (b): home.file ".config/herdr" is wired with recursive = true
   # -------------------------------------------------------------------------
   echo "- eval_homeFile_herdr_recursive_true"
   herdr_recursive="$(nix eval --json --impure --expr "
@@ -255,9 +233,7 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
       "Expected homeConfigurations.\"naramotoyuuji-darwin\".config.home.file.\".config/herdr\".recursive == true, got: ${herdr_recursive}"
   fi
 else
-  skip "eval_hostMode_includes_herdr" \
-    "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
-  skip "eval_containerMode_excludes_herdr" \
+  skip "eval_list_includes_herdr" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
   skip "eval_homeFile_herdr_recursive_true" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"

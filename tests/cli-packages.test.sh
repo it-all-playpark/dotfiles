@@ -40,33 +40,25 @@ echo ""
 echo "--- tier-1: static text verification (no nix required) ---"
 
 # ---------------------------------------------------------------------------
-# tier-1 (1): containerOnly list must include nodejs_24
+# tier-1 (1): the (single, host-only) package list must NOT include nodejs*
+# (PATH collision guard; Node.js is managed by mise, "node = lts")
+#
+# NOTE: commit 21b56f2 (hermes repo separation) intentionally removed the
+# mode = "host" / "container" split from lib/cli-packages.nix — the
+# container-only list (incl. nodejs_24 for the hermes-agent Docker image)
+# now lives and evolves independently in the hermes repo. flake.nix's
+# hermes-image build target was removed in the same commit, so this repo no
+# longer has a "container mode" to test. The former
+# static_containerOnly_includes_nodejs_24 assertion is obsolete and removed;
+# the PATH-collision regression guard below is preserved against the
+# current flat list.
 # ---------------------------------------------------------------------------
-echo "- static_containerOnly_includes_nodejs_24"
-if awk '/^  containerOnly = with pkgs; \[/,/^  \];/' "${REPO_ROOT}/lib/cli-packages.nix" |
-  grep -qE '^ +nodejs_24$'; then
-  pass "static_containerOnly_includes_nodejs_24"
+echo "- static_hostList_excludes_nodejs"
+if grep -qE '^ +nodejs' "${REPO_ROOT}/lib/cli-packages.nix"; then
+  fail "static_hostList_excludes_nodejs" \
+    "'nodejs*' must NOT appear in ${REPO_ROOT}/lib/cli-packages.nix (managed by mise)"
 else
-  fail "static_containerOnly_includes_nodejs_24" \
-    "Expected 'nodejs_24' inside the containerOnly list in ${REPO_ROOT}/lib/cli-packages.nix"
-fi
-
-# ---------------------------------------------------------------------------
-# tier-1 (2): common / hostOnly lists must NOT include nodejs*
-# (host mode = common ++ hostOnly, so absence in both proves nodejs is
-#  excluded from host mode; PATH collision guard, Node.js is managed by mise)
-# ---------------------------------------------------------------------------
-echo "- static_hostSets_exclude_nodejs"
-if awk '/^  common = with pkgs; \[/,/^  \];/' "${REPO_ROOT}/lib/cli-packages.nix" |
-  grep -qE '^ +nodejs'; then
-  fail "static_hostSets_exclude_nodejs" \
-    "'nodejs*' must NOT appear in the common list of ${REPO_ROOT}/lib/cli-packages.nix"
-elif awk '/^  hostOnly = with pkgs; \[/,/^  \];/' "${REPO_ROOT}/lib/cli-packages.nix" |
-  grep -qE '^ +nodejs'; then
-  fail "static_hostSets_exclude_nodejs" \
-    "'nodejs*' must NOT appear in the hostOnly list of ${REPO_ROOT}/lib/cli-packages.nix"
-else
-  pass "static_hostSets_exclude_nodejs"
+  pass "static_hostList_excludes_nodejs"
 fi
 
 echo ""
@@ -80,7 +72,6 @@ echo "--- tier-2: nix eval verification (requires nix daemon) ---"
 # 評価する。これにより CI / 開発環境で評価結果が一致する。
 # ---------------------------------------------------------------------------
 eval_pkg_names() {
-  local mode="$1"
   local system
   system="$(nix eval --impure --raw --expr 'builtins.currentSystem' 2>/dev/null || true)"
   nix eval --json --impure --expr "
@@ -92,7 +83,7 @@ eval_pkg_names() {
       };
     in
       map (p: p.pname or p.name) (
-        import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; mode = \"${mode}\"; }
+        import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; }
       )
   " 2>/dev/null
 }
@@ -105,59 +96,32 @@ fi
 
 if [ "${NIX_AVAILABLE}" -eq 1 ]; then
   # -------------------------------------------------------------------------
-  # AC1: container mode must include nodejs_24
+  # PATH collision guard: the package list must NOT include nodejs
+  # (Node.js is managed by mise, "node = lts")
   # -------------------------------------------------------------------------
-  echo "- eval_containerMode_includes_nodejs_24"
-  container_pkgs="$(eval_pkg_names "container" || true)"
-  if echo "${container_pkgs}" | jq -e 'map(select(startswith("nodejs"))) | length > 0' >/dev/null 2>&1; then
-    pass "eval_containerMode_includes_nodejs_24"
-  else
-    fail "eval_containerMode_includes_nodejs_24" \
-      "Expected nodejs* in container mode packages, got: ${container_pkgs}"
-  fi
-
-  # -------------------------------------------------------------------------
-  # AC1 supplement: host mode must NOT include nodejs (PATH collision guard)
-  # -------------------------------------------------------------------------
-  echo "- eval_hostMode_unchanged_no_nodejs_in_cli_packages"
-  host_pkgs="$(eval_pkg_names "host" || true)"
+  echo "- eval_hostList_excludes_nodejs"
+  host_pkgs="$(eval_pkg_names || true)"
   if echo "${host_pkgs}" | jq -e 'map(select(startswith("nodejs"))) | length == 0' >/dev/null 2>&1; then
-    pass "eval_hostMode_unchanged_no_nodejs_in_cli_packages"
+    pass "eval_hostList_excludes_nodejs"
   else
-    fail "eval_hostMode_unchanged_no_nodejs_in_cli_packages" \
-      "nodejs must NOT appear in host mode (managed by mise). Got: ${host_pkgs}"
+    fail "eval_hostList_excludes_nodejs" \
+      "nodejs must NOT appear in cli-packages.nix (managed by mise). Got: ${host_pkgs}"
   fi
   # -------------------------------------------------------------------------
-  # AC: host mode must include hunk (git diff review TUI)
+  # AC: package list must include hunk (git diff review TUI)
   # upstream pname is "hunkdiff" (binary is bin/hunk), so use a prefix match.
   # -------------------------------------------------------------------------
-  echo "- hostMode_includes_hunk"
+  echo "- hostList_includes_hunk"
   if echo "${host_pkgs}" | jq -e 'map(select(startswith("hunk"))) | length > 0' >/dev/null 2>&1; then
-    pass "hostMode_includes_hunk"
+    pass "hostList_includes_hunk"
   else
-    fail "hostMode_includes_hunk" \
-      "Expected hunk* in host mode packages, got: ${host_pkgs}"
-  fi
-
-  # -------------------------------------------------------------------------
-  # AC: container mode must NOT include hunk (host-only, not needed in
-  # hermes-agent container image)
-  # -------------------------------------------------------------------------
-  echo "- containerMode_excludes_hunk"
-  if echo "${container_pkgs}" | jq -e 'map(select(startswith("hunk"))) | length == 0' >/dev/null 2>&1; then
-    pass "containerMode_excludes_hunk"
-  else
-    fail "containerMode_excludes_hunk" \
-      "hunk must NOT appear in container mode (host-only tool). Got: ${container_pkgs}"
+    fail "hostList_includes_hunk" \
+      "Expected hunk* in cli-packages.nix, got: ${host_pkgs}"
   fi
 else
-  skip "eval_containerMode_includes_nodejs_24" \
+  skip "eval_hostList_excludes_nodejs" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
-  skip "eval_hostMode_unchanged_no_nodejs_in_cli_packages" \
-    "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
-  skip "hostMode_includes_hunk" \
-    "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
-  skip "containerMode_excludes_hunk" \
+  skip "hostList_includes_hunk" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
 fi
 
