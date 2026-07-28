@@ -1118,6 +1118,566 @@ make_trust_handoff() {
 }
 
 # --------------------------------------------------------------------------
+# Helper: build a handoff whose telemetry carries the 8 new telemetry keys
+# (issue #430: vdelta_verdicts / vdelta_fail_open / redgreen_deny /
+# testsurf_hits / duration_seconds / phase_durations / merge_tier_reasons /
+# route) plus the base telemetry fields. Usage:
+#   make_full_telemetry_handoff <outfile> <stub_path> [extra_jq_filter]
+# --------------------------------------------------------------------------
+make_full_telemetry_handoff() {
+  local outfile="$1" stub="$2" extra="${3:-.}"
+  jq -n --arg js "$stub" '{
+    skill: "dev-flow",
+    outcome: "success",
+    issue: 430,
+    journal_sh: $js,
+    telemetry: {
+      merge_tier: "REVIEW",
+      gate_policy: "llm-major-advisory",
+      danger_hits: [],
+      shape: "standard",
+      shape_refloored: false,
+      plan_iter: 1,
+      eval_iter: 1,
+      vdelta_verdicts: [{"ac":1,"status":"promoted"}],
+      vdelta_fail_open: 1,
+      redgreen_deny: [{"ac":2,"reasons":["no red"]}],
+      testsurf_hits: ["test/foo.test.js"],
+      duration_seconds: 840,
+      phase_durations: {"analyze":120,"plan":95},
+      merge_tier_reasons: ["danger hit"],
+      route: "lite"
+    }
+  }' | jq "$extra" >"$outfile"
+}
+
+# --------------------------------------------------------------------------
+# Test 16: telemetry 8-key normal forwarding — all 8 new keys present in
+#          handoff → all forwarded to journal.sh with correct (compact JSON
+#          for object/array-valued keys) values, and existing keys
+#          (--merge-tier / --gate-policy etc.) still forwarded (no regression)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/full.json" "$stub"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ $RUN_EXIT -eq 0 ]]; then
+    pass "full_telemetry_exits_0"
+  else
+    fail "full_telemetry_exits_0" "expected exit 0, got ${RUN_EXIT}. output: ${RUN_OUT}"
+  fi
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if echo "$captured" | grep -q -- '--vdelta-verdicts \[{"ac":1,"status":"promoted"}\]'; then
+      pass "full_telemetry_vdelta_verdicts"
+    else
+      fail "full_telemetry_vdelta_verdicts" "--vdelta-verdicts not found/compact. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--vdelta-fail-open 1"; then
+      pass "full_telemetry_vdelta_fail_open"
+    else
+      fail "full_telemetry_vdelta_fail_open" "--vdelta-fail-open 1 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- '--redgreen-deny \[{"ac":2,"reasons":\["no red"\]}\]'; then
+      pass "full_telemetry_redgreen_deny"
+    else
+      fail "full_telemetry_redgreen_deny" "--redgreen-deny not found/compact. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- '--testsurf-hits \["test/foo.test.js"\]'; then
+      pass "full_telemetry_testsurf_hits"
+    else
+      fail "full_telemetry_testsurf_hits" "--testsurf-hits not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--duration-seconds 840"; then
+      pass "full_telemetry_duration_seconds"
+    else
+      fail "full_telemetry_duration_seconds" "--duration-seconds 840 not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- '--phase-durations {"analyze":120,"plan":95}'; then
+      pass "full_telemetry_phase_durations"
+    else
+      fail "full_telemetry_phase_durations" "--phase-durations not found/compact. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- '--merge-tier-reasons \["danger hit"\]'; then
+      pass "full_telemetry_merge_tier_reasons"
+    else
+      fail "full_telemetry_merge_tier_reasons" "--merge-tier-reasons not found. got: ${captured}"
+    fi
+    if echo "$captured" | grep -q -- "--route lite"; then
+      pass "full_telemetry_route"
+    else
+      fail "full_telemetry_route" "--route lite not found. got: ${captured}"
+    fi
+    # Existing keys must still be forwarded (no regression)
+    if echo "$captured" | grep -q -- "--merge-tier REVIEW" &&
+      echo "$captured" | grep -q -- "--gate-policy llm-major-advisory"; then
+      pass "full_telemetry_existing_keys_preserved"
+    else
+      fail "full_telemetry_existing_keys_preserved" "existing --merge-tier/--gate-policy must still be forwarded. got: ${captured}"
+    fi
+  else
+    fail "full_telemetry_stub_called" "capture file not created (stub not called)"
+  fi
+
+  if [[ ! -f "${tmpd}/journal/pending/full.json" ]]; then
+    pass "full_telemetry_pending_removed"
+  else
+    fail "full_telemetry_pending_removed" "pending file should be removed after successful processing"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 17: conditional output — legacy handoff without the 8 new telemetry
+#          keys (same shape as Test 9h) → none of the new flags appear.
+#          Test 9h's exact-match regression is the final byte-compat
+#          guarantee; this test only needs to confirm the absence of the
+#          new flags for a handoff that doesn't carry them.
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  jq -n --arg js "$stub" \
+    '{
+      skill: "dev-flow",
+      outcome: "success",
+      issue: 203,
+      journal_sh: $js,
+      telemetry: {
+        merge_tier: "REVIEW",
+        gate_policy: "llm-major-advisory",
+        danger_hits: [],
+        shape: "standard",
+        shape_refloored: false,
+        plan_iter: 1,
+        eval_iter: 1
+      }
+    }' >"${tmpd}/journal/pending/legacy.json"
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  if [[ -f $capture ]]; then
+    captured=$(cat "$capture")
+    if ! echo "$captured" | grep -q -- "--vdelta-"; then
+      pass "legacy_no_vdelta_flags"
+    else
+      fail "legacy_no_vdelta_flags" "--vdelta-* must not appear for legacy handoff. got: ${captured}"
+    fi
+    if ! echo "$captured" | grep -q -- "--redgreen-"; then
+      pass "legacy_no_redgreen_flags"
+    else
+      fail "legacy_no_redgreen_flags" "--redgreen-* must not appear for legacy handoff. got: ${captured}"
+    fi
+    if ! echo "$captured" | grep -q -- "--testsurf-"; then
+      pass "legacy_no_testsurf_flags"
+    else
+      fail "legacy_no_testsurf_flags" "--testsurf-* must not appear for legacy handoff. got: ${captured}"
+    fi
+    if ! echo "$captured" | grep -q -- "--duration-seconds"; then
+      pass "legacy_no_duration_seconds"
+    else
+      fail "legacy_no_duration_seconds" "--duration-seconds must not appear for legacy handoff. got: ${captured}"
+    fi
+    if ! echo "$captured" | grep -q -- "--phase-durations"; then
+      pass "legacy_no_phase_durations"
+    else
+      fail "legacy_no_phase_durations" "--phase-durations must not appear for legacy handoff. got: ${captured}"
+    fi
+    if ! echo "$captured" | grep -q -- "--merge-tier-reasons"; then
+      pass "legacy_no_merge_tier_reasons"
+    else
+      fail "legacy_no_merge_tier_reasons" "--merge-tier-reasons must not appear for legacy handoff. got: ${captured}"
+    fi
+    if ! echo "$captured" | grep -q -- "--route"; then
+      pass "legacy_no_route"
+    else
+      fail "legacy_no_route" "--route must not appear for legacy handoff. got: ${captured}"
+    fi
+  else
+    fail "legacy_stub_called" "capture file not created (stub not called)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 18: per-key drop — a single telemetry key with a contract-violating
+#          value must be dropped (flag absent from journal.sh call), while
+#          the base entry (--merge-tier etc.) is still recorded, pending is
+#          still removed, and the drop is logged as
+#          "telemetry-key-dropped: <key>" (fail-open, same design as trust
+#          keys in Test 13/14).
+# --------------------------------------------------------------------------
+
+# Test 18a: vdelta_verdicts with a non-object array element
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.vdelta_verdicts = ["not-object"]'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--vdelta-verdicts"; then
+    pass "drop_vdelta_verdicts_flag_absent"
+  else
+    fail "drop_vdelta_verdicts_flag_absent" "invalid --vdelta-verdicts must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_vdelta_verdicts_base_entry_preserved"
+  else
+    fail "drop_vdelta_verdicts_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_vdelta_verdicts_pending_removed"
+  else
+    fail "drop_vdelta_verdicts_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: vdelta_verdicts" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_vdelta_verdicts_logged"
+  else
+    fail "drop_vdelta_verdicts_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18b: vdelta_fail_open negative number
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.vdelta_fail_open = -1'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--vdelta-fail-open"; then
+    pass "drop_vdelta_fail_open_flag_absent"
+  else
+    fail "drop_vdelta_fail_open_flag_absent" "invalid --vdelta-fail-open must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_vdelta_fail_open_base_entry_preserved"
+  else
+    fail "drop_vdelta_fail_open_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_vdelta_fail_open_pending_removed"
+  else
+    fail "drop_vdelta_fail_open_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: vdelta_fail_open" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_vdelta_fail_open_logged"
+  else
+    fail "drop_vdelta_fail_open_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18c: redgreen_deny is an object, not an array
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.redgreen_deny = {"ac":1}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--redgreen-deny"; then
+    pass "drop_redgreen_deny_flag_absent"
+  else
+    fail "drop_redgreen_deny_flag_absent" "invalid --redgreen-deny must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_redgreen_deny_base_entry_preserved"
+  else
+    fail "drop_redgreen_deny_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_redgreen_deny_pending_removed"
+  else
+    fail "drop_redgreen_deny_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: redgreen_deny" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_redgreen_deny_logged"
+  else
+    fail "drop_redgreen_deny_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18d: testsurf_hits with a number array element
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.testsurf_hits = [42]'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--testsurf-hits"; then
+    pass "drop_testsurf_hits_flag_absent"
+  else
+    fail "drop_testsurf_hits_flag_absent" "invalid --testsurf-hits must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_testsurf_hits_base_entry_preserved"
+  else
+    fail "drop_testsurf_hits_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_testsurf_hits_pending_removed"
+  else
+    fail "drop_testsurf_hits_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: testsurf_hits" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_testsurf_hits_logged"
+  else
+    fail "drop_testsurf_hits_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18e: duration_seconds is a non-numeric string
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.duration_seconds = "abc"'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--duration-seconds"; then
+    pass "drop_duration_seconds_flag_absent"
+  else
+    fail "drop_duration_seconds_flag_absent" "invalid --duration-seconds must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_duration_seconds_base_entry_preserved"
+  else
+    fail "drop_duration_seconds_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_duration_seconds_pending_removed"
+  else
+    fail "drop_duration_seconds_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: duration_seconds" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_duration_seconds_logged"
+  else
+    fail "drop_duration_seconds_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18f: phase_durations with a non-numeric object value
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.phase_durations = {"analyze":"fast"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--phase-durations"; then
+    pass "drop_phase_durations_flag_absent"
+  else
+    fail "drop_phase_durations_flag_absent" "invalid --phase-durations must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_phase_durations_base_entry_preserved"
+  else
+    fail "drop_phase_durations_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_phase_durations_pending_removed"
+  else
+    fail "drop_phase_durations_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: phase_durations" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_phase_durations_logged"
+  else
+    fail "drop_phase_durations_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18g: merge_tier_reasons with an object array element
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.merge_tier_reasons = [{"r":1}]'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--merge-tier-reasons"; then
+    pass "drop_merge_tier_reasons_flag_absent"
+  else
+    fail "drop_merge_tier_reasons_flag_absent" "invalid --merge-tier-reasons must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_merge_tier_reasons_base_entry_preserved"
+  else
+    fail "drop_merge_tier_reasons_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_merge_tier_reasons_pending_removed"
+  else
+    fail "drop_merge_tier_reasons_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: merge_tier_reasons" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_merge_tier_reasons_logged"
+  else
+    fail "drop_merge_tier_reasons_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# Test 18h: route outside the lite|full enum (also carries a valid
+#           duration_seconds to prove only the offending key is dropped)
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_full_telemetry_handoff "${tmpd}/journal/pending/bad.json" "$stub" \
+    '.telemetry.route = "turbo"'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+
+  if ! echo "$captured" | grep -q -- "--route"; then
+    pass "drop_route_flag_absent"
+  else
+    fail "drop_route_flag_absent" "invalid --route must not be forwarded. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--duration-seconds 840"; then
+    pass "drop_route_other_valid_key_preserved"
+  else
+    fail "drop_route_other_valid_key_preserved" "--duration-seconds 840 must still be forwarded (only route should be dropped). got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "drop_route_base_entry_preserved"
+  else
+    fail "drop_route_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/bad.json" ]]; then
+    pass "drop_route_pending_removed"
+  else
+    fail "drop_route_pending_removed" "pending file must not be stuck on telemetry-key drop"
+  fi
+  if grep -q "telemetry-key-dropped: route" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "drop_route_logged"
+  else
+    fail "drop_route_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test 19 (integration): 実 journal.sh が存在する環境では、telemetry 8 キーが
+#          実際に journal entry の .telemetry へ到達することを確認する
+#          （skills repo 側の --vdelta-* / --route 等の受理契約との結合テスト）。
+#          未配置環境では skip（Test 15 と同じ扱い）。
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_full_telemetry_handoff "${tmpd}/journal/pending/e2e8.json" "$REAL_JOURNAL"
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_8key_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_8key_entry_written"
+      if [[ $(jq -r '.telemetry.vdelta_verdicts[0].ac' "$entry") == "1" ]] &&
+        [[ $(jq -r '.telemetry.route' "$entry") == "lite" ]] &&
+        [[ $(jq -r '.telemetry.duration_seconds' "$entry") == "840" ]] &&
+        [[ $(jq -r '.telemetry.phase_durations.analyze' "$entry") == "120" ]]; then
+        pass "integration_8key_telemetry_persisted"
+      else
+        fail "integration_8key_telemetry_persisted" "8-key telemetry missing in entry: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""

@@ -82,6 +82,14 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_surfaceproof_json=""
   error_category=""
   error_msg=""
+  vdelta_verdicts_json=""
+  vdelta_fail_open=""
+  redgreen_deny_json=""
+  testsurf_hits_json=""
+  duration_seconds=""
+  phase_durations_json=""
+  merge_tier_reasons_json=""
+  route=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -106,7 +114,15 @@ for f in "${PENDING_DIR}"/*.json; do
     ci_poll_attempts: .telemetry.ci_poll_attempts,
     trust_run_id: .telemetry.trust_run_id,
     trust_receipts: .telemetry.trust_receipts,
-    trust_surfaceproof: .telemetry.trust_surfaceproof_shadow
+    trust_surfaceproof: .telemetry.trust_surfaceproof_shadow,
+    vdelta_verdicts: .telemetry.vdelta_verdicts,
+    vdelta_fail_open: .telemetry.vdelta_fail_open,
+    redgreen_deny: .telemetry.redgreen_deny,
+    testsurf_hits: .telemetry.testsurf_hits,
+    duration_seconds: .telemetry.duration_seconds,
+    phase_durations: .telemetry.phase_durations,
+    merge_tier_reasons: .telemetry.merge_tier_reasons,
+    route: .telemetry.route
   }' "$claimed" 2>/dev/null); then
     # JSON parse error
     mkdir -p "${PENDING_DIR}/malformed"
@@ -151,6 +167,14 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_run_id=$(echo "$parsed" | jq -r '.trust_run_id // empty')
   trust_receipts_json=$(echo "$parsed" | jq -c '.trust_receipts // empty')
   trust_surfaceproof_json=$(echo "$parsed" | jq -c '.trust_surfaceproof // empty')
+  vdelta_verdicts_json=$(echo "$parsed" | jq -c '.vdelta_verdicts // empty')
+  vdelta_fail_open=$(echo "$parsed" | jq -r '.vdelta_fail_open // empty')
+  redgreen_deny_json=$(echo "$parsed" | jq -c '.redgreen_deny // empty')
+  testsurf_hits_json=$(echo "$parsed" | jq -c '.testsurf_hits // empty')
+  duration_seconds=$(echo "$parsed" | jq -r '.duration_seconds // empty')
+  phase_durations_json=$(echo "$parsed" | jq -c '.phase_durations // empty')
+  merge_tier_reasons_json=$(echo "$parsed" | jq -c '.merge_tier_reasons // empty')
+  route=$(echo "$parsed" | jq -r '.route // empty')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -254,6 +278,89 @@ for f in "${PENDING_DIR}"/*.json; do
       printf '%s %s trust-key-dropped: trust_surfaceproof_shadow (journal.sh closed-enum 契約を満たさない)\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
     fi
+  fi
+
+  # --- telemetry 8-key forwarding (issue #143 / #430) ---
+  # vdelta_verdicts / vdelta_fail_open / redgreen_deny / testsurf_hits /
+  # duration_seconds / phase_durations / merge_tier_reasons / route を journal.sh
+  # へ転送する。journal.sh（skill-retrospective/scripts/journal.sh）は受け側でも
+  # 同一の型/enum 検証で契約違反を drop するが、drop の観測点を hook ログに残す
+  # ため送り側でも同じ検証を行う（trust telemetry と同じ fail-open 方式。
+  # base entry の記録は必ず成功させる）。
+  if [[ -n $vdelta_verdicts_json && $vdelta_verdicts_json != "null" ]]; then
+    if echo "$vdelta_verdicts_json" | jq -e 'type == "array" and all(.[]; type == "object")' >/dev/null 2>&1; then
+      cmd_args+=(--vdelta-verdicts "$vdelta_verdicts_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: vdelta_verdicts (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $redgreen_deny_json && $redgreen_deny_json != "null" ]]; then
+    if echo "$redgreen_deny_json" | jq -e 'type == "array" and all(.[]; type == "object")' >/dev/null 2>&1; then
+      cmd_args+=(--redgreen-deny "$redgreen_deny_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: redgreen_deny (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $testsurf_hits_json && $testsurf_hits_json != "null" ]]; then
+    if echo "$testsurf_hits_json" | jq -e 'type == "array" and all(.[]; type == "string")' >/dev/null 2>&1; then
+      cmd_args+=(--testsurf-hits "$testsurf_hits_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: testsurf_hits (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $merge_tier_reasons_json && $merge_tier_reasons_json != "null" ]]; then
+    if echo "$merge_tier_reasons_json" | jq -e 'type == "array" and all(.[]; type == "string")' >/dev/null 2>&1; then
+      cmd_args+=(--merge-tier-reasons "$merge_tier_reasons_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: merge_tier_reasons (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $phase_durations_json && $phase_durations_json != "null" ]]; then
+    if echo "$phase_durations_json" | jq -e 'type == "object" and all(.[]; type == "number")' >/dev/null 2>&1; then
+      cmd_args+=(--phase-durations "$phase_durations_json")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: phase_durations (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $vdelta_fail_open && $vdelta_fail_open != "null" ]]; then
+    if [[ $vdelta_fail_open =~ ^[0-9]+$ ]]; then
+      cmd_args+=(--vdelta-fail-open "$vdelta_fail_open")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: vdelta_fail_open (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $duration_seconds && $duration_seconds != "null" ]]; then
+    if [[ $duration_seconds =~ ^[0-9]+$ ]]; then
+      cmd_args+=(--duration-seconds "$duration_seconds")
+    else
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: duration_seconds (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+    fi
+  fi
+  if [[ -n $route && $route != "null" ]]; then
+    case "$route" in
+    lite | full)
+      cmd_args+=(--route "$route")
+      ;;
+    *)
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: route (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+      ;;
+    esac
   fi
 
   # --- Execute journal.sh ---
