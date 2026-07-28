@@ -169,6 +169,28 @@
           }
         ],
         "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pretool-inline-edit-guard.sh\"",
+            "statusMessage": "inline 生成区間ガードチェック中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pretool-bash-inline-commit-gate.sh\"",
+            "statusMessage": "inline 同期チェック中...",
+            "timeout": 30,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ],
     "SessionStart": [
