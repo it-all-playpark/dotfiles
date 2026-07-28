@@ -65,7 +65,9 @@ Conflict: Safety > Scope > Quality > Speed
 - **Deletion**: `rip` を使用（復元可能）
 
 ## Git
-- Feature branch で作業。`dev` branch は直接 push 可
+- Feature branch で作業。**保護ブランチへの直接 push は禁止**（`main` / `master` / `dev` / `develop` / `development` / `production` / `staging` / `release` / `nightly`）— `dev` も含めて必ず PR 経由。CI とレビューを飛ばさないため
+  - 強制は `allow-feature-push.sh`（PreToolUse hook）が主。`main` / `master` / `dev` / `develop` / `development` は `permissions.deny` でも重ねて塞いである
+  - `保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなくこの hook。feature branch を切って PR を出す
 - Incremental commits with descriptive messages
 
 ## Temporal Awareness
