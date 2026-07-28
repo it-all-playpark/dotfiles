@@ -60,6 +60,10 @@ run_case "compound command with &&" 'git fetch && gh pr review 137 --approve' "d
 run_case "pr review --approve=true (cobra = form)" 'gh pr review 137 --approve=true' "deny"
 run_case "pr review -a=true (cobra = form)" 'gh pr review 137 -a=true' "deny"
 run_case "pr review --approve=false (fail-closed)" 'gh pr review 137 --approve=false' "deny"
+run_case "pr review --approve then ; compound (no space)" 'gh pr review 137 --approve; echo done' "deny"
+run_case "pr review -a then ; compound (no space)" 'gh pr review -a; echo done' "deny"
+run_case "pr review --approve then && compound" 'gh pr review 137 --approve&&echo done' "deny"
+run_case "pr review --approve then | pipe" 'gh pr review 137 --approve|cat' "deny"
 
 # --- Negative cases: should NOT trigger (pass through) ---
 echo "[Negative cases — should pass through]"

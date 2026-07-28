@@ -47,7 +47,11 @@ PR_REVIEW_RE='(^|[;&|[:space:]])gh([[:space:]]+-[^[:space:]]+([[:space:]]+[^[:sp
 # standalone token としての --approve / -a 検出（--approver / -abc に誤爆しない）
 # --approve=true / -a=true のような cobra 形式（`=` 区切り値）も検出する
 # （--approve=false も fail-closed で deny する: 安全側）
-APPROVE_TOKEN_RE='(^|[[:space:]])(--approve(=[^[:space:]]*)?|-a(=[^[:space:]]*)?)([[:space:]]|$)'
+# 境界は PR_REVIEW_RE と対称に compound command 区切り（;&|）も含める。
+# 末尾は `--approve; echo` / `--approve&&x` / `--approve|cat` のような
+# 区切り文字直後の token も検出できるよう [;&|<>[:space:]] まで広げる
+# （fail-closed: 誤検知より見逃しを避ける）
+APPROVE_TOKEN_RE='(^|[;&|[:space:]])(--approve(=[^[:space:]]*)?|-a(=[^[:space:]]*)?)([;&|<>[:space:]]|$)'
 
 if echo "$CMD" | grep -qE "$PR_REVIEW_RE" && echo "$CMD" | grep -qE "$APPROVE_TOKEN_RE"; then
   echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"PR self-approve は禁止（merge/approve は常に人間が行う invariant）"}}'
