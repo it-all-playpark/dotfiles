@@ -291,6 +291,7 @@
       }
     ]
   },
+  "inputNeededNotifEnabled": true,
   "language": "ja",
   "permissions": {
     "additionalDirectories": [
