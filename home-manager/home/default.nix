@@ -95,18 +95,35 @@ in
     # ロック対象も -xn で扱える)。
     packages = packages.commonPackages ++ cliPackages ++ [ pkgs.flock ];
 
+    # Deskflow (ソフトウェアKVM) のサーバ設定。GUI の Server タブで「外部設定ファイルを
+    # 使う」を有効にし ~/.config/deskflow/deskflow-server.conf を指定する。
+    #
+    # home.file の symlink ではなく実体コピーで置く。Deskflow の GUI は選択されたパスを
+    # 実体解決してから Deskflow.conf の externalConfigFile に記録するため、symlink だと
+    # /nix/store/<hash>-hm_deskflowserver.conf が焼き込まれる。conf を編集すると hash が
+    # 変わるので Deskflow は古い世代を読み続け (GC 後は読めなくなり) 編集が反映されない。
+    # 実体ファイルなら解決結果が指定パスと一致し、この経路が成立しない。
+    #
+    # 外部設定が有効な間 Deskflow はこのファイルを読むだけで書き戻さない
+    # (CoreProcess::persistServerConfig)。デフォルトの ~/Library/Deskflow/ 側は書き込み
+    # 可能のまま残すので、外部設定を切っても GUI が壊れない。
+    #
+    # linkGeneration は writeBoundary の後に走る (home-manager modules/files.nix)。この
+    # パスは以前 home.file 管理だったので、その撤去処理より後に置かないと消される。
+    activation.deskflowServerConfig = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      deskflowConf="${config.home.homeDirectory}/.config/deskflow/deskflow-server.conf"
+      # 444 のまま install すると dest を開けず EACCES になるので先に消す。
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -f "$deskflowConf"
+      $DRY_RUN_CMD ${pkgs.coreutils}/bin/install -D -m 444 \
+        ${./file/deskflow/deskflow-server.conf} "$deskflowConf"
+    '';
+
     file = {
       ".myclirc".source = ./file/.myclirc;
       ".ripgreprc".source = ./file/.ripgreprc;
       ".myclirc.local.template".source = ./file/.myclirc.local.template;
       ".config/git/config.local.template".source = ./file/git/config.local.template;
       ".config/fish/config.fish.local.template".source = ./file/fish/config.fish.local.template;
-      # Deskflow (ソフトウェアKVM) のサーバ設定。GUI の Server タブで「外部設定ファイル
-      # を使う」を有効にし、このパスを指定する。外部設定が有効な間 Deskflow はこのファイル
-      # を読むだけで書き戻さない (CoreProcess::persistServerConfig) ため、home-manager の
-      # read-only symlink で問題ない。デフォルトの ~/Library/Deskflow/ 側は書き込み可能の
-      # まま残すので、外部設定を切っても GUI が壊れない。
-      ".config/deskflow/deskflow-server.conf".source = ./file/deskflow/deskflow-server.conf;
       ".config/nvim" = {
         source = ./file/nvim;
         recursive = true;

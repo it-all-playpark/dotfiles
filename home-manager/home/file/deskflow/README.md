@@ -4,7 +4,9 @@ Mac 間でキーボード・マウスを共有する Deskflow のサーバ設定
 アプリ本体は `darwin/default.nix` の Homebrew cask で導入している。cask は安定版の
 `deskflow` ではなく master 追従の **`deskflow-dev`**（→「カーソル固着」の節）。
 
-配置先は `~/.config/deskflow/deskflow-server.conf`（home-manager の read-only symlink）。
+配置先は `~/.config/deskflow/deskflow-server.conf`。home-manager の symlink ではなく
+**activation script (`home.activation.deskflowServerConfig`) による実体コピー**（mode 444）。
+理由は「なぜ symlink ではなく実体コピーか」の節。
 
 ## 初回セットアップ（手動、1回だけ）
 
@@ -19,10 +21,35 @@ externalConfig=true
 externalConfigFile=/Users/<user>/.config/deskflow/deskflow-server.conf
 ```
 
+**`/nix/store/...` が入っていたら失敗**（→ 次節）。その場合は Deskflow を終了してから
+`Deskflow.conf` の `externalConfigFile` 行を上記のパスへ手で書き直す。Deskflow が起動中に
+編集すると、終了時の QSettings 書き戻しで消える。
+
 デフォルトの `~/Library/Deskflow/deskflow-server.conf` は書き込み可能なまま残してある。
 外部設定を無効に戻しても GUI が書き込みに失敗しない。
 
-## なぜ read-only symlink で平気か
+## なぜ symlink ではなく実体コピーか
+
+Deskflow の GUI はファイル選択ダイアログで選ばれたパスを**実体解決してから**
+`Deskflow.conf` の `externalConfigFile` に記録する。`~/.config/deskflow/deskflow-server.conf`
+が home-manager の symlink だと、記録されるのは
+
+```
+externalConfigFile=/nix/store/<hash>-hm_deskflowserver.conf
+```
+
+という**その時点の世代の store path** になる。この conf を編集すると hash が変わるが
+`Deskflow.conf` 側は古い hash を指したままなので、
+
+- Deskflow は**古い世代の conf を読み続ける**（編集が無反応に見える）
+- `nix-collect-garbage` 後は**パスごと消えて読めなくなる**
+
+`home.activation.deskflowServerConfig` で実体ファイルとして置けば解決結果が指定パスと
+一致するので、この経路が成立しない。activation は `entryAfter [ "linkGeneration" ]`
+（`writeBoundary` ではない）— このパスは以前 `home.file` 管理だったため、その撤去処理の
+後でないと消される。
+
+## なぜ read-only (mode 444) で平気か
 
 `CoreProcess::persistServerConfig()` は外部設定が有効なとき、パスと readable 判定を
 返すだけでファイルを書かない。内部設定モードのときだけデフォルトパスを
