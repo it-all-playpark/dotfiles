@@ -1,7 +1,8 @@
 # Deskflow server config
 
 Mac 間でキーボード・マウスを共有する Deskflow のサーバ設定 (`deskflow-server.conf`)。
-アプリ本体は `darwin/default.nix` の Homebrew cask で導入している。
+アプリ本体は `darwin/default.nix` の Homebrew cask で導入している。cask は安定版の
+`deskflow` ではなく master 追従の **`deskflow-dev`**（→「カーソル固着」の節）。
 
 配置先は `~/.config/deskflow/deskflow-server.conf`（home-manager の read-only symlink）。
 
@@ -81,15 +82,42 @@ ZMK キーボード (`zmk-config-fish`) の `layer_navi` から出している�
 F13/F14 は英数字の範囲外なので、macOS システムホットキー・ghostty・zellij・
 Raycast のいずれとも原理的に衝突しない。
 
-## 既知の未解決バグ（upstream）
+## ホットキー切替後にカーソルが固まる件（upstream 修正済み / cask を dev にした理由）
 
-`OSXScreen::leave()` がカーソルを画面中央に warp せず `m_xCursor`/`m_yCursor` を
-更新しないため、baseline が stale になる（deskflow/deskflow#9779、open）。
-`MSWindowsScreen::leave()` と `XWindowsScreen::leave()` は両方 warp するので
-**macOS サーバーだけの欠陥**。ホットキー切替で発火し、エッジ切替では起きない。
+v1.26.0 の `OSXScreen::leave()` はカーソルを画面中央へ warp せず `m_xCursor` /
+`m_yCursor` も更新しない。一方 `onMouseMove()` の secondary 側は「今の実座標 −
+`m_xCursor`」で移動量を出すため、切替直後の 1 発目が巨大な delta になり
+`bogusZoneSize` のフィルタに落ちて捨てられる。さらに v1.26.0 は移動イベントを
+`return event` でローカルにも流したうえで毎回カーソルを中央へ warp し続けるので、
+**トラックパッドは動いているのにサーバー側のカーソルが中央に貼り付いて動かない**
+ように見える。
 
-サーバー側でカーソルが動かなくなる症状はこれが原因の可能性がある。修飾キーの
-stuck とは独立した問題なので、F13/F14 化しても残るなら upstream 修正が必要。
+エッジ切替では warp サイクルが途切れず baseline が同期されたままなので発火しない。
+つまり**ホットキー切替に固有の症状**で、F13/F14 化（修飾キー stuck の対策）とは
+独立した問題。
+
+upstream では 2 本の PR で解消済み:
+
+| PR | 内容 | merge |
+| --- | --- | --- |
+| [#9784](https://github.com/deskflow/deskflow/pull/9784) | `leave()` でカーソルを中央へ warp し baseline を同期（[#9779](https://github.com/deskflow/deskflow/issues/9779) の修正） | 2026-06-01 |
+| [#9963](https://github.com/deskflow/deskflow/pull/9963) | `leave()` で `CGAssociateMouseAndMouseCursorPosition(false)` によりマウスを capture し、client 制御中は `kCGMouseEventDeltaX/Y` の生 delta を読む。移動イベントはローカルへ流さず消費し、`enter()` で再結合 | 2026-07-18 |
+
+**どちらも v1.26.0（2026-02-16 リリース）には入っていない**。安定版の次リリースを
+待つ代わりに、公式 tap の `deskflow-dev`（`continuous` = master ビルドを追う cask）
+へ切り替えている。
+
+### 安定版へ戻す場合
+
+`darwin/default.nix` の cask を `deskflow/tap/deskflow` に戻し、apply 前に
+`brew uninstall --cask deskflow-dev` を実行する（両 cask は `conflicts_with`）。
+逆方向へ切り替えるときも同様に、先に旧 cask を uninstall しておくこと。
+
+### 別件（未修正・低頻度）
+
+`AppUtilUnix::getCurrentLanguageCode()` が `CFArrayGetCount(layoutLanguages) &&
+layoutLanguages` と NULL チェックを後置しており SIGSEGV しうる。キーダウン毎に
+呼ばれるが実測で数日に 1 回程度。上記のカーソル固着とは別件。
 
 ## 編集時の注意
 

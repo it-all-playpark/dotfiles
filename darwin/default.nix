@@ -82,7 +82,14 @@ in
       "chatgpt"
       "claude"
       "deepl"
-      "deskflow/tap/deskflow" # Mac間でキーボード・マウスを共有するソフトウェアKVM
+      # Mac間でキーボード・マウスを共有するソフトウェアKVM。
+      # 安定版 (deskflow) ではなく master 追従の deskflow-dev を使う。macOS サーバーで
+      # ホットキー切替後にカーソルが固まる問題の修正 (deskflow/deskflow#9784, #9963) が
+      # v1.26.0 に入っておらず、continuous ビルドにしか存在しないため。
+      # 詳細と安定版へ戻す手順: home-manager/home/file/deskflow/README.md
+      # 両 cask は conflicts_with なので、切り替え時は先に
+      # `brew uninstall --cask deskflow` を実行してから apply すること。
+      "deskflow/tap/deskflow-dev"
       "font-hack-nerd-font"
       "google-chrome"
       "google-drive"
