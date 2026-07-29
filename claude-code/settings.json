@@ -7,8 +7,7 @@
   },
   "effortLevel": "high",
   "enableAllProjectMcpServers": false,
-  "enabledMcpjsonServers": [
-  ],
+  "enabledMcpjsonServers": [],
   "enabledPlugins": {
     "playwright@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
@@ -23,8 +22,7 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "DISABLE_AUTOUPDATER": "1"
   },
-  "extraKnownMarketplaces": {
-  },
+  "extraKnownMarketplaces": {},
   "fallbackModel": [
     "claude-opus-4-8",
     "claude-sonnet-5"
@@ -319,7 +317,8 @@
       "mcp__plugin_telegram_telegram__edit_message",
       "mcp__plugin_telegram_telegram__download_attachment",
       "Bash(zernio post:*)",
-      "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio:*)"
+      "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio:*)",
+      "Bash(gh api repos/playpark-llc/corporate-site/git/refs:*)"
     ],
     "defaultMode": "auto",
     "deny": [
@@ -631,6 +630,12 @@
     "symlinkDirectories": [
       "node_modules",
       ".cache"
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "playpark-llc/corporate-site の refs/heads/dev を origin/main の sha から gh api で再作成することは許可する（日次ブログ生産の base ブランチ復旧。作成のみで、削除は含まない）"
     ]
   }
 }
