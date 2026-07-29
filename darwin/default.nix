@@ -55,8 +55,9 @@ in
       # Homebrew有効化時の挙動設定
       autoUpdate = true; # brewの自動更新を有効化
       upgrade = true; # 古いバージョンがあれば自動でアップグレード
-      cleanup = "uninstall"; # Brewfileにないものをアンインストール
-      extraFlags = [ "--force-cleanup" ]; # cleanup実行時の確認を明示的に許可
+      # Brewfileにないものをアンインストール。
+      # nix-darwin が `--force-cleanup` を自動で付けるので extraFlags での指定は不要
+      cleanup = "uninstall";
     };
     taps = [
       {
