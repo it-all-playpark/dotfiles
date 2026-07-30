@@ -12,7 +12,10 @@ let
     dontConfigure = true;
     buildPhase = ''
       runHook preBuild
-      $CC -O2 -Wall -Wextra -Werror \
+      # -Werror はテスト側 (tests/uc-handoff.test.sh) だけに置く。ここに入れると
+      # nixpkgs の bump で clang が新しい警告を出した瞬間、dotfiles 全体の
+      # apply が落ちる (この derivation は activation の依存にいる)。
+      $CC -O2 -Wall -Wextra \
         -framework ApplicationServices \
         -o uc-handoff uc-handoff.c
       runHook postBuild
@@ -37,6 +40,9 @@ lib.mkIf pkgs.stdenv.isDarwin {
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -f "${ucHandoffBin}"
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/install -D -m 555 \
       ${ucHandoff}/bin/uc-handoff "${ucHandoffBin}"
+    # plist は世代が変わっても不変なので home-manager は agent を reload しない。
+    # バイナリを差し替えたら明示的に蹴り直さないと古いプロセスが残る。
+    $DRY_RUN_CMD /bin/launchctl kickstart -k "gui/$(id -u)/com.playpark.uc-handoff" || true
   '';
 
   launchd.agents.uc-handoff = {
@@ -59,7 +65,13 @@ lib.mkIf pkgs.stdenv.isDarwin {
         HOME = config.home.homeDirectory;
       };
       RunAtLoad = true;
-      KeepAlive = true;
+      # exit 0 (方向未設定) では再起動しない。spec §7.2 の「設定を書き忘れた機体では
+      # 起動しない」を launchd 側でも守る。クラッシュとシグナル死だけ拾い、
+      # 権限未許可の exit 1 は 60 秒間隔で自己回復させる。
+      KeepAlive = {
+        SuccessfulExit = false;
+      };
+      ThrottleInterval = 60;
       ProcessType = "Interactive";
       StandardOutPath = "${config.home.homeDirectory}/.local/state/uc-handoff.out.log";
       StandardErrorPath = "${config.home.homeDirectory}/.local/state/uc-handoff.err.log";

@@ -816,6 +816,11 @@ tail -5 ~/.local/state/uc-handoff.err.log
 
 期待: `watching F13/F14, neighbor is on the ...` がログに出る。
 
+このコマンドは権限付与のときだけでなく、**`uc-handoff.c` を変更して apply したときにも必要**。
+plist は世代が変わっても不変なので home-manager は agent を reload せず、
+activation でバイナリを差し替えても古いプロセスが走り続ける。
+activation script 側でも `kickstart -k` を打つようにしてあるが、手で確認するときはこれを使う。
+
 - [ ] **Step 4: Universal Control を両機で有効化する**
 
 システム設定 → ディスプレイ → 詳細設定 で、特に

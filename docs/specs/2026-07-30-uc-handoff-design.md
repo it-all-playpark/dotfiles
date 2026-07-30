@@ -124,7 +124,8 @@ HID レポートが届いていればよいので `macro_wait_time 100` を置�
 
 両機に同一バイナリを置き、方向だけを機体ごとに変える（§7.2）。
 
-1. `CGEventTap` を `.cgSessionEventTap` に `keyDown` で張る
+1. `CGEventTap` を `.cgSessionEventTap` に `keyDown` と `keyUp` の両方で張る
+   （keyUp を食わないとアプリに漏れる。項目 4 の「両方を常に食う」はこの両方を指す）
 2. `F13` / `F14` を捕捉し、**イベントを消費する**（`nil` を返してアプリに漏らさない）
 3. 自機で有効化されている方向のキーだったら、エッジ押し込みを実行する
 4. 有効化されていない方向なら押し込まない。ただし**イベントは同じく消費する**。
@@ -177,6 +178,11 @@ launchd agent はこの固定パスを指す。バイナリの中身が変わっ
 > 署名が変わると TCC が無効化される可能性は残る。ad-hoc 署名で
 > 毎回 hash が変わるなら、初回セットアップ手順に「許可し直し」を明記する。
 > ここは実装時に実測して判断する（§10）。
+>
+> `-framework ApplicationServices` のリンクが失敗しても
+> `buildInputs = [ pkgs.darwin.apple_sdk.frameworks.ApplicationServices ]` を足さないこと。
+> pin している nixpkgs (2026-07-26) では Apple SDK が darwin stdenv の既定 sysroot に
+> 入っており `apple_sdk.frameworks.*` は撤去済みで、足すと eval が落ちる。
 
 ### 7.4 常駐
 
@@ -192,6 +198,10 @@ Aqua セッションで動く必要があるので user agent であること（
 | 反対方向のキーを押した | no-op |
 | デーモンが落ちている | `F13` / `F14` が素通りするだけ |
 | Universal Control が途中で切れる | ポインタが移らない。手でエッジに押し込めば復帰 |
+
+表のうち押し込みが空振りしたケースでは、ポインタは画面端に置き去りになる。
+「動かない」のではなく「端まで飛んだまま戻らない」のが実際の見え方で、
+トラックパッドを動かせばそのまま復帰する。
 
 **すべて「ポインタが移らない」で止まる。**
 deskflow のようにキー入力そのものが壊れる経路が存在しない、というのが
@@ -240,5 +250,12 @@ apply は人間が行う。
   塞がれていた）ため、darwin stdenv + clang の確実な側に倒した。
   検証プローブ `scripts/uc-edge-probe.swift` は診断用に Swift のまま残す。
 - 押し込み時間の実測チューニング（500ms 起点）
-- ad-hoc 署名の hash 変動で TCC が切れるかどうかの実測（§7.3）
+- ad-hoc 署名の cdhash 変動で TCC が切れる条件の実測（§7.3）。
+  TCC は未署名 / ad-hoc バイナリを path + cdhash で記録する。nix の darwin fixup が打つ
+  ad-hoc 署名の cdhash はバイナリ内容の関数であって store path に依存しない。したがって
+  期待値は「切れるか切れないか」ではなく **ソースを変えたときだけ切れる**:
+  - `uc-handoff.c` を変えずに `nix run .#update` → cdhash 不変 → 許可は生き残るはず
+  - `uc-handoff.c` を変えて再ビルド → cdhash 変化 → 許可し直しが要る
+  受け入れ基準 5 はこの前提で判定する。前者で切れたなら clang の出力が非決定的という
+  ことなので、そのとき初めて `codesign` の扱いを考える
 - `macro_wait_time` を 100ms から詰められるか

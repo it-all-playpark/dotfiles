@@ -7,6 +7,7 @@
 // Mac Studio は right 配置なので direction=left、MacBook Pro は direction=right。
 
 #include <ApplicationServices/ApplicationServices.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -85,6 +86,7 @@ uc_push_plan_t uc_plan_push(CGRect bounds, uc_direction_t dir, double delta) {
 
 static uc_direction_t g_neighbor = DIR_NONE;
 static CFMachPortRef g_tap = NULL;
+static atomic_bool g_pushing;
 
 // 全アクティブディスプレイの外接矩形
 static CGRect uc_union_bounds(void) {
@@ -113,9 +115,17 @@ static void uc_post_move(CGEventSourceRef src, CGPoint p, double dx, double dy) 
 }
 
 static void uc_push(uc_direction_t dir) {
+  // オートリピート等で押し込みが多重に走ると、互いに矛盾する mouseMoved を
+  // 撃ち合ったうえに usleep するブロックがスレッドを食い潰す。1 本だけ通す。
+  bool expected = false;
+  if (!atomic_compare_exchange_strong(&g_pushing, &expected, true)) {
+    return;
+  }
+
   CGRect u = uc_union_bounds();
   if (CGRectIsNull(u)) {
     fprintf(stderr, "uc-handoff: no active display, skipping push\n");
+    atomic_store(&g_pushing, false);
     return;
   }
   uc_push_plan_t plan = uc_plan_push(u, dir, UC_PUSH_DELTA);
@@ -135,6 +145,7 @@ static void uc_push(uc_direction_t dir) {
   if (src != NULL) {
     CFRelease(src);
   }
+  atomic_store(&g_pushing, false);
 }
 
 static CGEventRef uc_tap_callback(CGEventTapProxy proxy, CGEventType type,
