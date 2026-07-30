@@ -133,14 +133,24 @@ HID レポートが届いていればよいので `macro_wait_time 100` を置�
 押し込みルーチンは検証済みのものをそのまま使う。本番の押し込み時間は
 検証時の 2500ms も要らないので 500ms 程度から始め、実測で詰める。
 
-### 7.2 起動引数
+### 7.2 方向の指定
 
-```
-uc-handoff --left     # Mac Studio: 左に MBP がいる
-uc-handoff --right    # MacBook Pro: 右に Mac Studio がいる
-```
+両機に同じ nix 世代が適用されるため、機体ごとの差分を nix 側では表現できない。
+既存の `hermes-watchdog` が使っているマーカーファイル方式に倣い、
+実行時にファイルから読む。
 
-指定されなかった方向のキーは受け取っても no-op。設定ファイルは作らない。
+    ~/.config/uc-handoff/direction
+
+中身は `left` か `right` の 1 行。この機体から見て**隣の Mac がいる側**を書く。
+
+| 機体 | 中身 |
+| --- | --- |
+| Mac Studio（右） | `left` |
+| MacBook Pro（左） | `right` |
+
+ファイルが無い、または解釈できない場合は、その旨をログに出して
+**常駐せずに exit 0**（`hermes-watchdog` の marker skip と同じ扱い）。
+設定を書き忘れた機体で黙って動き続けるより、起動しないほうが分かりやすい。
 
 ### 7.3 配置 — TCC のためのパス固定
 
@@ -221,8 +231,11 @@ apply は人間が行う。
 
 ## 12. 未解決 / 実装時に決めること
 
-- nix で Swift をビルドする derivation の形（`swiftPackages` を使うか、
-  `stdenv.mkDerivation` で `swiftc` を直接叩くか）
+- ~~nix で Swift をビルドする derivation の形~~ → **決着**。実装言語は C にした。
+  `CGEventTap` / `CGEventPost` はもともと C API であり、nixpkgs の Swift が
+  aarch64-darwin で通るかを実測できなかった（`nix eval` がサンドボックスで
+  塞がれていた）ため、darwin stdenv + clang の確実な側に倒した。
+  検証プローブ `scripts/uc-edge-probe.swift` は診断用に Swift のまま残す。
 - 押し込み時間の実測チューニング（500ms 起点）
 - ad-hoc 署名の hash 変動で TCC が切れるかどうかの実測（§7.3）
 - `macro_wait_time` を 100ms から詰められるか
