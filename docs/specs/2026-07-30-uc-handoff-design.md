@@ -1,8 +1,10 @@
 # `uc-handoff` — キー1回でキーボードとポインタを両方隣の Mac へ渡す 設計
 
-- 状態: 設計レビュー待ち
+- 状態: 実装済み・実機検証待ち
 - 対象リポジトリ: `dotfiles`（常駐デーモン）/ `zmk-config-fish`（キーマップ）
 - 前提の検証: 2026-07-30 実機で完了（§3）
+- PR: it-all-playpark/dotfiles#149（デーモン）/ it-all-playpark/zmk-config-fish#3（キーマップ）
+- 残作業: §10 の手作業と §11 の受け入れ確認。加えて `nix build` でのビルド確認（§7.3）
 
 ## 1. 目的 / 解決する痛み
 
@@ -100,13 +102,13 @@ macros {
     handoff_to_mbp: handoff_to_mbp {
         compatible = "zmk,behavior-macro";
         #binding-cells = <0>;
-        bindings = <&kp F13>, <&macro_wait_time 100>, <&bt BT_SEL 0>;
+        bindings = <&macro_wait_time 100>, <&kp F13>, <&bt BT_SEL 0>;
     };
 
     handoff_to_studio: handoff_to_studio {
         compatible = "zmk,behavior-macro";
         #binding-cells = <0>;
-        bindings = <&kp F14>, <&macro_wait_time 100>, <&bt BT_SEL 1>;
+        bindings = <&macro_wait_time 100>, <&kp F14>, <&bt BT_SEL 1>;
     };
 };
 ```
@@ -115,8 +117,16 @@ macros {
 逆にすると、切替後の機体にキーコードが飛んで意図が反転する。
 
 `&kp` はマクロ内で press と release の両方を出す。BT リンクが落ちる前に
-HID レポートが届いていればよいので `macro_wait_time 100` を置く。
-実測で詰められるなら短くしてよい。
+HID レポートが届いていればよいので 100ms 待つ。実測で詰められるなら短くしてよい。
+
+`&macro_wait_time` の位置には罠がある。これは**その場で待つバインディングではなく、
+以降に処理されるバインディングの `wait_ms` を書き換える状態変更**で、`&kp` の後ろに
+置くと `&kp` の release には反映されない。既定は
+`CONFIG_ZMK_MACRO_DEFAULT_WAIT_MS = 15`（`CONFIG_ZMK_MACRO_DEFAULT_TAP_MS` は 30）
+なので、後ろに置くと待ちは 100ms ではなく 15ms になる。**必ず `&kp` の前に置くこと。**
+
+実行順序そのもの（`&kp` が必ず先）は `wait_ms` の値に関わらず保証されるため、
+位置を誤っても「反転」は起きない。壊れるのは待ち時間だけで、それゆえ気づきにくい。
 
 ## 7. macOS 側（`dotfiles`）
 

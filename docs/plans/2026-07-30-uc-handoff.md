@@ -29,7 +29,8 @@
 - **TCC はバイナリのパスに紐づく。** バイナリは nix store ではなく `~/.local/bin/uc-handoff` に**実体コピー**する。symlink 不可（TCC が実体解決して store パスを記録するため）
 - 両 Mac は同一ユーザー名で**同じ home-manager 世代**を適用する。機体ごとの差分を nix の引数で表現してはいけない
 - `nix run .#update` は内部で `sudo darwin-rebuild` を呼ぶため **agent は実行しない**。検証範囲は `nix fmt` / `nix flake check` / `nix eval` まで。apply は人間
-- 保護ブランチ（`main` 等）への直接 push 禁止。feature branch + PR
+- 保護ブランチへの直接 push 禁止。feature branch + PR。
+  既定ブランチは repo ごとに違う（`dotfiles` は `main`、`zmk-config-fish` は `master`）
 - treefmt の対象は nix / python / lua / shell / json。C と Markdown は対象外なので手で整える
 - deskflow の撤去はこの計画に含まない
 
@@ -717,8 +718,13 @@ git commit -m "feat(uc-handoff): 🎸 nix ビルドと固定パス配置と laun
     macros {
         // ポインタとキーボードを隣の Mac へ同時に渡す。
         //
-        // キーコードを先に送り、待ってから BT プロファイルを切り替える。
+        // キーコードを先に送り、100ms 待ってから BT プロファイルを切り替える。
         // 逆順にすると、切替後の機体にキーコードが飛んで意図が反転する。
+        //
+        // &macro_wait_time はその場で待つのではなく、以降のバインディングの
+        // wait_ms を書き換える状態変更。&kp の後ろに置くと F13 の release には
+        // 反映されず、既定の 15ms (CONFIG_ZMK_MACRO_DEFAULT_WAIT_MS) が使われる。
+        // 必ず &kp の前に置くこと。
         //
         // F13 = ポインタを左へ渡せ / F14 = ポインタを右へ渡せ。
         // 意味は「押された機体から見た方向」なので、隣がいない側のキーを
@@ -726,13 +732,13 @@ git commit -m "feat(uc-handoff): 🎸 nix ビルドと固定パス配置と laun
         handoff_to_mbp: handoff_to_mbp {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
-            bindings = <&kp F13>, <&macro_wait_time 100>, <&bt BT_SEL 0>;
+            bindings = <&macro_wait_time 100>, <&kp F13>, <&bt BT_SEL 0>;
         };
 
         handoff_to_studio: handoff_to_studio {
             compatible = "zmk,behavior-macro";
             #binding-cells = <0>;
-            bindings = <&kp F14>, <&macro_wait_time 100>, <&bt BT_SEL 1>;
+            bindings = <&macro_wait_time 100>, <&kp F14>, <&bt BT_SEL 1>;
         };
     };
 ```
@@ -760,10 +766,15 @@ git switch -c worktree-uc-handoff-macro
 git add config/boards/shields/fish/fish.keymap
 git commit -m "feat(keymap): 🎸 ポインタとキーボードを同時に渡すハンドオフマクロを追加"
 git push -u origin worktree-uc-handoff-macro
-gh pr create --draft --base main --fill
+gh pr create --draft --repo it-all-playpark/zmk-config-fish --base master --fill
 ```
 
-`main` への直接 push は禁止なので必ず feature branch を切ること。
+**`zmk-config-fish` に `main` は無い。** 既定ブランチは `master` で、しかもこのリポジトリは
+`TakumaOnishi/zmk-config-fish` の fork。`gh pr create` は fork では親リポジトリを
+base に取ろうとするため、`--repo it-all-playpark/zmk-config-fish` と `--base master`
+の両方を明示しないと `No commits between main and ...` で失敗する。
+
+`master` への直接 push は禁止なので必ず feature branch を切ること。
 
 GitHub Actions のファームウェアビルドが緑になることを確認する。
 devicetree の構文エラーはここで落ちる。
