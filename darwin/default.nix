@@ -60,19 +60,6 @@ in
       cleanup = "uninstall";
     };
     taps = [
-      {
-        # Deskflow公式Homebrew tap。
-        # cask 単位ではなく tap 単位で trust する必要がある: activation 末尾の
-        # `brew cleanup` は tap 内の *全* cask をロードするが、この tap には Brewfile に
-        # 載せていない安定版 `deskflow` cask も含まれる。Brewfile 由来の trust は
-        # `deskflow/tap/deskflow-dev` しか登録しないため、trust されていない
-        # `deskflow` に当たって
-        #   Error: Refusing to load cask deskflow/tap/deskflow from untrusted tap
-        # となり `brew cleanup` が exit 1 → activation 全体が失敗する
-        # (Homebrew 6.0.0 で HOMEBREW_REQUIRE_TAP_TRUST がデフォルト有効化された影響)。
-        name = "deskflow/tap";
-        trusted = true;
-      }
       "rjyo/moshi" # moshi-hook 配布用 tap (formula は moshi-hook のみで、完全修飾名により trust 済み)
     ];
     brews = [
@@ -95,14 +82,6 @@ in
       "chatgpt"
       "claude"
       "deepl"
-      # Mac間でキーボード・マウスを共有するソフトウェアKVM。
-      # 安定版 (deskflow) ではなく master 追従の deskflow-dev を使う。macOS サーバーで
-      # ホットキー切替後にカーソルが固まる問題の修正 (deskflow/deskflow#9784, #9963) が
-      # v1.26.0 に入っておらず、continuous ビルドにしか存在しないため。
-      # 詳細と安定版へ戻す手順: home-manager/home/file/deskflow/README.md
-      # 両 cask は conflicts_with なので、切り替え時は先に
-      # `brew uninstall --cask deskflow` を実行してから apply すること。
-      "deskflow/tap/deskflow-dev"
       "font-hack-nerd-font"
       "google-chrome"
       "google-drive"

@@ -31,7 +31,7 @@ let
   # TCC はバイナリのパスに紐づく。nix store のパスは世代ごとに変わるため、
   # そこを直接 launchd から起動するとアクセシビリティ許可が毎回切れる。
   # symlink も不可 (TCC が実体解決して store パスを記録する)。
-  # deskflowServerConfig と同じく実体コピーで固定パスに置く。
+  # そのため実体コピーで固定パスに置く。
   ucHandoffBin = "${config.home.homeDirectory}/.local/bin/uc-handoff";
 in
 lib.mkIf pkgs.stdenv.isDarwin {

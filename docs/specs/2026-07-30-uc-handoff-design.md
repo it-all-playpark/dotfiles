@@ -35,6 +35,7 @@ IME 干渉系: #8977 / #9984 / #9992）。いずれも**キーボードを転送
 ### 入れないもの（YAGNI）
 
 - deskflow の撤去。新方式が安定するまで併存させ、問題が出たら戻せるようにする
+  （**2026-07-31 追記**: 併存を終了し、別 PR で撤去済み。§9）
 - ポインタ以外の共有。クリップボードは Universal Clipboard が別途効く
 - 3 台目以降への対応。左右 2 台だけを前提にする
 - 方向以外の設定項目。`~/.config/uc-handoff/direction` に持つのは左右の別だけで、
@@ -87,10 +88,9 @@ Magic Trackpad はリンクキーを 1 ホスト分しか保持しないので�
 
 反対側のキーを押しても何も起きない。誤爆が自動的に無害になる。
 
-`F13`〜`F35` は macOS のシステムホットキー・ghostty・zellij・Raycast のいずれとも
-衝突しない（`home-manager/home/file/deskflow/README.md` に既出）。
-deskflow 撤去までの併存期間中は、deskflow 側の `keystroke(F13)` /
-`keystroke(F14)` と**意味が二重になる**点に注意する（§9）。
+`F13`〜`F35` は英数字の範囲外で、macOS のシステムホットキー・ghostty・zellij・
+Raycast のいずれとも原理的に衝突しない。deskflow 時代に同じ理由で `F13` / `F14` を
+選んでおり、実運用でも衝突は出ていない。
 
 ## 6. ZMK 側（`zmk-config-fish`）
 
@@ -170,8 +170,9 @@ HID レポートが届いていればよいので 100ms 待つ。実測で詰め
 nix store のパスに置くと `nix run .#update` のたびに store hash が変わり、
 許可が毎回切れる。symlink も駄目で、TCC は実体解決した store パスを記録する。
 
-既存の `home.activation.deskflowServerConfig` と**同じ方式・同じ理由**で、
-実体を固定パスへコピーする。
+そこで実体を固定パスへコピーする（deskflow のサーバ設定を
+`home.activation.deskflowServerConfig` で置いていたのと同じ方式・同じ理由。
+そちらは deskflow 撤去に伴い削除済み）。
 
 ```nix
 activation.ucHandoffBinary = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
@@ -217,16 +218,21 @@ Aqua セッションで動く必要があるので user agent であること（
 deskflow のようにキー入力そのものが壊れる経路が存在しない、というのが
 この設計の一番の狙い。
 
-## 9. deskflow との併存
+## 9. deskflow の撤去（2026-07-31 完了）
 
-新方式が安定するまで deskflow は残す。併存期間中の注意:
+当初は新方式が安定するまで deskflow を併存させる計画だったが、`uc-handoff` に
+一本化できたため撤去した。落としたもの:
 
-- deskflow サーバが `keystroke(F13)` / `keystroke(F14)` をホットキーとして
-  掴んでいる。`uc-handoff` の event tap と**どちらが先に食うか**が問題になる
-- 併存させるなら、deskflow 側のホットキー 2 行をコメントアウトして
-  `uc-handoff` に一本化するのが安全。deskflow 自体は起動したまま残せる
-- 撤去は別 PR。cask（`deskflow-dev`）、activation script、`deskflow-server.conf`、
-  README をまとめて落とす
+- Homebrew cask `deskflow/tap/deskflow-dev` と tap `deskflow/tap`
+  （tap 単位の `trusted = true` も不要になった）
+- `home.activation.deskflowServerConfig`
+- `home-manager/home/file/deskflow/`（`deskflow-server.conf` と README）
+
+`~/.config/deskflow/` と `~/Library/Deskflow/` は home-manager 管理外のため
+apply では消えない。不要なら手で削除する。
+
+これで `F13` / `F14` を掴むのは `uc-handoff` の event tap だけになり、
+併存期間に懸念していたホットキーの二重解釈は起こらない。
 
 ## 10. 手作業として残るもの
 
