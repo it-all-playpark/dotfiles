@@ -11,6 +11,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <dispatch/dispatch.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 // macOS 仮想キーコード
 #define UC_KEY_F13 105
@@ -74,6 +77,161 @@ uc_push_plan_t uc_plan_push(CGRect bounds, uc_direction_t dir, double delta) {
   return p;
 }
 
+// --- 副作用の殻 -------------------------------------------------------------
+
+#define UC_PUSH_FRAMES 60      // 120Hz で約 500ms
+#define UC_PUSH_INTERVAL_US 8333
+#define UC_PUSH_DELTA 8.0
+
+static uc_direction_t g_neighbor = DIR_NONE;
+static CFMachPortRef g_tap = NULL;
+
+// 全アクティブディスプレイの外接矩形
+static CGRect uc_union_bounds(void) {
+  CGDirectDisplayID ids[16];
+  uint32_t n = 0;
+  if (CGGetActiveDisplayList(16, ids, &n) != kCGErrorSuccess || n == 0) {
+    return CGRectNull;
+  }
+  CGRect u = CGDisplayBounds(ids[0]);
+  for (uint32_t i = 1; i < n; i++) {
+    u = CGRectUnion(u, CGDisplayBounds(ids[i]));
+  }
+  return u;
+}
+
+// エッジ検出は絶対座標ではなく delta を見ているため、必ず delta を載せる。
+static void uc_post_move(CGEventSourceRef src, CGPoint p, double dx, double dy) {
+  CGEventRef e = CGEventCreateMouseEvent(src, kCGEventMouseMoved, p, kCGMouseButtonLeft);
+  if (e == NULL) {
+    return;
+  }
+  CGEventSetIntegerValueField(e, kCGMouseEventDeltaX, (int64_t)dx);
+  CGEventSetIntegerValueField(e, kCGMouseEventDeltaY, (int64_t)dy);
+  CGEventPost(kCGHIDEventTap, e);
+  CFRelease(e);
+}
+
+static void uc_push(uc_direction_t dir) {
+  CGRect u = uc_union_bounds();
+  if (CGRectIsNull(u)) {
+    fprintf(stderr, "uc-handoff: no active display, skipping push\n");
+    return;
+  }
+  uc_push_plan_t plan = uc_plan_push(u, dir, UC_PUSH_DELTA);
+  CGEventSourceRef src = CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+
+  uc_post_move(src, plan.start, 0, 0);
+  usleep(120000);
+
+  CGPoint t = plan.start;
+  for (int i = 0; i < UC_PUSH_FRAMES; i++) {
+    t.x += plan.step.x;
+    t.y += plan.step.y;
+    uc_post_move(src, t, plan.step.x, plan.step.y);
+    usleep(UC_PUSH_INTERVAL_US);
+  }
+
+  if (src != NULL) {
+    CFRelease(src);
+  }
+}
+
+static CGEventRef uc_tap_callback(CGEventTapProxy proxy, CGEventType type,
+                                  CGEventRef event, void *ctx) {
+  (void)proxy;
+  (void)ctx;
+
+  // タップが無効化されたら黙って戻さず、必ず再有効化する
+  if (type == kCGEventTapDisabledByTimeout ||
+      type == kCGEventTapDisabledByUserInput) {
+    if (g_tap != NULL) {
+      CGEventTapEnable(g_tap, true);
+    }
+    return event;
+  }
+
+  if (type != kCGEventKeyDown && type != kCGEventKeyUp) {
+    return event;
+  }
+
+  int64_t kc = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+  uc_direction_t requested = uc_direction_for_keycode(kc);
+  if (requested == DIR_NONE) {
+    return event;
+  }
+
+  // 自機に隣がいる向きの keyDown のときだけ押し込む。
+  // タップのコールバックを塞ぐと macOS にタップごと切られるので、必ず別キューへ逃がす。
+  if (type == kCGEventKeyDown && requested == g_neighbor) {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      uc_push(requested);
+    });
+  }
+
+  // F13/F14 は down/up ともに常に消費する。押し込む向きかどうかで
+  // 消費の有無を変えると、機体によってキーが漏れる非対称ができる。
+  return NULL;
+}
+
+// ~/.config/uc-handoff/direction を読む
+static uc_direction_t uc_read_direction(void) {
+  const char *home = getenv("HOME");
+  if (home == NULL) {
+    return DIR_NONE;
+  }
+  char path[1024];
+  snprintf(path, sizeof(path), "%s/.config/uc-handoff/direction", home);
+  FILE *f = fopen(path, "r");
+  if (f == NULL) {
+    fprintf(stderr, "uc-handoff: %s not found\n", path);
+    return DIR_NONE;
+  }
+  char buf[64] = {0};
+  if (fgets(buf, sizeof(buf), f) == NULL) {
+    buf[0] = '\0';
+  }
+  fclose(f);
+  return uc_parse_direction(buf);
+}
+
+static int uc_run(void) {
+  g_neighbor = uc_read_direction();
+  if (g_neighbor == DIR_NONE) {
+    fprintf(stderr,
+            "uc-handoff: direction is unset or invalid; "
+            "write \"left\" or \"right\" to ~/.config/uc-handoff/direction. "
+            "not starting.\n");
+    return 0;
+  }
+
+  if (!AXIsProcessTrusted()) {
+    fprintf(stderr,
+            "uc-handoff: accessibility permission is missing. "
+            "grant it to ~/.local/bin/uc-handoff in "
+            "System Settings > Privacy & Security > Accessibility.\n");
+    return 1;
+  }
+
+  CGEventMask mask = CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventKeyUp);
+  g_tap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap,
+                           kCGEventTapOptionDefault, mask, uc_tap_callback, NULL);
+  if (g_tap == NULL) {
+    fprintf(stderr, "uc-handoff: failed to create the event tap\n");
+    return 1;
+  }
+
+  CFRunLoopSourceRef rls = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, g_tap, 0);
+  CFRunLoopAddSource(CFRunLoopGetCurrent(), rls, kCFRunLoopCommonModes);
+  CGEventTapEnable(g_tap, true);
+
+  fprintf(stderr, "uc-handoff: watching F13/F14, neighbor is on the %s\n",
+          g_neighbor == DIR_LEFT ? "left" : "right");
+
+  CFRunLoopRun();
+  return 0;
+}
+
 // --- self-test -------------------------------------------------------------
 
 static int uc_failures = 0;
@@ -134,6 +292,5 @@ int main(int argc, const char *argv[]) {
       return uc_self_test();
     }
   }
-  fprintf(stderr, "uc-handoff: not implemented yet\n");
-  return 2;
+  return uc_run();
 }
