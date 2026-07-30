@@ -14,8 +14,10 @@
 # caller to `cd`/export env vars first: REPO_ROOT and the bindings file
 # default are resolved from the script's own location (BASH_SOURCE), so it
 # can be invoked bare as `scripts/verify-branch-protection.sh` from any cwd
-# (needed so the sandbox's leading-token gh excludedCommands match still
-# applies when this script is the invoked command).
+# without the caller having to cd into the repo or export env vars first.
+# Because it calls `gh api`, it still requires access to gh's credentials
+# (`~/.config/gh` / keyring); it will fail in execution environments that
+# cannot read those credentials.
 #
 # Usage:
 #   scripts/verify-branch-protection.sh

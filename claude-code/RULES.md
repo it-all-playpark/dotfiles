@@ -56,7 +56,7 @@ Conflict: Safety > Scope > Quality > Speed
 - **process substitution `<(…)` を避ける**。`diff <(a) <(b)` 等は sandbox が `/dev/fd/*` を塞ぐため失敗する。一旦 tempfile に落として `diff f1 f2` にする
 - **network は `sandbox.network.allowedDomains` のホストのみ**到達可能。未許可ホストは即失敗 → 必要なら settings.json に追加してから実行（推測で叩かない）
 - sandbox で塞がれても `dangerouslyDisableSandbox` は policy で無効。回避不能なら失敗を報告し、settings 調整を提案する（勝手に緩めない）
-- **gh を内部で呼ぶ skill スクリプトは「先頭トークン＝スクリプトパス」の bare 形で呼ぶ**。`excludedCommands` は先頭トークンでマッチするため、`cd X && script`・`bash script`・`VAR=x script` の前置が付くと除外が外れて sandbox 内実行になり、中の gh が `~/.config/gh` を denyRead で読めず fatal（keyring token も securityd 経由で sandbox 内から取得不可）。`cd &&`/env 前置はパターンで塞げないので呼び出し側で回避する
+- **gh を内部で呼ぶ skill スクリプトは `sandbox.excludedCommands` に登録済みの起動形で呼ぶ**。登録されているのは「スクリプトパスが先頭トークンの bare 形」と `bash <path>` / `python3 <path>` の 2 トークン形（skills 配下のパス）のみ。`cd X && script` や `VAR=x script` のような前置形は登録がなく、先頭トークンマッチの仕組み上パターンでも表現できない。登録外の形で呼ぶと、内部で資格情報を要する処理（gh が `~/.config/gh` や keyring を読む等）が失敗する
 
 ## Failure Investigation
 🔴 Root cause analysis always. Never skip/disable tests or validation.
