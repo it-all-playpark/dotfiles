@@ -10,5 +10,6 @@
     ./neovim.nix
     ./cca.nix
     ./cc-launch.nix
+    ./uc-handoff.nix
   ];
 }
