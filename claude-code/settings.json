@@ -536,7 +536,9 @@
       "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
       "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
       "codex:*",
-      "zernio:*"
+      "zernio:*",
+      "bash tests/run-all-bats.sh",
+      "bats:*"
     ],
     "failIfUnavailable": true,
     "filesystem": {
