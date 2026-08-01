@@ -200,6 +200,17 @@
           }
         ],
         "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/pretool-context-guard.sh\"",
+            "statusMessage": "コンテキスト浪費チェック中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Read"
       }
     ],
     "SessionStart": [

@@ -56,6 +56,7 @@ nix run .#update
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
+| `PreToolUse` Bash \| Read | `pretool-context-guard.sh` | 20KB 超の構造化ファイル / 100KB 超のファイルの全読みを deny し、`jq`/`gron`/`yq`/`duckdb`/`rga` の代替コマンドを返す |
 | `PostToolUse` 系 | `posttool-secret-mask.sh` | 出力中の secret をマスク |
 | `Stop` | `stop-devflow-telemetry.sh` | dev-flow telemetry の journal flush（失敗時 `~/.claude/logs/stop-devflow-telemetry.log`） |
 
