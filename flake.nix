@@ -77,9 +77,13 @@
             # mise の checkPhase は Nix サンドボックスが setuid bit 付与を許可しないため
             # oci::layer::tests::preserve_metadata_dir_layer_keeps_special_permission_bits が失敗する。
             # nixpkgs 側でこのテストが skip されたら削除可。
+            # cmake は nixpkgs 側で nativeCheckInputs にあるため doCheck = false で PATH から外れるが、
+            # mise 2026.7.17 で追加された libz-ng-sys の build.rs が buildPhase で cmake を要求する。
+            # nativeBuildInputs に明示的に足さないと "is `cmake` not installed?" でビルドが落ちる。
             (_final: prev: {
-              mise = prev.mise.overrideAttrs (_: {
+              mise = prev.mise.overrideAttrs (old: {
                 doCheck = false;
+                nativeBuildInputs = old.nativeBuildInputs ++ [ prev.cmake ];
               });
             })
             # ollama 0.30.5 は macOS arm64 で MLX backend がデフォルト有効になり、
