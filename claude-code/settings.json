@@ -329,7 +329,8 @@
       "mcp__plugin_telegram_telegram__download_attachment",
       "Bash(zernio post:*)",
       "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio:*)",
-      "Bash(gh api repos/playpark-llc/corporate-site/git/refs:*)"
+      "Bash(gh api repos/playpark-llc/corporate-site/git/refs:*)",
+      "Bash(npx -y vdelta@* run -- npx vitest run*)"
     ],
     "defaultMode": "auto",
     "deny": [
