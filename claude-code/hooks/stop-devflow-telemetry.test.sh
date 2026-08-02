@@ -1678,6 +1678,139 @@ make_full_telemetry_handoff() {
 }
 
 # --------------------------------------------------------------------------
+# Test T-A: valid trust_evalseal_missing_reason → --trust-evalseal-missing-reason
+#           is forwarded to journal.sh
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/evalseal.json" "$stub" \
+    '.telemetry += {trust_evalseal_missing_reason: "agent_throw"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-evalseal-missing-reason agent_throw"; then
+    pass "trust_evalseal_missing_reason_forwarded"
+  else
+    fail "trust_evalseal_missing_reason_forwarded" "expected --trust-evalseal-missing-reason agent_throw. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/evalseal.json" ]]; then
+    pass "trust_evalseal_missing_reason_pending_removed"
+  else
+    fail "trust_evalseal_missing_reason_pending_removed" "pending file should be removed after success"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test T-B: trust_evalseal_missing_reason with a closed-enum 契約違反の値
+#           → 当該フラグのみ drop、base entry は記録される、drop はログされる
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/badreason.json" "$stub" \
+    '.telemetry += {trust_evalseal_missing_reason: "totally_bogus"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-evalseal-missing-reason"; then
+    fail "bad_evalseal_missing_reason_dropped" "invalid --trust-evalseal-missing-reason must not be forwarded. got: ${captured}"
+  else
+    pass "bad_evalseal_missing_reason_dropped"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "bad_evalseal_missing_reason_base_entry_preserved"
+  else
+    fail "bad_evalseal_missing_reason_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if grep -q "trust-key-dropped: trust_evalseal_missing_reason" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "bad_evalseal_missing_reason_logged"
+  else
+    fail "bad_evalseal_missing_reason_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/badreason.json" ]]; then
+    pass "bad_evalseal_missing_reason_pending_removed"
+  else
+    fail "bad_evalseal_missing_reason_pending_removed" "pending file must not be stuck on trust-key drop"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test T-C: trust_evalseal_missing_reason absent → no such flag at all
+#           (空値を渡さない)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/noreason.json" "$stub" '.'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-evalseal-missing-reason"; then
+    fail "trust_evalseal_missing_reason_absent_no_flag" "no --trust-evalseal-missing-reason flag expected. got: ${captured}"
+  else
+    pass "trust_evalseal_missing_reason_absent_no_flag"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test T-D (integration): 実 journal.sh が存在する環境では、
+#          trust_evalseal_missing_reason が実際に journal entry の
+#          telemetry へ到達することを確認する。未配置環境では skip。
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_trust_handoff "${tmpd}/journal/pending/e2ereason.json" "$REAL_JOURNAL" \
+      '.telemetry += {trust_evalseal_missing_reason: "seal_error"}'
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_evalseal_missing_reason_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_evalseal_missing_reason_entry_written"
+      if [[ $(jq -r '.telemetry.trust_evalseal_missing_reason' "$entry") == "seal_error" ]] &&
+        [[ $(jq -r '.telemetry.merge_tier' "$entry") == "REVIEW" ]]; then
+        pass "integration_evalseal_missing_reason_persisted"
+      else
+        fail "integration_evalseal_missing_reason_persisted" "trust_evalseal_missing_reason missing/altered in entry: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
