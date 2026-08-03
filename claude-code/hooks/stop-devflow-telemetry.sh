@@ -80,6 +80,7 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_run_id=""
   trust_receipts_json=""
   trust_surfaceproof_json=""
+  trust_evalseal_missing_reason=""
   error_category=""
   error_msg=""
   vdelta_verdicts_json=""
@@ -115,6 +116,7 @@ for f in "${PENDING_DIR}"/*.json; do
     trust_run_id: .telemetry.trust_run_id,
     trust_receipts: .telemetry.trust_receipts,
     trust_surfaceproof: .telemetry.trust_surfaceproof_shadow,
+    trust_evalseal_missing_reason: .telemetry.trust_evalseal_missing_reason,
     vdelta_verdicts: .telemetry.vdelta_verdicts,
     vdelta_fail_open: .telemetry.vdelta_fail_open,
     redgreen_deny: .telemetry.redgreen_deny,
@@ -167,6 +169,7 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_run_id=$(echo "$parsed" | jq -r '.trust_run_id // empty')
   trust_receipts_json=$(echo "$parsed" | jq -c '.trust_receipts // empty')
   trust_surfaceproof_json=$(echo "$parsed" | jq -c '.trust_surfaceproof // empty')
+  trust_evalseal_missing_reason=$(echo "$parsed" | jq -r '.trust_evalseal_missing_reason // empty')
   vdelta_verdicts_json=$(echo "$parsed" | jq -c '.vdelta_verdicts // empty')
   vdelta_fail_open=$(echo "$parsed" | jq -r '.vdelta_fail_open // empty')
   redgreen_deny_json=$(echo "$parsed" | jq -c '.redgreen_deny // empty')
@@ -278,6 +281,18 @@ for f in "${PENDING_DIR}"/*.json; do
       printf '%s %s trust-key-dropped: trust_surfaceproof_shadow (journal.sh closed-enum 契約を満たさない)\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
     fi
+  fi
+  if [[ -n $trust_evalseal_missing_reason && $trust_evalseal_missing_reason != "null" ]]; then
+    case "$trust_evalseal_missing_reason" in
+    eval_skipped | agent_throw | agent_null | seal_error | mode_off | unknown)
+      cmd_args+=(--trust-evalseal-missing-reason "$trust_evalseal_missing_reason")
+      ;;
+    *)
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s trust-key-dropped: trust_evalseal_missing_reason (journal.sh closed-enum 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+      ;;
+    esac
   fi
 
   # --- telemetry 8-key forwarding (issue #143 / #430) ---
