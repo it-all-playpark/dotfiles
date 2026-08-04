@@ -81,6 +81,7 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_receipts_json=""
   trust_surfaceproof_json=""
   trust_evalseal_missing_reason=""
+  trust_effectdelta_pr_missing_reason=""
   error_category=""
   error_msg=""
   vdelta_verdicts_json=""
@@ -117,6 +118,7 @@ for f in "${PENDING_DIR}"/*.json; do
     trust_receipts: .telemetry.trust_receipts,
     trust_surfaceproof: .telemetry.trust_surfaceproof_shadow,
     trust_evalseal_missing_reason: .telemetry.trust_evalseal_missing_reason,
+    trust_effectdelta_pr_missing_reason: .telemetry.trust_effectdelta_pr_missing_reason,
     vdelta_verdicts: .telemetry.vdelta_verdicts,
     vdelta_fail_open: .telemetry.vdelta_fail_open,
     redgreen_deny: .telemetry.redgreen_deny,
@@ -170,6 +172,7 @@ for f in "${PENDING_DIR}"/*.json; do
   trust_receipts_json=$(echo "$parsed" | jq -c '.trust_receipts // empty')
   trust_surfaceproof_json=$(echo "$parsed" | jq -c '.trust_surfaceproof // empty')
   trust_evalseal_missing_reason=$(echo "$parsed" | jq -r '.trust_evalseal_missing_reason // empty')
+  trust_effectdelta_pr_missing_reason=$(echo "$parsed" | jq -r '.trust_effectdelta_pr_missing_reason // empty')
   vdelta_verdicts_json=$(echo "$parsed" | jq -c '.vdelta_verdicts // empty')
   vdelta_fail_open=$(echo "$parsed" | jq -r '.vdelta_fail_open // empty')
   redgreen_deny_json=$(echo "$parsed" | jq -c '.redgreen_deny // empty')
@@ -290,6 +293,23 @@ for f in "${PENDING_DIR}"/*.json; do
     *)
       mkdir -p "$(dirname "$LOG_FILE")"
       printf '%s %s trust-key-dropped: trust_evalseal_missing_reason (journal.sh closed-enum 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+      ;;
+    esac
+  fi
+  # EffectDelta PR stage receipt の欠落理由（skills#476 Phase 1 の送り側）。enum は
+  # journal.sh の --trust-effectdelta-pr-missing-reason と一致させること。EvalSeal 側とは
+  # 独立定義であり（skills#476 D-3）、値集合が違うので case を共有しない。
+  # journal.sh は out-of-enum・空文字の両方で die_json する（fail-closed）ため、
+  # 契約を満たさない値は必ず送り側で drop する（entry ごと失わないため）。
+  if [[ -n $trust_effectdelta_pr_missing_reason && $trust_effectdelta_pr_missing_reason != "null" ]]; then
+    case "$trust_effectdelta_pr_missing_reason" in
+    agent_throw | agent_null | mode_off | gh_failed | script_error | agent_error | schema_invalid | unknown)
+      cmd_args+=(--trust-effectdelta-pr-missing-reason "$trust_effectdelta_pr_missing_reason")
+      ;;
+    *)
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s trust-key-dropped: trust_effectdelta_pr_missing_reason (journal.sh closed-enum 契約を満たさない)\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
       ;;
     esac
