@@ -1811,6 +1811,173 @@ make_full_telemetry_handoff() {
 }
 
 # --------------------------------------------------------------------------
+# Test T-E: valid trust_effectdelta_pr_missing_reason
+#           → --trust-effectdelta-pr-missing-reason is forwarded to journal.sh
+#           (issue #156 AC-1 / skills#476 Phase 1 送り側)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/effectdelta.json" "$stub" \
+    '.telemetry += {trust_effectdelta_pr_missing_reason: "gh_failed"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-effectdelta-pr-missing-reason gh_failed"; then
+    pass "trust_effectdelta_pr_missing_reason_forwarded"
+  else
+    fail "trust_effectdelta_pr_missing_reason_forwarded" "expected --trust-effectdelta-pr-missing-reason gh_failed. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/effectdelta.json" ]]; then
+    pass "trust_effectdelta_pr_missing_reason_pending_removed"
+  else
+    fail "trust_effectdelta_pr_missing_reason_pending_removed" "pending file should be removed after success"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test T-E2: closed enum の全 8 値が転送される（EvalSeal と値集合が違うので
+#            取り違えると silent に落ちる。全値を固定する — issue #156 AC-1）
+# --------------------------------------------------------------------------
+{
+  for reason in agent_throw agent_null mode_off gh_failed script_error agent_error schema_invalid unknown; do
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+    capture="${tmpd}/capture.txt"
+    stub="${tmpd}/journal.sh"
+    make_stub_journal "$stub" "$capture" 0
+
+    make_trust_handoff "${tmpd}/journal/pending/ed-${reason}.json" "$stub" \
+      ".telemetry += {trust_effectdelta_pr_missing_reason: \"${reason}\"}"
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    captured=$(cat "$capture" 2>/dev/null || echo "")
+    if echo "$captured" | grep -q -- "--trust-effectdelta-pr-missing-reason ${reason}"; then
+      pass "trust_effectdelta_pr_missing_reason_enum_${reason}"
+    else
+      fail "trust_effectdelta_pr_missing_reason_enum_${reason}" "enum value ${reason} must be forwarded. got: ${captured}"
+    fi
+
+    rm -rf "$tmpd"
+  done
+}
+
+# --------------------------------------------------------------------------
+# Test T-F: trust_effectdelta_pr_missing_reason に closed-enum 契約違反の値
+#           → 当該フラグのみ drop、base entry は記録される、drop はログされる
+#           (issue #156 AC-2 / AC-3)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  # seal_error は EvalSeal 側 enum の値であり EffectDelta 側には無い。
+  # case を共有すると誤って通るので、この値で分離を固定する。
+  make_trust_handoff "${tmpd}/journal/pending/badeffectdelta.json" "$stub" \
+    '.telemetry += {trust_effectdelta_pr_missing_reason: "seal_error"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-effectdelta-pr-missing-reason"; then
+    fail "bad_effectdelta_pr_missing_reason_dropped" "invalid --trust-effectdelta-pr-missing-reason must not be forwarded. got: ${captured}"
+  else
+    pass "bad_effectdelta_pr_missing_reason_dropped"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "bad_effectdelta_pr_missing_reason_base_entry_preserved"
+  else
+    fail "bad_effectdelta_pr_missing_reason_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if grep -q "trust-key-dropped: trust_effectdelta_pr_missing_reason" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "bad_effectdelta_pr_missing_reason_logged"
+  else
+    fail "bad_effectdelta_pr_missing_reason_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/badeffectdelta.json" ]]; then
+    pass "bad_effectdelta_pr_missing_reason_pending_removed"
+  else
+    fail "bad_effectdelta_pr_missing_reason_pending_removed" "pending file must not be stuck on trust-key drop"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test T-G: trust_effectdelta_pr_missing_reason absent → no such flag at all
+#           (空値を渡さない。journal.sh は空文字でも die_json するため
+#            entry ごと失う — issue #156 AC-4)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/noeffectdelta.json" "$stub" '.'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--trust-effectdelta-pr-missing-reason"; then
+    fail "trust_effectdelta_pr_missing_reason_absent_no_flag" "no --trust-effectdelta-pr-missing-reason flag expected. got: ${captured}"
+  else
+    pass "trust_effectdelta_pr_missing_reason_absent_no_flag"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test T-H (integration): 実 journal.sh が存在する環境では、
+#          trust_effectdelta_pr_missing_reason が実際に journal entry の
+#          telemetry へ到達することを確認する。未配置環境では skip。
+#          (issue #156 AC-5)
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_trust_handoff "${tmpd}/journal/pending/e2eeffectdelta.json" "$REAL_JOURNAL" \
+      '.telemetry += {trust_effectdelta_pr_missing_reason: "gh_failed"}'
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_effectdelta_pr_missing_reason_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_effectdelta_pr_missing_reason_entry_written"
+      if [[ $(jq -r '.telemetry.trust_effectdelta_pr_missing_reason' "$entry") == "gh_failed" ]] &&
+        [[ $(jq -r '.telemetry.merge_tier' "$entry") == "REVIEW" ]]; then
+        pass "integration_effectdelta_pr_missing_reason_persisted"
+      else
+        fail "integration_effectdelta_pr_missing_reason_persisted" "trust_effectdelta_pr_missing_reason missing/altered in entry: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
