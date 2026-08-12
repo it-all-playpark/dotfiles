@@ -1,6 +1,7 @@
 { pkgs, ... }:
 {
-  # Office を git diff で読めるようにする textconv ドライバ。
+  # Office ファイル（docx/doc/xlsx/xls/pptx）を git diff で読めるようにする
+  # textconv ドライバ。変換には office-oxide を使う。
   # リポジトリ側は .gitattributes に `*.docx diff=office` のように書くだけで、
   # 実体（どのコマンドを呼ぶか）はこちらのマシン側設定で与える。
   # 未導入の環境では diff driver が見つからず、従来どおり
@@ -29,12 +30,13 @@
       # cachetextconv は変換結果を git notes にキャッシュする。
       # 数百件の Office ファイルを持つリポジトリで git log -p を回すと
       # 毎回全件再変換することになるため、有効にしておく。
+      # docx / doc / xlsx / xls / pptx をすべて office-oxide で扱う。
+      # pptx 専用に undoc を併用する案もあったが、実測で本文再現率は同じ
+      # （836/836 = 100%）でスライド分離はむしろ office-oxide の方が正確、
+      # 差は画像参照の有無のみだった。pptx の差分を追う機会が実際には
+      # ほぼ無いため、ツールを1本に絞っている。
       diff.office = {
         textconv = "git-textconv office";
-        cachetextconv = true;
-      };
-      diff.slides = {
-        textconv = "git-textconv slides";
         cachetextconv = true;
       };
       # pdfdoc は anydoc に依存する。anydoc 未導入の間は .gitattributes 側で

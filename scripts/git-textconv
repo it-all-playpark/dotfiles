@@ -23,7 +23,6 @@ fi
 
 case $mode in
   office) tool=office-oxide; set -- markdown "$file" ;;
-  slides) tool=undoc;        set -- md       "$file" ;;
   pdf)    tool=anydoc;       set --          "$file" ;;
   *)
     echo "[textconv: 未知のモード '$mode']"
