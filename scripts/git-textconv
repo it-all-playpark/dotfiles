@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# git-textconv <mode> <file>
+#
+# git の textconv ドライバ本体。git は
+#   textconv = git-textconv office
+# のように登録し、末尾にファイルパスを付けて呼ぶ。
+#
+# 契約上とても重要な点:
+#   - 出力は stdout のテキストのみ
+#   - 何があっても exit 0 を返す。非 0 を返すと git が diff 全体をエラーにする
+#     ので、読めないファイルは「読めなかった」旨を1行出して正常終了する
+#
+# mode とツールの対応は .gitattributes 側のコメントも参照。
+set -uo pipefail
+
+mode=${1:-}
+file=${2:-}
+
+if [[ -z $mode || -z $file ]]; then
+  echo "[textconv: 引数が足りません (mode=${mode:-未指定})]"
+  exit 0
+fi
+
+case $mode in
+  office) tool=office-oxide; set -- markdown "$file" ;;
+  slides) tool=undoc;        set -- md       "$file" ;;
+  pdf)    tool=anydoc;       set --          "$file" ;;
+  *)
+    echo "[textconv: 未知のモード '$mode']"
+    exit 0
+    ;;
+esac
+
+if ! command -v "$tool" >/dev/null 2>&1; then
+  echo "[textconv: $tool が PATH にありません。$(basename "$file") は変換できません]"
+  exit 0
+fi
+
+if out=$("$tool" "$@" 2>/dev/null) && [[ -n ${out//[[:space:]]/} ]]; then
+  printf '%s\n' "$out"
+else
+  # スキャン PDF や壊れたファイルはここに来る。差分上で理由が見えるようにしておく
+  echo "[textconv: $(basename "$file") を $tool で読めませんでした（スキャン PDF / 破損 / 非対応形式）]"
+fi
+
+exit 0
