@@ -1,0 +1,307 @@
+#!/usr/bin/env bash
+# git-worktree-gc — merge 済み worktree の一括削除（安全版）
+#
+# 旧 `wrm` abbr (home-manager/programs/common.nix) の置き換え。
+# abbr: wrm (current repo) / wrma (--all) / wrmn (--all --dry-run)
+#
+# 旧実装からの変更点:
+#   1. gh の失敗と「PR 無し」を区別する。旧実装は `gh pr view` の stdout が空なら
+#      無条件に remove していたため、gh の 404 / 認証失敗 / ネットワーク断でも
+#      「PR 無し」と誤判定し、未マージ worktree を消す事故が起きうる。
+#   2. PR 無しの worktree は default branch の祖先である場合のみ remove する。
+#      旧実装は「PR 未作成 = 消してよい」としていたが、PR を立てる前の作業中
+#      worktree がこれに該当する。
+#   3. default branch を origin/HEAD から解決する（main 決め打ちをやめる）。
+#      dev を default にしている repo (jikka-scan, sales-pipeline 等) で誤判定していた。
+#   4. dirty worktree は skip する（未コミットの変更を保護）。
+#   5. worktree のディレクトリ名と checkout 中のブランチ名の不一致を警告する。
+#      dev-flow が残す `worktrees/issue-1406` が `feature/issue-1384` を掴んでいる
+#      ような状態は、それ自体が異常なので気づけるようにする。
+#   6. --all で ghq 配下の全 repo を横断する。旧実装は cwd の repo のみで、
+#      repo に cd したときしか掃除されなかった。
+#
+# 削除するのは以下のいずれかを満たす worktree のみ:
+#   - 紐づく PR が MERGED
+#   - PR が存在せず、かつブランチが default branch にマージ済み（祖先）
+# いずれの場合も clean tree であることが前提。判定できない場合は必ず skip する
+# （fail-closed）。
+
+set -uo pipefail
+
+DRY_RUN=0
+ALL=0
+
+usage() {
+  cat <<'EOF'
+usage: git-worktree-gc [--all] [--dry-run]
+
+  --all      ghq 配下の全 repo を横断する（既定は cwd の repo のみ）
+  --dry-run  削除せず判定結果のみ表示する
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --all) ALL=1 ;;
+  --dry-run | -n) DRY_RUN=1 ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "unknown option: $1" >&2
+    usage >&2
+    exit 2
+    ;;
+  esac
+  shift
+done
+
+REMOVED=0
+SKIPPED=0
+WARNED=0
+
+# ---------------------------------------------------------------------------
+# default branch を解決する。
+# origin/HEAD が未設定の repo もあるため、main → master → dev の順で fallback。
+# ---------------------------------------------------------------------------
+default_branch() {
+  local repo="$1" ref
+  ref="$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
+  if [ -n "$ref" ]; then
+    echo "${ref#origin/}"
+    return 0
+  fi
+  local candidate
+  for candidate in main master dev; do
+    if git -C "$repo" show-ref --verify --quiet "refs/remotes/origin/${candidate}"; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  echo ""
+}
+
+# ---------------------------------------------------------------------------
+# PR の状態を引く。stdout に状態を、exit code で判定可否を返す。
+#
+#   0 + MERGED/OPEN/CLOSED  … gh が状態を返した
+#   0 + NO_PR               … gh が「PR が無い」と明示的に答えた
+#   1 + GH_ERROR            … gh が失敗した（404 / 認証 / ネットワーク / 未 push 等）
+#
+# 3 つ目を 2 つ目と混同しないことが、この関数の唯一かつ最大の役目。
+# ---------------------------------------------------------------------------
+pr_state() {
+  local repo="$1" branch="$2" out err rc
+  err="$(mktemp)"
+  out="$(gh -R "$(git -C "$repo" remote get-url origin 2>/dev/null)" \
+    pr view "$branch" --json state -q .state 2>"$err")"
+  rc=$?
+  if [ $rc -eq 0 ] && [ -n "$out" ]; then
+    rm -f "$err"
+    echo "$out"
+    return 0
+  fi
+  if grep -qi 'no pull requests found\|no pull request found' "$err"; then
+    rm -f "$err"
+    echo "NO_PR"
+    return 0
+  fi
+  rm -f "$err"
+  echo "GH_ERROR"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# repo 1 つ分の worktree を掃除する。
+# ---------------------------------------------------------------------------
+gc_repo() {
+  local repo="$1"
+  local cur main def
+  git -C "$repo" worktree prune
+
+  cur="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)"
+  main="$(git -C "$repo" worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+  def="$(default_branch "$repo")"
+
+  if [ -z "$def" ]; then
+    echo "  Skip (repo): default branch を解決できません"
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+  fi
+
+  local path="" branch="" locked=0 pid="-"
+  # NOTE: `while ... done < <(...)` は使わない。sandbox が /dev/fd/* を塞ぐ環境が
+  # あるため（dotfiles RULES.md / Sandbox Hygiene）。パイプにすると while が
+  # subshell に入りカウンタが消えるので、tempfile を経由する。
+  local wtlist
+  wtlist="$(mktemp)"
+  {
+    git -C "$repo" worktree list --porcelain
+    echo ""
+  } >"$wtlist"
+
+  # porcelain は空行区切りのレコード列。1 レコード読み終えた時点で判定する。
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+    "worktree "*)
+      path="${line#worktree }"
+      branch=""
+      locked=0
+      pid="-"
+      continue
+      ;;
+    "branch "*)
+      branch="${line#branch }"
+      branch="${branch#refs/heads/}"
+      continue
+      ;;
+    "locked"*)
+      locked=1
+      # locked の理由文字列に "(pid 1234)" が含まれていれば拾う
+      if [[ "$line" =~ \(pid\ ([0-9]+)\) ]]; then
+        pid="${BASH_REMATCH[1]}"
+      fi
+      continue
+      ;;
+    "") ;; # レコード終端 → 下の判定へ落ちる
+    *) continue ;;
+    esac
+
+    [ -n "$path" ] || continue
+    [ -n "$branch" ] || {
+      path=""
+      continue
+    }
+
+    judge_worktree "$repo" "$path" "$branch" "$locked" "$pid" "$cur" "$main" "$def"
+    path=""
+  done <"$wtlist"
+  rm -f "$wtlist"
+}
+
+judge_worktree() {
+  local repo="$1" path="$2" branch="$3" locked="$4" pid="$5"
+  local cur="$6" main="$7" def="$8"
+
+  if [ "$path" = "$cur" ]; then
+    echo "  Skip (current): $branch"
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+  fi
+  if [ "$path" = "$main" ]; then
+    return 0
+  fi
+
+  if [ "$locked" = 1 ]; then
+    if [ "$pid" != "-" ] && ! kill -0 "$pid" 2>/dev/null; then
+      git -C "$repo" worktree unlock "$path" &&
+        echo "  Unlocked (stale pid $pid): $branch"
+    else
+      echo "  Skip (locked): $branch"
+      SKIPPED=$((SKIPPED + 1))
+      return 0
+    fi
+  fi
+
+  # ディレクトリ名とブランチ名の不一致は、それ自体が異常のサイン。
+  # 判定は変えず警告だけ出す。
+  local dirname
+  dirname="$(basename "$path")"
+  if [ "$dirname" != "$branch" ] &&
+    [ "$dirname" != "${branch##*/}" ] &&
+    [ "worktree-$dirname" != "$branch" ]; then
+    echo "  Warn (name mismatch): dir=$dirname branch=$branch"
+    WARNED=$((WARNED + 1))
+  fi
+
+  if [ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]; then
+    echo "  Skip (dirty): $branch"
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+  fi
+
+  local state
+  state="$(pr_state "$repo" "$branch")"
+
+  local reason=""
+  case "$state" in
+  MERGED)
+    reason="PR MERGED"
+    ;;
+  NO_PR)
+    # PR が無い場合は「default branch にマージ済み」を自分で確かめる。
+    if git -C "$repo" merge-base --is-ancestor "$branch" "origin/$def" 2>/dev/null; then
+      reason="no PR, merged into $def"
+    else
+      echo "  Skip (no PR, unmerged): $branch"
+      SKIPPED=$((SKIPPED + 1))
+      return 0
+    fi
+    ;;
+  GH_ERROR)
+    echo "  Skip (gh error): $branch — PR 状態を判定できないため保護しました"
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+    ;;
+  *)
+    echo "  Skip (PR $state): $branch"
+    SKIPPED=$((SKIPPED + 1))
+    return 0
+    ;;
+  esac
+
+  if [ "$DRY_RUN" = 1 ]; then
+    echo "  Would remove: $branch ($reason)"
+    REMOVED=$((REMOVED + 1))
+    return 0
+  fi
+
+  if git -C "$repo" worktree remove "$path"; then
+    echo "  Removed: $branch ($reason)"
+    REMOVED=$((REMOVED + 1))
+  else
+    echo "  Skip (remove failed): $branch"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+if [ "$ALL" = 1 ]; then
+  if ! command -v ghq >/dev/null 2>&1; then
+    echo "ghq が見つかりません（--all には ghq が必要です）" >&2
+    exit 1
+  fi
+  repolist="$(mktemp)"
+  ghq list --full-path >"$repolist"
+  while IFS= read -r repo; do
+    # ghq list は main worktree のみを返す。念のため .claude/worktrees 配下は除外。
+    case "$repo" in
+    */.claude/worktrees/*) continue ;;
+    esac
+    [ -d "$repo/.git" ] || [ -f "$repo/.git" ] || continue
+    # worktree を 1 つも持たない repo は黙って飛ばす（出力を静かに保つ）
+    if [ "$(git -C "$repo" worktree list --porcelain 2>/dev/null | grep -c '^worktree ')" -le 1 ]; then
+      continue
+    fi
+    echo "=== $repo"
+    gc_repo "$repo"
+  done <"$repolist"
+  rm -f "$repolist"
+else
+  repo="$(git rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "$repo" ]; then
+    echo "git repository ではありません" >&2
+    exit 1
+  fi
+  gc_repo "$repo"
+fi
+
+echo ""
+if [ "$DRY_RUN" = 1 ]; then
+  echo "Results: ${REMOVED} would be removed, ${SKIPPED} skipped, ${WARNED} warned (dry-run)"
+else
+  echo "Results: ${REMOVED} removed, ${SKIPPED} skipped, ${WARNED} warned"
+fi
