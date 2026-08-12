@@ -137,6 +137,12 @@ in
         source = ./file/cc-launch;
         recursive = true;
       };
+      # wrm / wrma / wrmn abbr (home-manager/programs/common.nix) の実体。
+      # abbr は絶対パスで直接叩くため PATH には追加しない。
+      ".local/bin/git-worktree-gc" = {
+        source = ./file/bin/git-worktree-gc;
+        executable = true;
+      };
     };
 
     # Claude Code 設定を dotfiles/claude-code/ からシンボリックリンクで参照
