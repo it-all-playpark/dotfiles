@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 # git-textconv <mode> <file>
 #
-# git の textconv ドライバ本体。git は
+# git の textconv ドライバ本体。git config には
 #   textconv = git-textconv office
-# のように登録し、末尾にファイルパスを付けて呼ぶ。
+# のように登録し、git が末尾にファイルパスを付けて呼ぶ。
 #
-# 契約上とても重要な点:
-#   - 出力は stdout のテキストのみ
-#   - 何があっても exit 0 を返す。非 0 を返すと git が diff 全体をエラーにする
-#     ので、読めないファイルは「読めなかった」旨を1行出して正常終了する
-#
-# mode とツールの対応は .gitattributes 側のコメントも参照。
+# 契約上とても重要な点: 何があっても exit 0 を返すこと。
+# 非 0 を返すと git が diff 全体をエラーにするため、変換できなかった場合も
+# 理由を1行出して正常終了する。
 set -uo pipefail
 
 mode=${1:-}
@@ -23,13 +20,13 @@ fi
 
 case $mode in
   office) tool=office-oxide; set -- markdown "$file" ;;
-  pdf)    tool=anydoc;       set --          "$file" ;;
   *)
     echo "[textconv: 未知のモード '$mode']"
     exit 0
     ;;
 esac
 
+# 変換ツールは PATH から探す。導入方法（mise / cargo install）を選ばないため。
 if ! command -v "$tool" >/dev/null 2>&1; then
   echo "[textconv: $tool が PATH にありません。$(basename "$file") は変換できません]"
   exit 0
@@ -38,8 +35,7 @@ fi
 if out=$("$tool" "$@" 2>/dev/null) && [[ -n ${out//[[:space:]]/} ]]; then
   printf '%s\n' "$out"
 else
-  # スキャン PDF や壊れたファイルはここに来る。差分上で理由が見えるようにしておく
-  echo "[textconv: $(basename "$file") を $tool で読めませんでした（スキャン PDF / 破損 / 非対応形式）]"
+  echo "[textconv: $(basename "$file") を $tool で読めませんでした（破損 / 非対応形式）]"
 fi
 
 exit 0

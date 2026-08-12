@@ -9,9 +9,9 @@
   home.packages = [
     (pkgs.writeShellApplication {
       name = "git-textconv";
-      # 変換ツール本体（office-oxide / undoc / anydoc）は runtimeInputs に固定せず
-      # 実行時に PATH から探す。mise や cargo install など導入方法を選ばないためで、
-      # 見つからない場合はスクリプト側がその旨を1行出して exit 0 する。
+      # office-oxide は runtimeInputs に固定せず実行時に PATH から探す
+      # （mise 管理のため）。見つからない場合はスクリプト側が
+      # その旨を1行出して exit 0 する。
       text = builtins.readFile ../../scripts/git-textconv;
     })
   ];
@@ -30,20 +30,8 @@
       # cachetextconv は変換結果を git notes にキャッシュする。
       # 数百件の Office ファイルを持つリポジトリで git log -p を回すと
       # 毎回全件再変換することになるため、有効にしておく。
-      # docx / doc / xlsx / xls / pptx をすべて office-oxide で扱う。
-      # pptx 専用に undoc を併用する案もあったが、実測で本文再現率は同じ
-      # （836/836 = 100%）でスライド分離はむしろ office-oxide の方が正確、
-      # 差は画像参照の有無のみだった。pptx の差分を追う機会が実際には
-      # ほぼ無いため、ツールを1本に絞っている。
       diff.office = {
         textconv = "git-textconv office";
-        cachetextconv = true;
-      };
-      # pdfdoc は anydoc に依存する。anydoc 未導入の間は .gitattributes 側で
-      # *.pdf に割り当てないこと（割り当てると差分が変換失敗メッセージに変わり、
-      # "Binary files differ" より情報が減る）。
-      diff.pdfdoc = {
-        textconv = "git-textconv pdf";
         cachetextconv = true;
       };
     };
