@@ -23,6 +23,10 @@ uv = "latest"
 rust = "latest"
 go = "latest"
 java = "21"
+# git の textconv ドライバ (diff.office) が呼ぶ Office 抽出ツール。
+# docx/doc/xlsx/xls/pptx を Markdown に変換する。詳細は
+# home-manager/programs/git.nix と各リポジトリの .gitattributes を参照。
+"cargo:office_oxide_cli" = "latest"
 
 [settings]
 experimental = true

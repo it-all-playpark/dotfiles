@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# git-textconv <mode> <file>
+#
+# git の textconv ドライバ本体。git config には
+#   textconv = git-textconv office
+# のように登録し、git が末尾にファイルパスを付けて呼ぶ。
+#
+# 契約上とても重要な点: 何があっても exit 0 を返すこと。
+# 非 0 を返すと git が diff 全体をエラーにするため、変換できなかった場合も
+# 理由を1行出して正常終了する。
+set -uo pipefail
+
+mode=${1:-}
+file=${2:-}
+
+if [[ -z $mode || -z $file ]]; then
+  echo "[textconv: 引数が足りません (mode=${mode:-未指定})]"
+  exit 0
+fi
+
+case $mode in
+  office) tool=office-oxide; set -- markdown "$file" ;;
+  *)
+    echo "[textconv: 未知のモード '$mode']"
+    exit 0
+    ;;
+esac
+
+# 変換ツールは PATH から探す。導入方法（mise / cargo install）を選ばないため。
+if ! command -v "$tool" >/dev/null 2>&1; then
+  echo "[textconv: $tool が PATH にありません。$(basename "$file") は変換できません]"
+  exit 0
+fi
+
+if out=$("$tool" "$@" 2>/dev/null) && [[ -n ${out//[[:space:]]/} ]]; then
+  printf '%s\n' "$out"
+else
+  echo "[textconv: $(basename "$file") を $tool で読めませんでした（破損 / 非対応形式）]"
+fi
+
+exit 0
