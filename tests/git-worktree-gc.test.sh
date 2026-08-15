@@ -72,7 +72,7 @@ if grep -Fq '".local/bin/git-worktree-gc"' "${REPO_ROOT}/home-manager/home/defau
   pass "homeFile_bin_wiring"
 else
   fail "homeFile_bin_wiring" \
-    "Expected home.file.\".local/bin/git-worktree-gc\" with executable = true in home-manager/home/default.nix"
+    'Expected home.file.".local/bin/git-worktree-gc" with executable = true in home-manager/home/default.nix'
 fi
 
 echo "- abbrs_point_to_script"

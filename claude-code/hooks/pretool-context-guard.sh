@@ -73,11 +73,11 @@ classify() {
   local f="$1"
   local ext="${f##*.}"
   case "$(echo "$ext" | tr '[:upper:]' '[:lower:]')" in
-    json | jsonl | ndjson) echo "structured_json" ;;
-    yaml | yml | toml | xml) echo "structured_yaml" ;;
-    csv | tsv | parquet) echo "tabular" ;;
-    pdf | docx | xlsx | pptx | epub | zip | sqlite | sqlite3 | db) echo "binary_doc" ;;
-    *) echo "plain" ;;
+  json | jsonl | ndjson) echo "structured_json" ;;
+  yaml | yml | toml | xml) echo "structured_yaml" ;;
+  csv | tsv | parquet) echo "tabular" ;;
+  pdf | docx | xlsx | pptx | epub | zip | sqlite | sqlite3 | db) echo "binary_doc" ;;
+  *) echo "plain" ;;
   esac
 }
 
@@ -85,21 +85,21 @@ classify() {
 advice_for() {
   local kind="$1" f="$2"
   case "$kind" in
-    structured_json)
-      echo "jq で必要キーだけ抽出する: jq '.foo.bar' ${f}  /  構造が未知なら gron ${f} | rg <keyword> でパスを見つけてから jq"
-      ;;
-    structured_yaml)
-      echo "yq で必要部分だけ抽出する: yq '.foo.bar' ${f}"
-      ;;
-    tabular)
-      echo "duckdb で集計・抽出する: duckdb -c \"SELECT … FROM '${f}' LIMIT 20\""
-      ;;
-    binary_doc)
-      echo "rga（ripgrep-all）で中身を検索する: rga <pattern> ${f}"
-      ;;
-    *)
-      echo "rg <pattern> ${f} で該当行を特定し、sed -n 'START,ENDp' ${f} か Read の offset/limit で必要な範囲だけ読む"
-      ;;
+  structured_json)
+    echo "jq で必要キーだけ抽出する: jq '.foo.bar' ${f}  /  構造が未知なら gron ${f} | rg <keyword> でパスを見つけてから jq"
+    ;;
+  structured_yaml)
+    echo "yq で必要部分だけ抽出する: yq '.foo.bar' ${f}"
+    ;;
+  tabular)
+    echo "duckdb で集計・抽出する: duckdb -c \"SELECT … FROM '${f}' LIMIT 20\""
+    ;;
+  binary_doc)
+    echo "rga（ripgrep-all）で中身を検索する: rga <pattern> ${f}"
+    ;;
+  *)
+    echo "rg <pattern> ${f} で該当行を特定し、sed -n 'START,ENDp' ${f} か Read の offset/limit で必要な範囲だけ読む"
+    ;;
   esac
 }
 
@@ -118,21 +118,21 @@ if [[ $TOOL == "Read" ]]; then
   KIND=$(classify "$FILE")
 
   case "$KIND" in
-    structured_json | structured_yaml | tabular)
-      if ((SIZE > STRUCTURED_LIMIT)); then
-        emit_deny "$(human_size "$SIZE") の構造化ファイルを全読みしようとしている: ${FILE}
+  structured_json | structured_yaml | tabular)
+    if ((SIZE > STRUCTURED_LIMIT)); then
+      emit_deny "$(human_size "$SIZE") の構造化ファイルを全読みしようとしている: ${FILE}
 コンテキストを浪費するので、必要な部分だけ抽出すること。
 → $(advice_for "$KIND" "$FILE")
 どうしても全体が必要なら Read に offset/limit を付けて分割して読む。"
-      fi
-      ;;
-    plain)
-      if ((SIZE > PLAIN_LIMIT)); then
-        emit_deny "$(human_size "$SIZE") のファイルを全読みしようとしている: ${FILE}
+    fi
+    ;;
+  plain)
+    if ((SIZE > PLAIN_LIMIT)); then
+      emit_deny "$(human_size "$SIZE") のファイルを全読みしようとしている: ${FILE}
 コンテキストを浪費するので、必要な範囲だけ読むこと。
 → $(advice_for "$KIND" "$FILE")"
-      fi
-      ;;
+    fi
+    ;;
   esac
   exit 0
 fi
@@ -222,22 +222,22 @@ while IFS= read -r SEG; do
     KIND=$(classify "$TARGET")
 
     case "$KIND" in
-      binary_doc)
-        emit_deny "バイナリ文書を ${READ_CMD} しようとしている: ${TARGET}
+    binary_doc)
+      emit_deny "バイナリ文書を ${READ_CMD} しようとしている: ${TARGET}
 → $(advice_for binary_doc "$TARGET")"
-        ;;
-      structured_json | structured_yaml | tabular)
-        if ((SIZE > STRUCTURED_LIMIT)); then
-          emit_deny "$(human_size "$SIZE") の構造化ファイルを ${READ_CMD} で全部コンテキストに載せようとしている: ${TARGET}
+      ;;
+    structured_json | structured_yaml | tabular)
+      if ((SIZE > STRUCTURED_LIMIT)); then
+        emit_deny "$(human_size "$SIZE") の構造化ファイルを ${READ_CMD} で全部コンテキストに載せようとしている: ${TARGET}
 → $(advice_for "$KIND" "$TARGET")"
-        fi
-        ;;
-      plain)
-        if ((SIZE > PLAIN_LIMIT)); then
-          emit_deny "$(human_size "$SIZE") のファイルを ${READ_CMD} で全部コンテキストに載せようとしている: ${TARGET}
+      fi
+      ;;
+    plain)
+      if ((SIZE > PLAIN_LIMIT)); then
+        emit_deny "$(human_size "$SIZE") のファイルを ${READ_CMD} で全部コンテキストに載せようとしている: ${TARGET}
 → $(advice_for "$KIND" "$TARGET")"
-        fi
-        ;;
+      fi
+      ;;
     esac
   done
 done <<<"$TERMINAL_SEGMENTS"
