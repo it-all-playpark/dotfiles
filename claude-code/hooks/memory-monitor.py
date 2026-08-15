@@ -45,8 +45,9 @@ def get_claude_rss_mb():
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return 0, []
 
     procs = []
