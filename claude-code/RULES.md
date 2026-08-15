@@ -8,7 +8,9 @@
 Conflict: Safety > Scope > Quality > Speed
 
 ## Workflow
-- **Task Pattern**: Understand → Plan → TodoWrite(3+ tasks) → Execute → Validate
+- **Task Pattern**: Understand → Plan → Task ツール群で分解(3+ tasks) → Execute → Validate
+  - 新しめのモデル（opus 4.8 / sonnet 5 / fable 5 / mythos 5）では Todo ツールが既定無効。`TaskCreate` / `TaskUpdate` / `TaskList` を使う（`permissions.allow` に登録済み）
+  - 旧 `TodoWrite` を使いたい場合のみ `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`（または設定 `todoFeatureEnabled: true`）で復活させる
 - **Discovery First**: Project-wide analysis before systematic changes
 - **Session Lifecycle**: /session-load → Work → Checkpoint(30min) → /session-save
 - **Memory Persistence**: セッション終了時・タスク完了時に memvid へ自動保存（確認不要）

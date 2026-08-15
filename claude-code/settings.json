@@ -3,11 +3,18 @@
   "askUserQuestionTimeout": "10m",
   "attribution": {
     "commit": "",
-    "pr": ""
+    "pr": "",
+    "sessionUrl": false
   },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "playpark-llc/corporate-site の refs/heads/dev を origin/main の sha から gh api で再作成することは許可する（日次ブログ生産の base ブランチ復旧。作成のみで、削除は含まない）"
+    ]
+  },
+  "dialogExpiry": "10m",
   "effortLevel": "high",
   "enableAllProjectMcpServers": false,
-  "enabledMcpjsonServers": [],
   "enabledPlugins": {
     "playwright@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
@@ -22,7 +29,6 @@
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "DISABLE_AUTOUPDATER": "1"
   },
-  "extraKnownMarketplaces": {},
   "fallbackModel": [
     "claude-opus-4-8",
     "claude-sonnet-5"
@@ -611,7 +617,8 @@
         "zenn.dev",
         "api.slack.com",
         "fonts.googleapis.com"
-      ]
+      ],
+      "strictAllowlist": true
     }
   },
   "skillOverrides": {
@@ -645,12 +652,6 @@
     "symlinkDirectories": [
       "node_modules",
       ".cache"
-    ]
-  },
-  "autoMode": {
-    "allow": [
-      "$defaults",
-      "playpark-llc/corporate-site の refs/heads/dev を origin/main の sha から gh api で再作成することは許可する（日次ブログ生産の base ブランチ復旧。作成のみで、削除は含まない）"
     ]
   }
 }
