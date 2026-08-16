@@ -61,6 +61,18 @@ REMOVED=0
 SKIPPED=0
 WARNED=0
 
+# worktree の lock reason から pid を取り出す正規表現。
+#
+# git が保存する reason は書き手が自由に決められる。Claude Code は
+#   `claude session <name> (pid 38129 start Sun Aug 16 09:58:04 2026)`
+# と書くため、pid の直後は `)` ではなく ` start <date>` が続く。
+# 以前は `\(pid ([0-9]+)\)` と閉じ括弧まで要求していたので pid を必ず
+# 取りこぼし、セッションが死んでも stale lock を検出できず、該当 worktree が
+# `Skip (locked)` のまま永久に残っていた。開き括弧と数字までで止める。
+#
+# case アーム終端の `)` と衝突するため、[[ ]] に直書きせず変数に切り出す。
+PID_RE='[(]pid[[:space:]]+([0-9]+)'
+
 # ---------------------------------------------------------------------------
 # default branch を解決する。
 # origin/HEAD が未設定の repo もあるため、main → master → dev の順で fallback。
@@ -158,8 +170,9 @@ gc_repo() {
       ;;
     "locked"*)
       locked=1
-      # locked の理由文字列に "(pid 1234)" が含まれていれば拾う
-      if [[ "$line" =~ \(pid\ ([0-9]+)\) ]]; then
+      # locked の理由文字列から pid を拾う。$PID_RE は case アームの `)` と
+      # 衝突しないよう関数冒頭で変数に切り出してある。
+      if [[ "$line" =~ $PID_RE ]]; then
         pid="${BASH_REMATCH[1]}"
       fi
       continue
