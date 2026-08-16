@@ -64,7 +64,8 @@ Conflict: Safety > Scope > Quality > Speed
 
 ## Git
 - Feature branch で作業。**保護ブランチへの直接 push は禁止**（`main` / `master` / `dev` / `develop` / `development` / `production` / `staging` / `release` / `nightly`）— `dev` も含めて必ず PR 経由。CI とレビューを飛ばさないため
-  - 強制は `allow-feature-push.sh`（PreToolUse hook）が主。`main` / `master` / `dev` / `develop` / `development` は `permissions.deny` でも重ねて塞いである
+  - 強制は `allow-feature-push.sh`（PreToolUse hook）が**唯一**。9 ブランチ全てを、素の `git push origin main` / `git -C <dir> push` / `git push origin :main` / `--delete` / `--mirror` まで含めて判定する
+  - `permissions.deny` 側の保護ブランチ規則は 2026-08-16 に撤去した。`Bash(git push *:main)` のような**引数を glob で絞る規則は実際には一致せず**（実測で確認）、公式も「引数を制約する Bash permission パターンは fragile。PreToolUse hook を使え」としているため
   - `保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなくこの hook。feature branch を切って PR を出す
 - Incremental commits with descriptive messages
 
