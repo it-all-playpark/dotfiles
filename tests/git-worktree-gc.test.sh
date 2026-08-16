@@ -210,6 +210,35 @@ echo uncommitted >"${REPO}/wt/feat-dirty/scratch.txt"
 make_wt feat-mismatch merged issue-9999
 echo MERGED >"${FIXTURES}/feat-mismatch"
 
+# 8. stale lock → unlock されて削除される
+#    reason は Claude Code が実際に書く形式。pid の直後は `)` ではなく
+#    ` start <date>` が続くため、閉じ括弧まで要求する正規表現では pid を
+#    取りこぼし、死んだセッションの lock が永久に残る。
+make_wt feat-stale-lock merged
+echo MERGED >"${FIXTURES}/feat-stale-lock"
+DEAD_PID="$(bash -c 'echo $$')"
+if kill -0 "$DEAD_PID" 2>/dev/null; then
+  # pid が再利用されていた場合は判定できないので固定値に逃がす
+  DEAD_PID=""
+fi
+if [ -n "$DEAD_PID" ]; then
+  git_q -C "$REPO" worktree lock \
+    --reason "claude session feat-stale-lock (pid ${DEAD_PID} start Sun Aug 16 09:58:04 2026)" \
+    "${REPO}/wt/feat-stale-lock"
+fi
+
+# 9. 生きている pid の lock → 保護される
+make_wt feat-live-lock merged
+echo MERGED >"${FIXTURES}/feat-live-lock"
+git_q -C "$REPO" worktree lock \
+  --reason "claude session feat-live-lock (pid $$ start Sun Aug 16 09:58:04 2026)" \
+  "${REPO}/wt/feat-live-lock"
+
+# 10. pid を含まない lock（手動 lock）→ 保護される
+make_wt feat-manual-lock merged
+echo MERGED >"${FIXTURES}/feat-manual-lock"
+git_q -C "$REPO" worktree lock --reason "manual hold" "${REPO}/wt/feat-manual-lock"
+
 OUT="${WORK}/out.txt"
 (cd "$REPO" && bash "$SCRIPT" --dry-run) >"$OUT" 2>&1
 DRY_RC=$?
@@ -252,6 +281,22 @@ assert_out "dirty_worktree_is_protected" "Skip \(dirty\): feat-dirty"
 echo "- name_mismatch_is_warned"
 assert_out "name_mismatch_is_warned" "Warn \(name mismatch\): dir=issue-9999 branch=feat-mismatch"
 
+echo "- stale_lock_is_unlocked"
+if [ -z "$DEAD_PID" ]; then
+  skip "stale_lock_is_unlocked" "could not obtain a reliably-dead pid"
+  skip "stale_lock_is_removed" "could not obtain a reliably-dead pid"
+else
+  assert_out "stale_lock_is_unlocked" "Unlocked \(stale pid ${DEAD_PID}\): feat-stale-lock"
+  echo "- stale_lock_is_removed"
+  assert_out "stale_lock_is_removed" "Would remove: feat-stale-lock \(PR MERGED\)"
+fi
+
+echo "- live_lock_is_protected"
+assert_out "live_lock_is_protected" "Skip \(locked\): feat-live-lock"
+
+echo "- pidless_lock_is_protected"
+assert_out "pidless_lock_is_protected" "Skip \(locked\): feat-manual-lock"
+
 echo "- dryrun_removes_nothing"
 if [ -d "${REPO}/wt/feat-merged" ]; then
   pass "dryrun_removes_nothing"
@@ -265,11 +310,13 @@ OUT2="${WORK}/out2.txt"
 
 echo "- real_run_removes_only_safe_worktrees"
 gone_ok=1
-for d in feat-merged feat-nopr-merged; do
+gone_list="feat-merged feat-nopr-merged"
+[ -n "$DEAD_PID" ] && gone_list="${gone_list} feat-stale-lock"
+for d in $gone_list; do
   [ -d "${REPO}/wt/${d}" ] && gone_ok=0
 done
 kept_ok=1
-for d in feat-gherror feat-nopr-unmerged feat-open feat-dirty; do
+for d in feat-gherror feat-nopr-unmerged feat-open feat-dirty feat-live-lock feat-manual-lock; do
   [ -d "${REPO}/wt/${d}" ] || kept_ok=0
 done
 if [ "$gone_ok" = 1 ] && [ "$kept_ok" = 1 ]; then
