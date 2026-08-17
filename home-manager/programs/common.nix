@@ -24,6 +24,9 @@
     ghi = "gh issue list --limit 100 --state all | fzf --ansi --preview 'GH_FORCE_TTY=1 gh issue view {1}' --preview-window 'right,60%,wrap' | awk '{print $1}' | xargs gh issue view -w";
     # PRをfzf選択してブラウザで開く
     ghp = "gh pr list --limit 100 --state all | fzf --ansi --preview 'GH_FORCE_TTY=1 gh pr view {1}' --preview-window 'right,60%,wrap' | awk '{print $1}' | xargs gh pr view -w";
+    # repo横断で自分が関与する（author/assignee/reviewer/commenter）open PRをfzf選択してブラウザで開く
+    # 第1列はURL（fzfでは--with-nth=2..で非表示）。URL指定なのでrepo外からでもpreview/openできる。先頭マーカー D = draft
+    ghpa = ''gh search prs --state open --involves @me --limit 100 --sort updated --json url,repository,number,title,author,isDraft --template '{{range .}}{{.url}}{{"\t"}}{{if .isDraft}}D{{else}} {{end}}{{"\t"}}{{printf "%-30s" .repository.nameWithOwner}}{{"\t"}}{{printf "%6s" (printf "#%v" .number)}}{{"\t"}}{{printf "%-16s" .author.login}}{{"\t"}}{{.title}}{{"\n"}}{{end}}' | fzf --ansi --layout=reverse --prompt 'OPEN PR>' -d '\t' --with-nth=2.. --preview 'GH_FORCE_TTY=1 gh pr view {1}' --preview-window 'right,60%,wrap' | cut -f1 | xargs gh pr view -w'';
     # lazigit
     lg = "lazygit";
     # lazydocker
