@@ -524,6 +524,7 @@
       "git:*",
       "~/.claude/skills/*",
       "bash ~/.claude/skills/*",
+      "node ~/.claude/skills/*",
       "python3 ~/.claude/skills/*",
       "/Users/naramotoyuuji/.claude/skills/*",
       "bash /Users/naramotoyuuji/.claude/skills/*",
