@@ -561,6 +561,9 @@
         "~/.ssh/**",
         "~/.gnupg/**",
         "~/.config/gh/**"
+      ],
+      "allowRead": [
+        "~/ghq/**/.env.example"
       ]
     },
     "network": {
