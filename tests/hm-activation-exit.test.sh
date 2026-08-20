@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/hm-activation-exit-test.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 
-cat > "$TMPROOT/check.awk" <<'AWK'
+cat >"$TMPROOT/check.awk" <<'AWK'
 function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 
 !inblock {
@@ -58,14 +58,14 @@ FAIL=0
 
 while IFS= read -r result; do
   case "$result" in
-    OK\ *)
-      echo "  PASS: ${result#OK }"
-      PASS=$((PASS + 1))
-      ;;
-    FAIL\ *)
-      echo "  FAIL: ${result#FAIL }" >&2
-      FAIL=$((FAIL + 1))
-      ;;
+  OK\ *)
+    echo "  PASS: ${result#OK }"
+    PASS=$((PASS + 1))
+    ;;
+  FAIL\ *)
+    echo "  FAIL: ${result#FAIL }" >&2
+    FAIL=$((FAIL + 1))
+    ;;
   esac
 done < <(awk -f "$TMPROOT/check.awk" "${NIX_FILES[@]}")
 
