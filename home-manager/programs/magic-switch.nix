@@ -87,9 +87,9 @@ lib.mkIf pkgs.stdenv.isDarwin {
     fi
 
     # 起動中のバンドルを消してはいけない。実体を失ったプロセスは終了要求に
-    # まともに応答できず、シャットダウンを詰まらせる。2026-08-22 の apply で
-    # 実際に shutdown stall による強制再起動が起き、BLE の bond を巻き添えにした。
-    # 差し替えは次の apply に回し、この回は何も触らない。
+    # まともに応答できなくなりうる。差し替えは次の apply に回し、この回は
+    # 何も触らない。詳細と、2026-08-22 の強制再起動がこれとは無関係だった
+    # 実測結果は docs/specs/2026-07-30-uc-handoff-design.md §13.7。
     if [ -d "$dest" ] && /usr/bin/pgrep -f "${appDest}/Contents/MacOS/" >/dev/null 2>&1; then
       echo "magic-switch: 起動中のため差し替えをスキップしました (${magicSwitch.version} は未適用)。" >&2
       echo "              メニューバーの Magic Switch を終了してから 'nix run .#update' を再実行してください。" >&2

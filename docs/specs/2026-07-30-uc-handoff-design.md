@@ -480,10 +480,11 @@ nix 経由で取得した zip には `com.apple.quarantine` が付かないた�
 
 uc-handoff は役目を終える。ただし**上記の配線が実機で通ってから**別 PR で撤去する。
 
-### 13.7 起動中のバンドルを消して強制再起動を招いた（2026-08-22）
+### 13.7 activation で起動中のアプリバンドルを消さない（2026-08-22）
 
-magic-switch を nix 管理下に置いた最初の apply で、Fish Keyboard が BT で繋がらなく
-なった。調査の結果は以下。
+magic-switch を nix 管理下に置いた最初の apply の直後に Fish Keyboard が BT で
+繋がらなくなり、同じ時間帯に強制再起動が起きていた。調査でわかったことと、
+**当初の見立てが誤りだったこと**を両方残す。
 
 **apply が変えたのは magic-switch だけだった。** home-manager 世代 107→108 を
 `nix store diff-closures` で比較すると `magic-switch: ∅ → 2.25.7` の 1 行のみ。
@@ -491,22 +492,31 @@ magic-switch を nix 管理下に置いた最初の apply で、Fish Keyboard �
 変わっていない。repo 全体を grep しても Bluetooth を触る処理は無く、magic-switch の
 `peripherals` はトラックパッド 1 台だけでキーボードは含まれない（§13.6 の規則どおり）。
 
-**間に挟まっていたのは強制再起動だった。** `shutdown_stall_2026-08-22-064938` が残って
-おり、06:49 にシャットダウンが停止して強制再起動している。再起動後、BT 自体は正常で
+**06:49 に shutdown stall による強制再起動が起きていた。** 再起動後、BT 自体は正常で
 （bluetoothd が LE の DB を更新中、BT HID も 5 台接続）、Fish Keyboard だけが USB に
 落ちていた。§13.5 の stale-bond signature と同じ状態である。
 
-**activation が起動中のアプリバンドルを `rm -rf` していた。** Magic Switch は前日に
-設定済み＝起動中で、そこへ activation が実体を消して置き直した。実体を失った
-プロセスは終了要求にまともに応答できず、シャットダウンを詰まらせる。しかも
-activation 自身が「起動中なら再起動してください」と促すので、事故の起点と
-再起動の引き金が同じ場所にあった。
+**当初「起動中の Magic Switch を activation が `rm -rf` したせいで shutdown が
+詰まった」と推定したが、これは誤りだった。** `shutdown_stall` を decode して確認した
+結果は以下。
 
-なお `shutdown_stall` は spindump バイナリで、root なしではデコードできなかった。
-**どのプロセスが停止させたかまでは特定できていない**（`sudo spindump -i <file>` で
-確定できる）。以下の規則は、特定を待たずに成立する範囲で書いている。
+- **Magic Switch は shutdown 時に動いていない。** 32MB のレポート全体で "magic" の
+  ヒットは 0 件
+- レポートは**単一の犯人を名指ししていない**。launchd の shutdown スレッドは
+  `system_override` → `lck_mtx_sleep_deadline`、つまりプロセスの終了を待つ汎用パス
+- 06:49:26 の時点で **96 プロセスが生存**。ほぼ全部がターミナル木で、`fish` 約 40、
+  `claude` 13、`nvim` 12、`zellij` 7、`zsh` 3、`herdr` 2、`node` 2、`mosh-server`、
+  `lazygit`、`git`。いずれも sudden termination 非対応で、1 つずつ刈り取る必要がある
+- 唯一の異常が **`zellij [10806]` の SIGSTOP 停止**（`Suspended for 101 samples`、
+  親は launchd に付け替え済み＝孤児、main は約 39 時間動いていない）。停止中の
+  プロセスは SIGTERM に反応できず、猶予後の SIGKILL でしか消えない
+- 別の `zellij [8558]` が 06:48:53 に `SIGABRT` で落ちている
 
-規則:
+つまり**強制再起動の原因はこちらのセッション木であって、magic-switch ではない**。
+キーボードの bond が壊れたのは再起動を挟んだ結果であり、apply との因果は無い。
+
+それでも以下は規則として残す。**起動中のアプリバンドルを消すこと自体が危ういから**で
+あって、今回の事故の原因だったからではない。
 
 - **activation で、起動中かもしれないアプリバンドルを消さない。** 差し替えの前に
   `pgrep` で確認し、動いていたら何もせず次の apply に回す
@@ -517,9 +527,14 @@ activation 自身が「起動中なら再起動してください」と促すの
 
 `tests/magic-switch-replace.test.sh` がこの 3 つを不変条件として検査する。
 
-また調査上の注意として、**sandbox 下の `blueutil --power` は当てにならない**。BT が
-動作中でも `0`（オフ）を返した。BT の生死は `/Library/Bluetooth/com.apple.MobileBluetooth.*.db-wal`
-の更新時刻や `ioreg -c IOHIDDevice` の `Transport` で見るほうが確実だった。
+調査上の注意を 2 つ。
+
+- **sandbox 下の `blueutil --power` は当てにならない。** BT が動作中でも `0`（オフ）を
+  返した。BT の生死は `/Library/Bluetooth/com.apple.MobileBluetooth.*.db-wal` の
+  更新時刻や `ioreg -c IOHIDDevice` の `Transport` で見るほうが確実だった
+- **`shutdown_stall` の decode に root は要らない。** `spindump -i <file> -o out.txt` が
+  無言で空ファイルを吐くのは、自分のキャッシュ DB を作れずに落ちているだけ。
+  中身は「8 バイトヘッダ + zlib」の base64 で、展開すると NSKeyedArchiver の bplist
 
 ### 13.8 出典
 
