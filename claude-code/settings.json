@@ -556,6 +556,7 @@
         "~/.claude/channels",
         "~/Documents/meetings",
         "~/Library/CloudStorage/Box-Box",
+        "~/Library/Caches/treefmt",
         "~/ghq/**/.claude/scheduled_tasks.json",
         "~/ghq/**/.claude/scheduled_tasks.lock",
         "~/.config/gws"
@@ -603,7 +604,10 @@
         "api.slack.com",
         "fonts.googleapis.com"
       ],
-      "strictAllowlist": true
+      "strictAllowlist": true,
+      "allowUnixSockets": [
+        "/nix/var/nix/daemon-socket/socket"
+      ]
     }
   },
   "skillOverrides": {
