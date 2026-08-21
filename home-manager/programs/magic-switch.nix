@@ -73,6 +73,9 @@ lib.mkIf pkgs.stdenv.isDarwin {
     src="${magicSwitch}/Applications/${appName}"
     dest="${appDest}"
     stamp="${stampLink}"
+    # 入れ替え用の組み立て先。dest と同じボリュームでないと mv が rename にならず、
+    # コピーへ落ちて中途半端な dest を作りうるので /Applications 直下に置く。
+    staging="/Applications/.${appName}.new"
 
     if [ -d "$dest" ] && [ "$(${pkgs.coreutils}/bin/readlink "$stamp" 2>/dev/null)" = "${magicSwitch}" ]; then
       exit 0
@@ -83,16 +86,32 @@ lib.mkIf pkgs.stdenv.isDarwin {
       exit 0
     fi
 
+    # 起動中のバンドルを消してはいけない。実体を失ったプロセスは終了要求に
+    # まともに応答できず、シャットダウンを詰まらせる。2026-08-22 の apply で
+    # 実際に shutdown stall による強制再起動が起き、BLE の bond を巻き添えにした。
+    # 差し替えは次の apply に回し、この回は何も触らない。
+    if [ -d "$dest" ] && /usr/bin/pgrep -f "${appDest}/Contents/MacOS/" >/dev/null 2>&1; then
+      echo "magic-switch: 起動中のため差し替えをスキップしました (${magicSwitch.version} は未適用)。" >&2
+      echo "              メニューバーの Magic Switch を終了してから 'nix run .#update' を再実行してください。" >&2
+      exit 0
+    fi
+
     echo "magic-switch: ${appDest} を ${magicSwitch.version} に更新します" >&2
+
+    # dest へ直接 cp すると、途中で失敗したときに壊れたバンドルがその場に残り、
+    # stamp も無いまま起動不能なアプリだけが居座る。同じボリューム上で組み立てて
+    # から rename で入れ替え、コピーが失敗しても既存の dest を壊さない。
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf "$staging"
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/cp -R "$src" "$staging"
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/rm -rf "$dest"
-    $DRY_RUN_CMD ${pkgs.coreutils}/bin/cp -R "$src" "$dest"
+    $DRY_RUN_CMD ${pkgs.coreutils}/bin/mv "$staging" "$dest"
 
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname "$stamp")"
     $DRY_RUN_CMD ${pkgs.coreutils}/bin/ln -sfn "${magicSwitch}" "$stamp"
 
     # ad-hoc 署名なので、バージョンが変わると cdhash も変わる。TCC はアプリを
     # 別物として扱うため、Bluetooth とローカルネットワークの許可を取り直す必要がある。
-    echo "magic-switch: アプリを差し替えました。起動中なら再起動してください。" >&2
+    echo "magic-switch: アプリを差し替えました。" >&2
     echo "magic-switch: 権限が外れていたら、システム設定 > プライバシーとセキュリティ の" >&2
     echo "              Bluetooth とローカルネットワークで Magic Switch を許可し直してください。" >&2
     )
