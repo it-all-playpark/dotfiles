@@ -53,6 +53,22 @@ Conflict: Safety > Scope > Quality > Speed
 - **`~/.claude/skills` / `~/.claude/agents` の実体（`it-all-playpark/skills` repo）は repo 丸ごと write deny**。組み込みの自己改変ガードが symlink を解決して効くため、repo 内の `.claude/worktrees/` も書けない。skills repo を編集する作業は **repo 外**に worktree を切る（例: `git worktree add ~/ghq/github.com/it-all-playpark/skills-wt/<branch>`）。settings では緩められない
 - **process substitution `<(…)` を避ける**。`diff <(a) <(b)` 等は sandbox が `/dev/fd/*` を塞ぐため失敗する。一旦 tempfile に落として `diff f1 f2` にする
 - **network は `sandbox.network.allowedDomains` のホストのみ**到達可能。未許可ホストは即失敗 → 必要なら settings.json に追加してから実行（推測で叩かない）
+- **Unix ソケット接続は `filesystem.allowWrite` では開かない**。専用キーの
+  `sandbox.network.allowUnixSockets`（macOS 限定・パスの配列）を使う。
+  `cannot connect to socket at '...': Operation not permitted` が出たらこれ。
+  `allowAllUnixSockets: true` は全ソケットが開くので使わない
+- **nix daemon socket は許可済み**（`/nix/var/nix/daemon-socket/socket`、2026-08-21 追加）。
+  これで `nix build` / `nix flake check` / `nix eval` / `nix fmt` が agent から実行でき、
+  CLAUDE.md の「agent の検証範囲は nix fmt / nix flake check / nix eval」が実際に機能する。
+  nix を書いたら apply 前に自分でビルドして確かめること
+  - **代償**: nix daemon は root で **sandbox の外側**にいるので、daemon 経由の取得は
+    `allowedDomains` の制限を受けない。fixed-output derivation のビルダーは設計上
+    ネットワーク自由なので、ここは egress の抜け道になっている。nix 経由の外部取得を
+    「許可ドメインの内側だから安全」と考えないこと。未知の flake や URL を
+    `nix build` / `nix run` で引く前に、通常の外部アクセスと同じ慎重さで扱う
+- **`nix fmt` は `-- --no-cache` を付ける**。treefmt が `~/Library/Caches/treefmt` に
+  キャッシュ DB を書こうとして `operation not permitted` で落ちる
+  （`allowWrite` に足せば素で通るが、キャッシュなので付けて回避で足りる）
 - sandbox で塞がれても `dangerouslyDisableSandbox` は policy で無効。回避不能なら失敗を報告し、settings 調整を提案する（勝手に緩めない）
 - **gh を内部で呼ぶ skill スクリプトは `sandbox.excludedCommands` に登録済みの起動形で呼ぶ**。登録されているのは「スクリプトパスが先頭トークンの bare 形」と `bash <path>` / `python3 <path>` の 2 トークン形（skills 配下のパス）のみ。`cd X && script` や `VAR=x script` のような前置形は登録がなく、先頭トークンマッチの仕組み上パターンでも表現できない。登録外の形で呼ぶと、内部で資格情報を要する処理（gh が `~/.config/gh` や keyring を読む等）が失敗する
 
