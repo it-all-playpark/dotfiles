@@ -1,6 +1,6 @@
 # `uc-handoff` — キー1回でキーボードとポインタを両方隣の Mac へ渡す 設計
 
-- 状態: 実機検証で設計前提の破綻が判明（§13）。方式を選び直し中
+- 状態: 設計前提が破綻していたため方式を変更（§13）。ポインタは magic-switch でトラックパッドごと切り替える。uc-handoff は撤去予定
 - 対象リポジトリ: `dotfiles`（常駐デーモン）/ `zmk-config-fish`（キーマップ）
 - 前提の検証: 2026-07-30 実機で完了（§3）
 - PR: it-all-playpark/dotfiles#149（デーモン）/ it-all-playpark/zmk-config-fish#3（キーマップ）
@@ -435,11 +435,50 @@ magic-switch の実体的な価値である。**「単純だから blueutil + ss
 **運用上の退避路**: USB-C ケーブルでの接続は BT の状態に関わらず必ずペアリングされる。
 切替に失敗して詰んだときはケーブルで戻す。
 
-### 13.6 残る採否判断
+### 13.6 採否判断: magic-switch を採用（2026-08-21）
 
-採否は magic-switch の実機検証で決める。観測項目は (1) 10 往復でのダイアログ発生頻度、
-(2) 出た場合に押さずともトラックパッドが動くか、(3) Full Keyboard Access 有効時に
-Return / Space で消せるか。
+実機トライアルの結果、**懸念していた issue #109 の Connection Request ダイアログは
+10 往復で 1 度も出なかった**。判定基準の最上段に当たるため採用する。
+
+採用後の構成:
+
+| 何を | どう移すか |
+| --- | --- |
+| キーボード | ZMK の BT プロファイル切替 (`&bt BT_SEL`)。従来どおり |
+| ポインタ | magic-switch がトラックパッドの接続先を切り替える |
+| Universal Control | **使わない** |
+
+両機ともキーボードとトラックパッドが自前のローカル入力になるため、§13.2 の規則
+（貸出ポインタの回収）も §13.3 の first responder 問題も、**構成上そもそも発生しない**。
+
+導入は `home-manager/programs/magic-switch.nix`。release の `app.zip` を `fetchurl` で
+取得し、`/Applications/Magic Switch.app` へ**実体コピー**する。store からの symlink に
+しないのは §7.3 とまったく同じ理由で、TCC がアプリのパスに紐づくため。`dontFixup` を
+立てているのは、nix の darwin fixup が ad-hoc 署名を壊して TCC がアプリを別物として
+扱うのを避けるため。`/Applications` は `drwxrwxr-x root:admin` なので admin ユーザーなら
+sudo は要らない。
+
+アプリは自己更新しない（README: *"Magic Switch tells you when there's a new version —
+it never updates itself."*）ので、nix 管理と競合しない。ただし ad-hoc 署名のため、
+**バージョンを上げると cdhash が変わり、Bluetooth とローカルネットワークの許可は
+取り直しになる**（§12 の uc-handoff と同じ性質）。
+
+nix 経由で取得した zip には `com.apple.quarantine` が付かないため、README が案内する
+「右クリック → 開く」の Gatekeeper 回避は不要になる見込み。
+
+**手作業として残るもの**（各機で初回 1 回だけ）:
+
+- トラックパッドを**両機に**ペアリングする。USB-C ケーブル接続が確実で、
+  BT の状態に関わらず必ず通る（§13.5 の退避路と同じ）
+- 初回起動時に Bluetooth / ローカルネットワーク / 通知 を許可する
+- Peripherals タブでトラックパッドを選ぶ。**キーボードは選ばない**
+  （ZMK が自分で切り替えるので、二重に触ると変数が増える）
+- Pairing タブで 12 文字コードを交換し、Macs タブで相手機を設定して Sync
+- Settings > Other > Keyboard shortcuts で、**自機から見て隣がいる向きのキー**を
+  `send` に割り当てる。Mac Studio は `F13`、MacBook Pro は `F14` で、§5 の意味づけが
+  そのまま生きる
+
+uc-handoff は役目を終える。ただし**上記の配線が実機で通ってから**別 PR で撤去する。
 
 ### 13.7 出典
 
