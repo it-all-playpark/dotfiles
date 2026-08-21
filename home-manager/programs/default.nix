@@ -11,5 +11,6 @@
     ./cca.nix
     ./cc-launch.nix
     ./uc-handoff.nix
+    ./magic-switch.nix
   ];
 }
