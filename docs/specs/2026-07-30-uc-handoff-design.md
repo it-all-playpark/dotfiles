@@ -1,10 +1,10 @@
 # `uc-handoff` — キー1回でキーボードとポインタを両方隣の Mac へ渡す 設計
 
-- 状態: 実装済み・実機検証待ち
+- 状態: 実機検証で設計前提の破綻が判明（§13）。方式を選び直し中
 - 対象リポジトリ: `dotfiles`（常駐デーモン）/ `zmk-config-fish`（キーマップ）
 - 前提の検証: 2026-07-30 実機で完了（§3）
 - PR: it-all-playpark/dotfiles#149（デーモン）/ it-all-playpark/zmk-config-fish#3（キーマップ）
-- 残作業: §10 の手作業と §11 の受け入れ確認。加えて `nix build` でのビルド確認（§7.3）
+- 残作業: 方式の選び直し（§13.4）。§11 の受け入れ基準 1〜2 は一度も満たされていない
 
 ## 1. 目的 / 解決する痛み
 
@@ -70,6 +70,9 @@ IME 干渉系: #8977 / #9984 / #9992）。いずれも**キーボードを転送
 トラックパッドは Mac Studio に BT 接続したまま動かさない。
 Magic Trackpad はリンクキーを 1 ホスト分しか保持しないので、
 「トラックパッド自体を付け替える」方向は採らない。
+
+> **2026-08-21 追記**: この前提は誤りだった。Magic デバイスは複数ホストのペアリングを
+> 記憶しており、付け替えはソフトだけで完結する。出典と含意は §13.4。
 
 ## 5. キーコードの意味づけ
 
@@ -275,3 +278,95 @@ apply は人間が行う。
   受け入れ基準 5 はこの前提で判定する。前者で切れたなら clang の出力が非決定的という
   ことなので、そのとき初めて `codesign` の扱いを考える
 - `macro_wait_time` を 100ms から詰められるか
+
+## 13. 実機検証の結果（2026-08-21）
+
+§11 の受け入れ基準 1〜2 は**一度も満たされたことがなかった**。両機で常駐が始まったのが
+2026-08-21 で、そこで初めて設計前提の破綻が表面化した。
+
+### 13.1 なぜ検証されていなかったか
+
+- **Mac Studio**: アクセシビリティ許可が TCC で拒否されたままだった
+  (`auth_value=0` / `auth_reason=4` / `last_modified 2026-07-31 05:34:58`)。
+  launchd から起動されたプロセスには責任アプリがいないため自前の許可が要る。
+  `~/.local/state/uc-handoff.err.log` は 2026-07-31 から 2026-08-21 まで
+  28,552 行すべてが権限エラーで、成功ログは 1 行も無い
+- **MacBook Pro**: `home.activation.setupHermes` の素の `exit 0` が後続の
+  `setupLaunchAgents` と `ucHandoffBinary` を丸ごと飛ばしていたため、plist も
+  バイナリも生成されていなかった（dotfiles#166 で修正。回帰テストは
+  `tests/hm-activation-exit.test.sh`）
+- §3 の「2026-07-30 実機で実測」はターミナルからの手動起動で、責任プロセスである
+  ターミナルの許可で通っていた。launchd 経由の常駐とは別物だった
+
+### 13.2 設計前提の破綻
+
+トラックパッドが Mac Studio 固定である以上、Universal Control のポインタ所有者は
+常に Mac Studio で、MacBook 上のポインタは貸出状態にすぎない。そこへ §6 の BT
+プロファイル切替が加わると、**キーボードだけが所有者機から離れる**。
+
+実測（2026-08-21、両機常駐後。ポインタはトラックパッドで手動移動、押し込みは不使用）:
+
+| キーボードの BT profile | 打鍵後のポインタ |
+| --- | --- |
+| 1 (Studio) のまま | MacBook に留まる |
+| 0 (MacBook) へ切替 | **Studio へ回収される** |
+
+差分は `&bt BT_SEL 0` だけで、合成押し込み (`uc_push`) は無関係だった。
+Universal Control は貸出先がローカル打鍵を受けた時点で貸出を打ち切る。
+§8 の失敗モード表に無い挙動。
+
+### 13.3 代替案（キーボード転送を UC に任せる）も不成立
+
+BT 切替をやめて UC にキーボード転送を任せると、ポインタは留まる。§1 が deskflow で
+問題視した入力破壊（ZMK combo の `LANG1`/`LANG2`/`CAPS`、`LCtrl` 長押し、IME 変換）は
+UC 転送では**すべて再現しなかった**。あれは deskflow の転送経路固有の不具合だった。
+
+しかし別の破綻がある。Studio 側でクリックして作業してから MacBook へポインタを戻すと、
+MacBook の first responder が復帰せず**クリックしないと入力を継続できない**。
+`tell application "X" to activate` でも復帰しない（実測）。UC のポインタ回収や
+フォーカス挙動を抑制する `defaults` キーも見つからなかった
+（`com.apple.universalcontrol` にあるのは `Disable` と `DisableMagicEdges` のみ）。
+
+ポインタが離れただけ（Studio でクリックしない）なら継続打鍵は可能。壊すのは
+「Studio で実際に操作すること」で、これは最も頻度の高い動線にあたる。
+
+### 13.4 §4 の前提が誤りだった
+
+§4 の「Magic Trackpad はリンクキーを 1 ホスト分しか保持しない」は事実ではない。
+`MegaManSec/magic-switch` の README 原文:
+
+> Apple's Magic devices remember multiple hosts but only connect to one at a time;
+> Magic Switch flips which Mac currently holds a peripheral, but it doesn't create
+> those pairings for you.
+
+事前に各機へ 1 回ペアリングしておけば、以後の切替はソフトのみで完結する
+（"you won't re-pair by hand on every switch — Magic Switch handles the handoff"）。
+したがって「トラックパッド自体を付け替える」方向は**採れる**。その場合、
+キーボードは ZMK の BT 切替、ポインタは magic-switch となり、両方が各機に実ローカル
+HID として繋がるため **Universal Control も uc-handoff も不要になる**。
+
+未解決のリスクは magic-switch の issue #109（切替時に受け側 Mac で macOS の
+Connection Request ダイアログが出る。トラックパッド固有で、v2.25.7 時点で open）。
+アプリ自身のペアリング経路は `devicePairingUserConfirmationRequest` が
+`replyUserConfirmation(initiated)` で自動承認しておりダイアログを出さない設計なので、
+これは bluetoothd の別経路によるもの。発生条件は未文書で、作者と報告者で症状も
+食い違っている（作者「出ても動く」／報告者「押さないと lost する」）。
+抑制手段は無い（作者いわく自動押下は "it's not possible"）。
+
+ただし構成上、完全なロックアウトは起こらない。受け側が MacBook なら内蔵トラック
+パッドで押せる。受け側が Studio でも、ZMK キーボードは `&bt BT_SEL` で既に Studio へ
+繋がっているためキーボードで消せる可能性があり、駄目でも MacBook 側から
+`magicswitch://switch?peripheral=trackpad&direction=take` で取り戻せる。
+
+採否は実機検証で決める。観測項目は (1) 10 往復でのダイアログ発生頻度、
+(2) 出た場合に押さずともトラックパッドが動くか、(3) Full Keyboard Access 有効時に
+Return / Space で消せるか。
+
+### 13.5 出典
+
+- https://github.com/MegaManSec/magic-switch （README・ソース・issues。
+  2026-08-21 時点で archived=false、最終 push 2026-08-20、最新 v2.25.7）
+- https://github.com/MegaManSec/magic-switch/issues/109 （Connection Request ダイアログ）
+- https://github.com/MegaManSec/magic-switch/issues/110 （本文に
+  "Found while looking into #109; independent of it." と明記。#109 の修正ではない）
+- 同名の商用製品 `www.magic-switch.com` とは無関係。取得元を間違えないこと
