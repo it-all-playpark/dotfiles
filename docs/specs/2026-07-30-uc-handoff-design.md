@@ -475,8 +475,7 @@ nix 経由で取得した zip には `com.apple.quarantine` が付かないた�
   （ZMK が自分で切り替えるので、二重に触ると変数が増える）
 - Pairing タブで 12 文字コードを交換し、Macs タブで相手機を設定して Sync
 - Settings > Other > Keyboard shortcuts で、**自機から見て隣がいる向きのキー**を
-  `send` に割り当てる。Mac Studio は `F13`、MacBook Pro は `F14` で、§5 の意味づけが
-  そのまま生きる
+  `Take peripherals to this Mac` に割り当てる（§13.8 で確定した配線）
 
 uc-handoff は役目を終える。ただし**上記の配線が実機で通ってから**別 PR で撤去する。
 
@@ -572,7 +571,54 @@ all clear を押しても、クリアされたつもりになるだけで効い�
   無言で空ファイルを吐くのは、自分のキャッシュ DB を作れずに落ちているだけ。
   中身は「8 バイトヘッダ + zlib」の base64 で、展開すると NSKeyedArchiver の bplist
 
-### 13.8 出典
+### 13.8 ホットキーの配線（2026-08-22 確定）
+
+`magicswitch://switch` の URL scheme とは別に、アプリ自身がグローバルホットキーを
+持っている。実装は Carbon の `RegisterEventHotKey` / `UnregisterEventHotKey` /
+`InstallEventHandler`（`nm -u` で確認）。**`CGEventTap` も `AXIsProcessTrusted` も
+参照していないので、アクセシビリティ権限は要らない。** uc-handoff が権限待ちで
+動かなかった問題は、ここでは起きない。
+
+割り当てられるアクションは 3 つ。
+
+- `Take peripherals to this Mac`
+- `Send peripherals to the other Mac`
+- `Toggle peripherals between Macs`
+
+**確定した配線**:
+
+| 機体 | キー | アクション |
+| --- | --- | --- |
+| Mac Studio | `⌃⌥⌘]` | Take peripherals to this Mac |
+| MacBook Pro | `⌃⌥⌘[` | Take peripherals to this Mac |
+
+物理配置は **Mac Studio が左、MacBook Pro が右**。キーは自機から見て隣がいる向きを
+指し、そこから引き寄せる、と読む。
+
+ZMK 側は該当キーを次に変える。
+
+    &kp LC(LA(LG(RBKT)))    // ⌃⌥⌘]  → Mac Studio
+    &kp LC(LA(LG(LBKT)))    // ⌃⌥⌘[  → MacBook Pro
+
+**`send` ではなく `take` を選んだ理由。** `take` は「行きたい機体で押す」ので、
+押す時点でキーボードが既にその機体に居る。キーボードが先に `&bt BT_SEL` で移動し、
+ポインタを後から引き寄せる順になる。`send` だと「ポインタだけ送ったがキーボードの
+切替を忘れて自機に何も残らない」が起こりうる。§13.4 の退避路 (`direction=take`) とも
+向きが揃う。
+
+**F キーは使えない。** shortcut recorder が `F13` を受け付けない。修飾キーとの
+組み合わせでも不可。`keyCode` と `charactersIgnoringModifiers` の両方を見ている
+ことまでは確認できたが、弾く判定そのものは静的解析では特定できなかった。F キーが
+`charactersIgnoringModifiers` で private-use 領域（`F13` なら `U+F710`）を返すのを
+弾いているのが有力。**当初 §5 で置いた F13/F14 の意味づけは、ここで捨てている。**
+
+したがって設定は次の順でやる。**先に recorder で組み合わせが通ることを確かめてから
+キーマップを焼く。** 逆順だと焼き直しを繰り返す。
+
+なお `~/.config/uc-handoff/direction` は `left` のままで、上記の配置と食い違う。
+uc-handoff を残すなら `right` に直す必要がある（撤去するなら不要）。
+
+### 13.9 出典
 
 - https://github.com/MegaManSec/magic-switch （README・ソース・issues。
   2026-08-21 時点で archived=false、最終 push 2026-08-20、最新 v2.25.7）
