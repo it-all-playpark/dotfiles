@@ -569,6 +569,9 @@
       ]
     },
     "network": {
+      "allowUnixSockets": [
+        "/nix/var/nix/daemon-socket/socket"
+      ],
       "allowedDomains": [
         "github.com",
         "api.github.com",
@@ -604,10 +607,7 @@
         "api.slack.com",
         "fonts.googleapis.com"
       ],
-      "strictAllowlist": true,
-      "allowUnixSockets": [
-        "/nix/var/nix/daemon-socket/socket"
-      ]
+      "strictAllowlist": true
     }
   },
   "skillOverrides": {
