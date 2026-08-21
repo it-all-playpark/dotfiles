@@ -358,11 +358,69 @@ Connection Request ダイアログが出る。トラックパッド固有で、v
 繋がっているためキーボードで消せる可能性があり、駄目でも MacBook 側から
 `magicswitch://switch?peripheral=trackpad&direction=take` で取り戻せる。
 
-採否は実機検証で決める。観測項目は (1) 10 往復でのダイアログ発生頻度、
+### 13.5 実機で確かめた bond の実態（2026-08-21）
+
+`blueutil` (nixpkgs 2.13.0) で実測した。対象はトラックパッド `a0-78-17-e5-50-10`。
+
+**bond は確かに両機に同居する。** MacBook へ USB-C ケーブルでペアリングした直後の
+`--paired`:
+
+| 機体 | 状態 |
+| --- | --- |
+| Mac Studio | `paired`, **not connected** |
+| MacBook Pro | `paired`, **connected (master)** |
+
+§4 の「リンクキーを 1 ホスト分しか保持しない」はこれで反証された。
+
+**しかし記録の同居と、ソフトによる切替可能性は別だった。** 非所有側の Mac Studio から
+平文の bonded connect を撃つと、20 秒かけて失敗する。
+
+    $ blueutil --connect a0-78-17-e5-50-10
+    Failed to connect "a0-78-17-e5-50-10"
+    ... 20.257 total
+
+`--unpair` → `--pair` → `--connect` による手動での張り直しも失敗した。
+**blueutil だけでは切替を実現できない。**
+
+これは magic-switch がソースのコメントで名前を付けている状態そのものだった。
+
+> A record that says `paired=true` while the device refuses the bonded connect is the
+> stale-bond signature: the device actually answers to the other Mac.
+
+magic-switch (`BluetoothPeripheralStore.swift`) はこの復旧を実装している。
+
+1. bonded な `openConnection()` の失敗を検出
+2. `rssi() != invalidRSSI` で圏内を確認（#103 / #113 の RSSI probe。20 秒ストールの回避）
+3. `btDevice.perform(Selector(("remove")))` でローカルのペアリング記録を削除
+4. settle 待ちののち `startDevicePair(...)` で再ペアリング
+5. 確認要求は `devicePairingUserConfirmationRequest` が `replyUserConfirmation(true)` で自動承認
+
+blueutil には 2〜5 が無い。`--pair` は PIN しか渡せず、確認要求を自動承認する仕組みを持たない。
+
+**したがって README の「remember multiple hosts」は記録が共存するところまでで、
+切替には再ペアリングのハンドシェイクが要る。それを無人で行うことが
+magic-switch の実体的な価値である。**「単純だから blueutil + ssh で足りる」という
+見立ては、この復旧経路を見落としていた。
+
+補足として、`blueutil` の以下も実測・一次情報で確認した。
+
+- classic IOBluetooth の列挙は TCC で保護されていない。Terminal.app は
+  `kTCCServiceBluetoothAlways` の許可を持たないまま `--paired` が通る
+  （TCC の Bluetooth は CoreBluetooth/BLE 向け）。launchd 文脈でも権限の壁は無い見込み
+- ただし ssh 越しでは `--paired` / `--connected` / `--disconnect` が機能しない
+  （blueutil issue #85）。§3 が記録した「ssh 配下は Aqua セッション外」と同種。
+  受け側での実行は GUI セッション内の launchd user agent などに寄せる必要がある
+
+**運用上の退避路**: USB-C ケーブルでの接続は BT の状態に関わらず必ずペアリングされる。
+切替に失敗して詰んだときはケーブルで戻す。
+
+### 13.6 残る採否判断
+
+採否は magic-switch の実機検証で決める。観測項目は (1) 10 往復でのダイアログ発生頻度、
 (2) 出た場合に押さずともトラックパッドが動くか、(3) Full Keyboard Access 有効時に
 Return / Space で消せるか。
 
-### 13.5 出典
+### 13.7 出典
 
 - https://github.com/MegaManSec/magic-switch （README・ソース・issues。
   2026-08-21 時点で archived=false、最終 push 2026-08-20、最新 v2.25.7）
@@ -370,3 +428,6 @@ Return / Space で消せるか。
 - https://github.com/MegaManSec/magic-switch/issues/110 （本文に
   "Found while looking into #109; independent of it." と明記。#109 の修正ではない）
 - 同名の商用製品 `www.magic-switch.com` とは無関係。取得元を間違えないこと
+- https://github.com/toy/blueutil （2.13.0。`--unpair` と `--wait-*` は EXPERIMENTAL）
+- https://github.com/toy/blueutil/issues/85 （ssh 越しで `--paired` / `--connected` /
+  `--disconnect` が機能しない）
