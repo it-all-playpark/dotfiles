@@ -1,6 +1,8 @@
 # `uc-handoff` — キー1回でキーボードとポインタを両方隣の Mac へ渡す 設計
 
-- 状態: 設計前提が破綻していたため方式を変更（§13）。ポインタは magic-switch でトラックパッドごと切り替える。uc-handoff は撤去予定
+- 状態: **ポインタの手渡しをやめた（§13.9）**。トラックパッドは Mac Studio 固定、
+  MacBook Pro は内蔵トラックパッドを使う。magic-switch は BLE キーボードを巻き込む
+  ため撤去した。uc-handoff も役目を失っている
 - 対象リポジトリ: `dotfiles`（常駐デーモン）/ `zmk-config-fish`（キーマップ）
 - 前提の検証: 2026-07-30 実機で完了（§3）
 - PR: it-all-playpark/dotfiles#149（デーモン）/ it-all-playpark/zmk-config-fish#3（キーマップ）
@@ -435,7 +437,13 @@ magic-switch の実体的な価値である。**「単純だから blueutil + ss
 **運用上の退避路**: USB-C ケーブルでの接続は BT の状態に関わらず必ずペアリングされる。
 切替に失敗して詰んだときはケーブルで戻す。
 
-### 13.6 採否判断: magic-switch を採用（2026-08-21）
+### 13.6 採否判断: magic-switch を採用（2026-08-21）→ **撤回（§13.9）**
+
+> [!WARNING]
+> この節の採用判断は **2026-08-22 に撤回した**。magic-switch は切り替えのたびに
+> BLE キーボードの接続を壊す。理由と実測は §13.9。以下は当時の判断の記録として
+> 残す。
+
 
 実機トライアルの結果、**懸念していた issue #109 の Connection Request ダイアログは
 10 往復で 1 度も出なかった**。判定基準の最上段に当たるため採用する。
@@ -480,6 +488,11 @@ nix 経由で取得した zip には `com.apple.quarantine` が付かないた�
 uc-handoff は役目を終える。ただし**上記の配線が実機で通ってから**別 PR で撤去する。
 
 ### 13.7 activation で起動中のアプリバンドルを消さない（2026-08-22）
+
+> [!NOTE]
+> magic-switch 本体は §13.9 で撤去したので、この節の `magic-switch.nix` はもう
+> 存在しない。**規則そのものは他の activation にも効く**ので記録として残す。
+
 
 magic-switch を nix 管理下に置いた最初の apply の直後に Fish Keyboard が BT で
 繋がらなくなり、同じ時間帯に強制再起動が起きていた。調査でわかったことと、
@@ -560,7 +573,8 @@ all clear を押しても、クリアされたつもりになるだけで効い�
 - **stamp は入れ替えが終わってから書く。** 失敗した回に書くと、次回が「適用済み」と
   誤認して永久に skip する
 
-`tests/magic-switch-replace.test.sh` がこの 3 つを不変条件として検査する。
+この 3 つは `tests/magic-switch-replace.test.sh` が不変条件として検査していたが、
+§13.9 の撤去でテストごと消した（検査対象の activation が無くなったため）。
 
 調査上の注意を 2 つ。
 
@@ -618,7 +632,63 @@ ZMK 側は該当キーを次に変える。
 なお `~/.config/uc-handoff/direction` は `left` のままで、上記の配置と食い違う。
 uc-handoff を残すなら `right` に直す必要がある（撤去するなら不要）。
 
-### 13.9 出典
+### 13.9 撤去: magic-switch を外し、ポインタの手渡しをやめる（2026-08-22）
+
+**magic-switch は切り替えのたびに BLE キーボードの接続を壊す。** 導入して 1 日で
+3 回発生した。導入前は 1 ヶ月に 1 回あるかないかだったので、およそ 90 倍である。
+決め手は**トラックパッドの切り替え操作そのものの最中に落ちた**という直接観測。
+
+**設定では回避できない。** `take` の実体は §13.5 で読んだとおりで、バイナリの文字列
+`Removed stale local pairing before taking ` とも一致する。
+
+1. bonded な接続の失敗を検出
+2. `btDevice.perform(Selector("remove"))` でローカルのペアリング記録を削除
+3. `startDevicePair(...)` で再ペアリング
+4. 確認要求を自動承認
+
+つまり「切り替え = 同じ Bluetooth コントローラ上で bond を消して張り直す」ことが
+このアプリの機能そのものである。§13.5 に「それを無人で行うことが magic-switch の
+実体的な価値」と書いたとおりで、ここを避けたら製品として何も残らない。Fish Keyboard
+は同じコントローラ上の BLE 機器なので、切り替えるたびに隣で再ペアリングの
+ハンドシェイクが走る。ショートカットを変えても
+`Take peripherals when a display connects` を切っても同じことが起きる。
+
+**「導入の仕方が悪い」ではなく、この構成と共存できない。** 切り分けの過程で
+以下は潰してある。
+
+- nix の `dontFixup` は効いていて署名は壊れていない
+  （`codesign -dv` は `adhoc`、`--verify --deep --strict` が OK）
+- prefs を自律的に書き換えてはいない（3 分 18 サンプルで変化 0）。
+  「クラス不明な機器を probe し続けている」という見立ては成り立たなかった
+- `AdvertisingDiagnostics` は BLE ではなく Bonjour の診断だった
+
+**採った構成**: ポインタの手渡しを**やめる**。
+
+| 何を | どうするか |
+| --- | --- |
+| キーボード | ZMK の BT プロファイル切替 (`&bt BT_SEL`)。従来どおり |
+| ポインタ | **Mac Studio にトラックパッド固定。MacBook Pro は内蔵を使う** |
+| magic-switch | 撤去 |
+| Universal Control | 使わない |
+
+クラムシェル運用ではないため、MacBook Pro には常に内蔵トラックパッドがある。
+§13.6 が目指した「両機とも自前のローカル入力」は、**切り替えを一切せずに**成立する。
+§13.2 の貸出ポインタ回収も §13.3 の first responder 問題も、構成上発生しない。
+
+**残る痛み**: キーボードを切り替えたとき、移動先の Mac のポインタがどこにいるか
+分からない。これは別途、視覚的な強調で解こうとしている。uc-handoff は
+トリガ（F13 の打鍵）も動作（UC 経由のポインタ移動）も違うので、そのままでは
+使えない。
+
+**手作業で消すもの**（nix はこれらを回収しない）:
+
+- `/Applications/Magic Switch.app`（activation が実体コピーしたもの）
+- `~/.local/state/magic-switch.store`（コピー済み世代を指すスタンプ）
+- `~/Library/Containers/com.megamansec.magic-switch`（設定とペアリング鍵）
+- ログイン項目の登録
+- システム設定 > プライバシーとセキュリティ の Bluetooth / ローカルネットワーク
+
+### 13.10 出典
 
 - https://github.com/MegaManSec/magic-switch （README・ソース・issues。
   2026-08-21 時点で archived=false、最終 push 2026-08-20、最新 v2.25.7）
