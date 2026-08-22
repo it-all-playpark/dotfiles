@@ -153,6 +153,14 @@ in
         memorySize = 12288;
         diskSize = 40960;
       };
+      # qemu 11.1 以降、HVF は GICv2 エミュレーションを拒否して起動直後に落ちる
+      # (qemu-system-aarch64: HVF does not support GICv2 emulation)。
+      # nixpkgs の nixos/lib/qemu-common.nix が aarch64-darwin ホスト向けに
+      # `-machine virt,gic-version=2,accel=hvf:tcg` を固定で渡しており NixOS
+      # オプションからは差し替えられないため、コマンドラインの後段に置かれる
+      # qemu.options で gic-version だけ上書きする
+      # （qemu の -machine は merge_lists なので同じキーは後勝ちになる）。
+      virtualisation.qemu.options = [ "-machine gic-version=3" ];
     };
   };
 
