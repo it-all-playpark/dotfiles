@@ -31,6 +31,14 @@ codex/**/*.local.toml
 result
 result-*
 
+# linux-builder の SSH 鍵
+# create-builder / add-keys は鍵置き場を `./keys` と cwd 基準で解決するため、
+# リポジトリ内で linux-builder-start を手実行すると秘密鍵がここに落ちる。
+# 正規の置き場は /var/lib/linux-builder/keys（launchd の WorkingDirectory）。
+/keys/
+**/builder_ed25519
+**/builder_ed25519.pub
+
 # macOS
 .DS_Store
 
