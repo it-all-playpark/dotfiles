@@ -92,6 +92,7 @@ for f in "${PENDING_DIR}"/*.json; do
   phase_durations_json=""
   merge_tier_reasons_json=""
   route=""
+  guard_id=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -126,7 +127,8 @@ for f in "${PENDING_DIR}"/*.json; do
     duration_seconds: .telemetry.duration_seconds,
     phase_durations: .telemetry.phase_durations,
     merge_tier_reasons: .telemetry.merge_tier_reasons,
-    route: .telemetry.route
+    route: .telemetry.route,
+    guard_id: .telemetry.guard_id
   }' "$claimed" 2>/dev/null); then
     # JSON parse error
     mkdir -p "${PENDING_DIR}/malformed"
@@ -181,6 +183,7 @@ for f in "${PENDING_DIR}"/*.json; do
   phase_durations_json=$(echo "$parsed" | jq -c '.phase_durations // empty')
   merge_tier_reasons_json=$(echo "$parsed" | jq -c '.merge_tier_reasons // empty')
   route=$(echo "$parsed" | jq -r '.route // empty')
+  guard_id=$(echo "$parsed" | jq -r '.guard_id // empty')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -396,6 +399,9 @@ for f in "${PENDING_DIR}"/*.json; do
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
       ;;
     esac
+  fi
+  if [[ -n $guard_id && $guard_id != "null" ]]; then
+    cmd_args+=(--guard-id "$guard_id")
   fi
 
   # --- Execute journal.sh ---
