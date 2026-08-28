@@ -1978,6 +1978,159 @@ make_full_telemetry_handoff() {
 }
 
 # --------------------------------------------------------------------------
+# Test G-A: valid guard_id → --guard-id が journal.sh へ転送される
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/guardid.json" "$stub" \
+    '.telemetry += {guard_id: "sandbox-deny"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--guard-id sandbox-deny"; then
+    pass "guard_id_forwarded"
+  else
+    fail "guard_id_forwarded" "expected --guard-id sandbox-deny. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "guard_id_base_entry_preserved"
+  else
+    fail "guard_id_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/guardid.json" ]]; then
+    pass "guard_id_pending_removed"
+  else
+    fail "guard_id_pending_removed" "pending file should be removed after success"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test G-B: comma 区切りの multi-guard 値がそのまま転送される
+#           (journal.sh 側は comma 区切りリストを受理する契約)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/multiguard.json" "$stub" \
+    '.telemetry += {guard_id: "sandbox-deny,inline-edit-guard"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--guard-id sandbox-deny,inline-edit-guard"; then
+    pass "guard_id_multi_forwarded_intact"
+  else
+    fail "guard_id_multi_forwarded_intact" "comma-joined guard_id must be forwarded verbatim. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test G-C: guard_id 不在 → --guard-id フラグ自体が出ない (空値を渡さない)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/noguard.json" "$stub" '.'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--guard-id"; then
+    fail "guard_id_absent_no_flag" "no --guard-id flag expected. got: ${captured}"
+  else
+    pass "guard_id_absent_no_flag"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test G-D: guard_id が JSON null → --guard-id を渡さない
+#           (jq -r で "null" 文字列化されるため、明示的に弾く必要がある)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/nullguard.json" "$stub" \
+    '.telemetry += {guard_id: null}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--guard-id"; then
+    fail "guard_id_null_no_flag" "JSON null guard_id must not be forwarded as the literal string null. got: ${captured}"
+  else
+    pass "guard_id_null_no_flag"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "guard_id_null_base_entry_preserved"
+  else
+    fail "guard_id_null_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test G-E (integration): 実 journal.sh が --guard-id を受理する環境では、
+#          guard_id が journal entry の telemetry へ到達することを確認する。
+#          未配置 / 未対応 (skills#530 未 merge) の環境では skip。
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  elif ! grep -q -- '--guard-id' "$REAL_JOURNAL"; then
+    echo "  (skip: real journal.sh does not support --guard-id yet — 受け側 skills#530 未 merge)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_trust_handoff "${tmpd}/journal/pending/e2eguard.json" "$REAL_JOURNAL" \
+      '.telemetry += {guard_id: "sandbox-deny"}'
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_guard_id_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_guard_id_entry_written"
+      if [[ $(jq -r '.telemetry.guard_id' "$entry") == "sandbox-deny" ]] &&
+        [[ $(jq -r '.telemetry.merge_tier' "$entry") == "REVIEW" ]]; then
+        pass "integration_guard_id_persisted"
+      else
+        fail "integration_guard_id_persisted" "guard_id missing/altered in entry: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
