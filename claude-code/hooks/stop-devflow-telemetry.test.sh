@@ -2131,6 +2131,196 @@ make_full_telemetry_handoff() {
 }
 
 # --------------------------------------------------------------------------
+# Test P-A: iterate_rounds / fixes_applied → --telemetry-json へ載って転送される
+#           (skills#535: pr-iterate の fix 回数を測定可能にする AC)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/iterate.json" "$stub" \
+    '.telemetry += {iterate_rounds: 3, fixes_applied: 2}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- '--telemetry-json'; then
+    pass "passthrough_flag_present"
+  else
+    fail "passthrough_flag_present" "expected --telemetry-json. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q '"iterate_rounds":3'; then
+    pass "iterate_rounds_forwarded"
+  else
+    fail "iterate_rounds_forwarded" "expected iterate_rounds:3. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q '"fixes_applied":2'; then
+    pass "fixes_applied_forwarded"
+  else
+    fail "fixes_applied_forwarded" "expected fixes_applied:2. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "passthrough_base_entry_preserved"
+  else
+    fail "passthrough_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if [[ ! -f "${tmpd}/journal/pending/iterate.json" ]]; then
+    pass "passthrough_pending_removed"
+  else
+    fail "passthrough_pending_removed" "pending file should be removed after success"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test P-B: 既に silent drop されていた 4 キーも同じ経路で回収される
+#           (fix_null_retries / review_null_retries / fix_uncommitted_recovered /
+#            subagent_invocations。subagent_invocations は object 値)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/dropped.json" "$stub" \
+    '.telemetry += {fix_null_retries: 1, review_null_retries: 2, fix_uncommitted_recovered: 3, subagent_invocations: {"pr-reviewer": 4}}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -qF -- '"fix_null_retries":1'; then
+    pass "passthrough_recovered_fix_null_retries"
+  else
+    fail "passthrough_recovered_fix_null_retries" "expected fix_null_retries:1. got: ${captured}"
+  fi
+  if echo "$captured" | grep -qF -- '"review_null_retries":2'; then
+    pass "passthrough_recovered_review_null_retries"
+  else
+    fail "passthrough_recovered_review_null_retries" "expected review_null_retries:2. got: ${captured}"
+  fi
+  if echo "$captured" | grep -qF -- '"fix_uncommitted_recovered":3'; then
+    pass "passthrough_recovered_fix_uncommitted_recovered"
+  else
+    fail "passthrough_recovered_fix_uncommitted_recovered" "expected fix_uncommitted_recovered:3. got: ${captured}"
+  fi
+  if echo "$captured" | grep -qF -- '"subagent_invocations":{"pr-reviewer":4}'; then
+    pass "passthrough_recovered_subagent_invocations"
+  else
+    fail "passthrough_recovered_subagent_invocations" "expected subagent_invocations object. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test P-C: passthrough キーが 1 つも無い → --telemetry-json フラグ自体を出さない
+#           (空 object を渡して journal.sh の検証を無駄に踏まない)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/nopass.json" "$stub" '.'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--telemetry-json"; then
+    fail "passthrough_absent_no_flag" "no --telemetry-json flag expected. got: ${captured}"
+  else
+    pass "passthrough_absent_no_flag"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "passthrough_absent_base_entry_preserved"
+  else
+    fail "passthrough_absent_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test P-D: JSON null のキーは object から除外される（存在する数値キーは残す）
+#           null をそのまま載せると doctor 側の集計で 0 と区別できなくなる
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/nullmix.json" "$stub" \
+    '.telemetry += {iterate_rounds: 0, fixes_applied: null}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q '"iterate_rounds":0'; then
+    pass "passthrough_zero_preserved"
+  else
+    fail "passthrough_zero_preserved" "expected iterate_rounds:0. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q '"fixes_applied"'; then
+    fail "passthrough_null_dropped" "null value must not be forwarded. got: ${captured}"
+  else
+    pass "passthrough_null_dropped"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test P-E (integration): 実 journal.sh が --telemetry-json を受理する環境で、
+#          iterate_rounds / fixes_applied が journal entry の telemetry へ
+#          「数値で」到達することを確認する（skills#535 の受け入れ条件そのもの）。
+#          未配置 / 未対応の環境では skip。
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  elif ! grep -q -- '--telemetry-json' "$REAL_JOURNAL"; then
+    echo "  (skip: real journal.sh does not support --telemetry-json — 受け側未対応)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_trust_handoff "${tmpd}/journal/pending/e2epass.json" "$REAL_JOURNAL" \
+      '.telemetry += {iterate_rounds: 3, fixes_applied: 2}'
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_passthrough_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_passthrough_entry_written"
+      if [[ $(jq -r '.telemetry.iterate_rounds | type' "$entry") == "number" ]] &&
+        [[ $(jq -r '.telemetry.iterate_rounds' "$entry") == "3" ]] &&
+        [[ $(jq -r '.telemetry.fixes_applied | type' "$entry") == "number" ]] &&
+        [[ $(jq -r '.telemetry.fixes_applied' "$entry") == "2" ]] &&
+        [[ $(jq -r '.telemetry.merge_tier' "$entry") == "REVIEW" ]]; then
+        pass "integration_passthrough_persisted_as_number"
+      else
+        fail "integration_passthrough_persisted_as_number" "iterate_rounds/fixes_applied missing or non-numeric: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
