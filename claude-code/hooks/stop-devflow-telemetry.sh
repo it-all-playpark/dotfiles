@@ -93,6 +93,7 @@ for f in "${PENDING_DIR}"/*.json; do
   merge_tier_reasons_json=""
   route=""
   guard_id=""
+  passthrough_telemetry_json=""
 
   if ! parsed=$(jq -e '{
     skill: .skill,
@@ -128,7 +129,15 @@ for f in "${PENDING_DIR}"/*.json; do
     phase_durations: .telemetry.phase_durations,
     merge_tier_reasons: .telemetry.merge_tier_reasons,
     route: .telemetry.route,
-    guard_id: .telemetry.guard_id
+    guard_id: .telemetry.guard_id,
+    passthrough_telemetry: ((.telemetry // {}) | {
+      iterate_rounds,
+      fixes_applied,
+      fix_null_retries,
+      review_null_retries,
+      fix_uncommitted_recovered,
+      subagent_invocations
+    } | with_entries(select(.value != null)))
   }' "$claimed" 2>/dev/null); then
     # JSON parse error
     mkdir -p "${PENDING_DIR}/malformed"
@@ -184,6 +193,7 @@ for f in "${PENDING_DIR}"/*.json; do
   merge_tier_reasons_json=$(echo "$parsed" | jq -c '.merge_tier_reasons // empty')
   route=$(echo "$parsed" | jq -r '.route // empty')
   guard_id=$(echo "$parsed" | jq -r '.guard_id // empty')
+  passthrough_telemetry_json=$(echo "$parsed" | jq -c '.passthrough_telemetry // {}')
 
   # --- Resolve journal.sh ---
   journal_sh=""
@@ -402,6 +412,16 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $guard_id && $guard_id != "null" ]]; then
     cmd_args+=(--guard-id "$guard_id")
+  fi
+
+  # --- passthrough telemetry (skills#535) ---
+  # journal.sh の汎用 --telemetry-json 口（任意 JSON object を telemetry へマージ）へ載せる。
+  # この projection は固定キー列挙なので、per-key フラグを持たないキーは列挙漏れすると
+  # エラーも出さずに落ちる（実測: fix_null_retries / review_null_retries /
+  # fix_uncommitted_recovered / subagent_invocations が payload に存在したまま journal に
+  # 到達していなかった）。新規キーは per-key フラグではなくこのリストへ足すこと。
+  if [[ -n $passthrough_telemetry_json && $passthrough_telemetry_json != "{}" ]]; then
+    cmd_args+=(--telemetry-json "$passthrough_telemetry_json")
   fi
 
   # --- Execute journal.sh ---
