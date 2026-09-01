@@ -93,6 +93,9 @@ for f in "${PENDING_DIR}"/*.json; do
   merge_tier_reasons_json=""
   route=""
   guard_id=""
+  eval_confidence=""
+  review_confidence=""
+  review_decision=""
   passthrough_telemetry_json=""
 
   if ! parsed=$(jq -e '{
@@ -130,6 +133,9 @@ for f in "${PENDING_DIR}"/*.json; do
     merge_tier_reasons: .telemetry.merge_tier_reasons,
     route: .telemetry.route,
     guard_id: .telemetry.guard_id,
+    eval_confidence: ((.telemetry // {}) | if has("eval_confidence") then (.eval_confidence | tojson) else null end),
+    review_confidence: ((.telemetry // {}) | if has("review_confidence") then (.review_confidence | tojson) else null end),
+    review_decision: .telemetry.review_decision,
     passthrough_telemetry: ((.telemetry // {}) | {
       iterate_rounds,
       fixes_applied,
@@ -193,6 +199,12 @@ for f in "${PENDING_DIR}"/*.json; do
   merge_tier_reasons_json=$(echo "$parsed" | jq -c '.merge_tier_reasons // empty')
   route=$(echo "$parsed" | jq -r '.route // empty')
   guard_id=$(echo "$parsed" | jq -r '.guard_id // empty')
+  # tojson 経由の projection のため、値は「キー欠落」時のみ empty（JSON null は
+  # 文字列 "null" として非空で抽出される。confidence forwarding が "null" を drop
+  # しないのはこの区別を保つため）。
+  eval_confidence=$(echo "$parsed" | jq -r '.eval_confidence // empty')
+  review_confidence=$(echo "$parsed" | jq -r '.review_confidence // empty')
+  review_decision=$(echo "$parsed" | jq -r '.review_decision // empty')
   passthrough_telemetry_json=$(echo "$parsed" | jq -c '.passthrough_telemetry // {}')
 
   # --- Resolve journal.sh ---
@@ -412,6 +424,30 @@ for f in "${PENDING_DIR}"/*.json; do
   fi
   if [[ -n $guard_id && $guard_id != "null" ]]; then
     cmd_args+=(--guard-id "$guard_id")
+  fi
+
+  # --- confidence telemetry (skills#561) ---
+  # eval_confidence / review_confidence は記録専用の optional [0,1] 値。他の optional
+  # キーと異なり "null" 文字列を drop しない — agent が実行されたが confidence を
+  # 返さなかった run（キーあり値 null）を journal.sh 側で JSON null として記録する契約
+  # （AC-3）を守るため。キー欠落（agent 自体が非実行）のときだけ非空判定で drop される。
+  if [[ -n $eval_confidence ]]; then
+    cmd_args+=(--eval-confidence "$eval_confidence")
+  fi
+  if [[ -n $review_confidence ]]; then
+    cmd_args+=(--review-confidence "$review_confidence")
+  fi
+  if [[ -n $review_decision && $review_decision != "null" ]]; then
+    case "$review_decision" in
+    approve | request-changes | comment)
+      cmd_args+=(--review-decision "$review_decision")
+      ;;
+    *)
+      mkdir -p "$(dirname "$LOG_FILE")"
+      printf '%s %s telemetry-key-dropped: review_decision (journal.sh 契約を満たさない)\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "$f")" >>"$LOG_FILE"
+      ;;
+    esac
   fi
 
   # --- passthrough telemetry (skills#535) ---
