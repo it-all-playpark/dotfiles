@@ -2321,6 +2321,220 @@ make_full_telemetry_handoff() {
 }
 
 # --------------------------------------------------------------------------
+# Test CONF-A: eval_confidence: 0.85 (number) → --eval-confidence 0.85 forwarded
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/conf-a.json" "$stub" \
+    '.telemetry += {eval_confidence: 0.85}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--eval-confidence 0.85"; then
+    pass "eval_confidence_number_forwarded"
+  else
+    fail "eval_confidence_number_forwarded" "expected --eval-confidence 0.85. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test CONF-B: eval_confidence: null (key present, value null) → --eval-confidence
+#              null is forwarded (欠落とは区別する — AC-3)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/conf-b.json" "$stub" \
+    '.telemetry += {eval_confidence: null}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--eval-confidence null"; then
+    pass "eval_confidence_null_forwarded"
+  else
+    fail "eval_confidence_null_forwarded" "expected --eval-confidence null. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test CONF-C: eval_confidence key absent → --eval-confidence flag not forwarded
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/conf-c.json" "$stub" '.'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--eval-confidence"; then
+    fail "eval_confidence_absent_not_forwarded" "no --eval-confidence flag expected. got: ${captured}"
+  else
+    pass "eval_confidence_absent_not_forwarded"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "eval_confidence_absent_base_entry_preserved"
+  else
+    fail "eval_confidence_absent_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test CONF-D: eval_confidence: 0 (falsy boundary value) → --eval-confidence 0
+#              forwarded (truthiness 判定を使わない)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/conf-d.json" "$stub" \
+    '.telemetry += {eval_confidence: 0}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--eval-confidence 0$" ||
+    echo "$captured" | grep -q -- "--eval-confidence 0 "; then
+    pass "eval_confidence_zero_forwarded"
+  else
+    fail "eval_confidence_zero_forwarded" "expected --eval-confidence 0. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test CONF-E: review_confidence: 0.42 + review_decision: "approve" → both
+#              forwarded to journal.sh
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/conf-e.json" "$stub" \
+    '.telemetry += {review_confidence: 0.42, review_decision: "approve"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--review-confidence 0.42"; then
+    pass "review_confidence_forwarded"
+  else
+    fail "review_confidence_forwarded" "expected --review-confidence 0.42. got: ${captured}"
+  fi
+  if echo "$captured" | grep -q -- "--review-decision approve"; then
+    pass "review_decision_approve_forwarded"
+  else
+    fail "review_decision_approve_forwarded" "expected --review-decision approve. got: ${captured}"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test CONF-F: review_decision outside the approve|request-changes|comment
+#              enum → not forwarded, dropped and logged (silent drop 禁止)
+# --------------------------------------------------------------------------
+{
+  tmpd=$(make_tmpdir)
+  mkdir -p "${tmpd}/journal/pending"
+  capture="${tmpd}/capture.txt"
+  stub="${tmpd}/journal.sh"
+  make_stub_journal "$stub" "$capture" 0
+
+  make_trust_handoff "${tmpd}/journal/pending/conf-f.json" "$stub" \
+    '.telemetry += {review_decision: "bikeshed"}'
+
+  run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+  captured=$(cat "$capture" 2>/dev/null || echo "")
+  if echo "$captured" | grep -q -- "--review-decision"; then
+    fail "review_decision_invalid_dropped" "invalid --review-decision must not be forwarded. got: ${captured}"
+  else
+    pass "review_decision_invalid_dropped"
+  fi
+  if echo "$captured" | grep -q -- "--merge-tier REVIEW"; then
+    pass "review_decision_invalid_base_entry_preserved"
+  else
+    fail "review_decision_invalid_base_entry_preserved" "base telemetry must still be logged. got: ${captured}"
+  fi
+  if grep -q "telemetry-key-dropped: review_decision" \
+    "${tmpd}/.claude/logs/stop-devflow-telemetry.log" 2>/dev/null; then
+    pass "review_decision_invalid_logged"
+  else
+    fail "review_decision_invalid_logged" "drop must be recorded in the log (silent drop 禁止)"
+  fi
+
+  rm -rf "$tmpd"
+}
+
+# --------------------------------------------------------------------------
+# Test CONF-G (integration): 実 journal.sh が --eval-confidence /
+#          --review-confidence / --review-decision を受理する環境では、
+#          journal entry の .telemetry へ実際に到達することを確認する
+#          （skills#561 F2 の受け側配線との結合テスト）。未配置 / 未対応の環境では skip。
+# --------------------------------------------------------------------------
+{
+  REAL_JOURNAL="${HOME}/ghq/github.com/it-all-playpark/skills/skill-retrospective/scripts/journal.sh"
+  if [[ ! -x $REAL_JOURNAL ]]; then
+    echo "  (skip: real journal.sh not found — integration test skipped)"
+  elif ! grep -q -- '--eval-confidence' "$REAL_JOURNAL"; then
+    echo "  (skip: real journal.sh does not support --eval-confidence — 受け側未対応)"
+  else
+    tmpd=$(make_tmpdir)
+    mkdir -p "${tmpd}/journal/pending"
+
+    make_trust_handoff "${tmpd}/journal/pending/e2econf.json" "$REAL_JOURNAL" \
+      '.telemetry += {eval_confidence: 0.9, review_confidence: null, review_decision: "comment"}'
+
+    run_hook "CLAUDE_JOURNAL_DIR=${tmpd}/journal" "HOME=${tmpd}"
+
+    entry=$(ls "${tmpd}/journal"/*.json 2>/dev/null | head -1 || true)
+    if [[ -z $entry ]]; then
+      fail "integration_confidence_entry_written" "no journal entry created. hook output: ${RUN_OUT}"
+    else
+      pass "integration_confidence_entry_written"
+      if [[ $(jq -r '.telemetry.eval_confidence' "$entry") == "0.9" ]] &&
+        [[ $(jq -r '.telemetry.review_confidence' "$entry") == "null" ]] &&
+        [[ $(jq -r '.telemetry.review_decision' "$entry") == "comment" ]]; then
+        pass "integration_confidence_persisted"
+      else
+        fail "integration_confidence_persisted" "confidence telemetry missing/mismatched in entry: $(jq -c '.telemetry' "$entry")"
+      fi
+    fi
+
+    rm -rf "$tmpd"
+  fi
+}
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
