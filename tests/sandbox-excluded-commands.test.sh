@@ -7,8 +7,9 @@
 # Verifies that the bin/ bare command names (18 names, resolved via PATH
 # once skills#582's bin/ wrappers are installed) are registered in both
 # their argument-less form (`<name>`) and argument-taking form
-# (`<name> *`), and that the pre-existing 20 entries (path globs, gh:*,
-# git:*, etc.) are preserved unchanged.
+# (`<name> *`), and that the pre-existing entries (path globs, gh:*,
+# git:*, etc.) are preserved unchanged. The .claude/skills 系 9 件は
+# issue #179 で削除済み（skills#584 の 3 plugin 化に追従）。
 
 set -euo pipefail
 
@@ -116,19 +117,11 @@ fi
 # legacy_path_globs_preserved
 # ---------------------------------------------------------------------------
 echo "- legacy_path_globs_preserved"
+# shellcheck disable=SC2016 # 意図的に非展開: settings.json に格納された literal string と照合する
 LEGACY_GLOBS=(
-  '~/.claude/skills/*'
-  'bash ~/.claude/skills/*'
-  'node ~/.claude/skills/*'
-  'python3 ~/.claude/skills/*'
-  '/Users/naramotoyuuji/.claude/skills/*'
-  'bash /Users/naramotoyuuji/.claude/skills/*'
-  'python3 /Users/naramotoyuuji/.claude/skills/*'
   '/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*'
   'bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*'
   'python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*'
-  'bash $HOME/.claude/skills/*'
-  'python3 $HOME/.claude/skills/*'
   'bash $HOME/ghq/github.com/it-all-playpark/skills/*'
   'python3 $HOME/ghq/github.com/it-all-playpark/skills/*'
 )
@@ -140,6 +133,32 @@ if [ "${#missing_legacy[@]}" -eq 0 ]; then
   pass "legacy_path_globs_preserved"
 else
   fail "legacy_path_globs_preserved" "Missing legacy globs: ${missing_legacy[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# dot_claude_skills_globs_removed
+# ---------------------------------------------------------------------------
+echo "- dot_claude_skills_globs_removed"
+# shellcheck disable=SC2016,SC2088 # 意図的に非展開: settings.json に格納された literal string と照合する
+REMOVED_GLOBS=(
+  '~/.claude/skills/*'
+  'bash ~/.claude/skills/*'
+  'node ~/.claude/skills/*'
+  'python3 ~/.claude/skills/*'
+  '/Users/naramotoyuuji/.claude/skills/*'
+  'bash /Users/naramotoyuuji/.claude/skills/*'
+  'python3 /Users/naramotoyuuji/.claude/skills/*'
+  'bash $HOME/.claude/skills/*'
+  'python3 $HOME/.claude/skills/*'
+)
+still_present=()
+for g in "${REMOVED_GLOBS[@]}"; do
+  has_entry "${g}" && still_present+=("${g}")
+done
+if [ "${#still_present[@]}" -eq 0 ]; then
+  pass "dot_claude_skills_globs_removed"
+else
+  fail "dot_claude_skills_globs_removed" "Should be removed but present: ${still_present[*]}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -180,10 +199,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 56 ]; then
+if [ "${total_len}" -eq 47 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 56 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 47 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------

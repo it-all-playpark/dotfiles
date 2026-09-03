@@ -83,9 +83,40 @@ permission を追加するときは、まず deny ルールに引っかからな
 
 ## skills のセットアップ
 
-skills 本体は別 repo（[it-all-playpark/skills](https://github.com/it-all-playpark/skills)）で管理。
-`scripts/setup-skills.sh` が `~/.claude/skills` / `~/.codex/skills` / `~/.gemini/antigravity/skills`
-へ symlink を張る。詳細は本体 [README.md](../README.md#agent-skills) の Agent Skills セクション参照。
+skills 本体は別 repo（[it-all-playpark/skills](https://github.com/it-all-playpark/skills)）で管理される。
+skills#571 以降は `plugins/{playpark-core,dev-flow,playpark-skills}` の 3 plugin 構成。
+
+自分用は `settings.json` の `extraKnownMarketplaces.playpark-local`（`source: "settings"` の
+inline marketplace）に 3 plugin を `source: "command"` + `mode: "link"` で登録し、
+`enabledPlugins` で `playpark-core@playpark-local` / `dev-flow@playpark-local` /
+`playpark-skills@playpark-local` を有効化している。command は
+`echo "$HOME/ghq/github.com/it-all-playpark/skills/plugins/<plugin>"` で、link mode は
+plugin cache から checkout への symlink を張るので repo の編集が再 install なしで反映される。
+
+`bin/` の bare 名（`journal` / `secfloor-classify` 等）は Claude Code が plugin の `bin/` を
+PATH に載せることで解決する。`sandbox.excludedCommands` には bare 名のみ登録し、
+`~/.claude/skills/*` 系 glob は撤去済み（issue #179）。
+
+旧 copy mode の `playpark-skills@playpark`（github marketplace `playpark`）は
+`enabledPlugins` で `false` にしてある。マシン上に残っていれば
+`claude plugin uninstall playpark-skills@playpark` で除去してよい。
+
+hunk-review は plugin ではなく `~/.claude/skills/hunk-review`（home-manager activation が
+`pkgs.hunk` の store path へ symlink を貼る。link mode は plugin dir 直下の外向き symlink を
+拒否するため plugin 内には置けない）。
+
+hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
+移植予定。
+
+### 導入手順（skills#571 merge 後）
+
+1. `nix run .#update` を実行
+2. `~/.claude/skills` / `~/.claude/workflows` / `~/.claude/agents` の repo symlink が残っていれば
+   skills 側の手順で撤去
+3. 素の `claude` を起動すると `playpark-local` の 3 plugin が install される
+4. `/dev-flow` が出ることを確認
+5. セッション内で `command -v journal` と `command -v secfloor-classify` が
+   `~/.claude/plugins/cache/playpark-local/...` 配下を返すことを確認
 
 ## Rollback
 

@@ -16,6 +16,10 @@
   "effortLevel": "high",
   "enableAllProjectMcpServers": false,
   "enabledPlugins": {
+    "dev-flow@playpark-local": true,
+    "playpark-core@playpark-local": true,
+    "playpark-skills@playpark": false,
+    "playpark-skills@playpark-local": true,
     "playwright@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": true,
@@ -28,6 +32,43 @@
     "API_TIMEOUT_MS": "900000",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "DISABLE_AUTOUPDATER": "1"
+  },
+  "extraKnownMarketplaces": {
+    "playpark-local": {
+      "source": {
+        "name": "playpark-local",
+        "plugins": [
+          {
+            "description": "Shared base for playpark plugins (link mode, local checkout)",
+            "name": "playpark-core",
+            "source": {
+              "command": "echo \"$HOME/ghq/github.com/it-all-playpark/skills/plugins/playpark-core\"",
+              "mode": "link",
+              "source": "command"
+            }
+          },
+          {
+            "description": "dev-flow workflows, skills and agents (link mode, local checkout)",
+            "name": "dev-flow",
+            "source": {
+              "command": "echo \"$HOME/ghq/github.com/it-all-playpark/skills/plugins/dev-flow\"",
+              "mode": "link",
+              "source": "command"
+            }
+          },
+          {
+            "description": "playpark personal skills (link mode, local checkout)",
+            "name": "playpark-skills",
+            "source": {
+              "command": "echo \"$HOME/ghq/github.com/it-all-playpark/skills/plugins/playpark-skills\"",
+              "mode": "link",
+              "source": "command"
+            }
+          }
+        ],
+        "source": "settings"
+      }
+    }
   },
   "fallbackModel": [
     "claude-opus-4-8",
@@ -522,18 +563,9 @@
     "excludedCommands": [
       "gh:*",
       "git:*",
-      "~/.claude/skills/*",
-      "bash ~/.claude/skills/*",
-      "node ~/.claude/skills/*",
-      "python3 ~/.claude/skills/*",
-      "/Users/naramotoyuuji/.claude/skills/*",
-      "bash /Users/naramotoyuuji/.claude/skills/*",
-      "python3 /Users/naramotoyuuji/.claude/skills/*",
       "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
-      "bash $HOME/.claude/skills/*",
-      "python3 $HOME/.claude/skills/*",
       "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
       "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
       "cross-repo-artifacts",
