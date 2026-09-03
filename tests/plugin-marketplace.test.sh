@@ -173,13 +173,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# legacy_playpark_plugin_not_enabled
+# legacy_playpark_plugin_still_enabled
 # ---------------------------------------------------------------------------
-echo "- legacy_playpark_plugin_not_enabled"
-if jq -e '.enabledPlugins["playpark-skills@playpark"] != true' "${SETTINGS}" >/dev/null 2>&1; then
-  pass "legacy_playpark_plugin_not_enabled"
+# NOTE: it-all-playpark/skills#584 (plugin bin/ 化) がまだ未 merge のため、
+# playpark-local 側だけを有効化すると journal / secfloor-classify 等の
+# bare command が PATH から消え、playpark-local の install も失敗しうる。
+# 584 merge 後の別 PR で false に倒すまでは true のまま残す。
+echo "- legacy_playpark_plugin_still_enabled"
+if jq -e '.enabledPlugins["playpark-skills@playpark"] == true' "${SETTINGS}" >/dev/null 2>&1; then
+  pass "legacy_playpark_plugin_still_enabled"
 else
-  fail "legacy_playpark_plugin_not_enabled" "enabledPlugins[playpark-skills@playpark] must not be true"
+  fail "legacy_playpark_plugin_still_enabled" "enabledPlugins[playpark-skills@playpark] must stay true until skills#584 merges"
 fi
 
 # ---------------------------------------------------------------------------

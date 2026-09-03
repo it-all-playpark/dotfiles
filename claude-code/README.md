@@ -97,9 +97,13 @@ plugin cache から checkout への symlink を張るので repo の編集が再
 PATH に載せることで解決する。`sandbox.excludedCommands` には bare 名のみ登録し、
 `~/.claude/skills/*` 系 glob は撤去済み（issue #179）。
 
-旧 copy mode の `playpark-skills@playpark`（github marketplace `playpark`）は
-`enabledPlugins` で `false` にしてある。マシン上に残っていれば
-`claude plugin uninstall playpark-skills@playpark` で除去してよい。
+旧 copy mode の `playpark-skills@playpark`（github marketplace `playpark`）は、
+[it-all-playpark/skills#584](https://github.com/it-all-playpark/skills/issues/584)
+（plugin `bin/` 化）が未 merge の間は `enabledPlugins` で `true` のまま残す。
+584 merge 前に `false` にすると `journal` / `secfloor-classify` 等の bare command が
+PATH から消え、`playpark-local` 側の install も失敗しうるため。584 merge 後に別 PR で
+`false` へ倒し、マシン上に残っていれば `claude plugin uninstall playpark-skills@playpark`
+で除去する。
 
 hunk-review は plugin ではなく `~/.claude/skills/hunk-review`（home-manager activation が
 `pkgs.hunk` の store path へ symlink を貼る。link mode は plugin dir 直下の外向き symlink を

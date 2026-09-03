@@ -18,7 +18,7 @@
   "enabledPlugins": {
     "dev-flow@playpark-local": true,
     "playpark-core@playpark-local": true,
-    "playpark-skills@playpark": false,
+    "playpark-skills@playpark": true,
     "playpark-skills@playpark-local": true,
     "playwright@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
