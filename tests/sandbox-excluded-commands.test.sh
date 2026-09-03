@@ -4,12 +4,13 @@
 # Run from the repo root: bash tests/sandbox-excluded-commands.test.sh
 # Requires: jq
 #
-# Verifies that the bin/ bare command names (18 names, resolved via PATH
-# once skills#582's bin/ wrappers are installed) are registered in both
-# their argument-less form (`<name>`) and argument-taking form
-# (`<name> *`), and that the pre-existing entries (path globs, gh:*,
-# git:*, etc.) are preserved unchanged. The .claude/skills 系 9 件は
-# issue #179 で削除済み（skills#584 の 3 plugin 化に追従）。
+# Verifies that the bin/ bare command names (28 names, resolved via PATH
+# once skills#582 (dev-flow/playpark-core) and skills#585 (playpark-skills)'s
+# bin/ wrappers are installed) are registered in both their argument-less
+# form (`<name>`) and argument-taking form (`<name> *`), and that the
+# pre-existing entries (path globs, gh:*, git:*, etc.) are preserved
+# unchanged. The .claude/skills 系 9 件は issue #179 で削除済み
+# （skills#584 の 3 plugin 化に追従）。
 
 set -euo pipefail
 
@@ -79,6 +80,16 @@ BARE_NAMES=(
   "analyze-dev-flow-telemetry"
   "detect-stack"
   "ac-lint"
+  "dep-guardian-discover-prs"
+  "dep-guardian-test-pr"
+  "dep-guardian-merge-prs"
+  "repo-commit"
+  "repo-export"
+  "repo-issue"
+  "repo-pr"
+  "qiita-publish"
+  "zenn-publish"
+  "yt-chorus-extract"
 )
 
 # ---------------------------------------------------------------------------
@@ -199,10 +210,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 47 ]; then
+if [ "${total_len}" -eq 67 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 47 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 67 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
