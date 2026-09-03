@@ -39,6 +39,9 @@ result-*
 **/builder_ed25519
 **/builder_ed25519.pub
 
+# dev-flow / pr-iterate の isolation preflight probe 一時ファイル
+.devflow-tmp/
+
 # macOS
 .DS_Store
 
