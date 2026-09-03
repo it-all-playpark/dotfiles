@@ -11,6 +11,7 @@
 # pre-existing entries (path globs, gh:*, git:*, etc.) are preserved
 # unchanged. The .claude/skills 系 9 件は issue #179 で削除済み
 # （skills#584 の 3 plugin 化に追従）。
+# issue #183: skills-wt/* (repo 外 worktree) の 5 エントリを skills/* の twin として要求する
 
 set -euo pipefail
 
@@ -147,6 +148,43 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# skills_wt_path_globs_present
+# ---------------------------------------------------------------------------
+echo "- skills_wt_path_globs_present"
+# shellcheck disable=SC2016 # 意図的に非展開: settings.json に格納された literal string と照合する
+SKILLS_WT_GLOBS=(
+  '/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*'
+  'bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*'
+  'python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*'
+  'bash $HOME/ghq/github.com/it-all-playpark/skills-wt/*'
+  'python3 $HOME/ghq/github.com/it-all-playpark/skills-wt/*'
+)
+missing_skills_wt=()
+for g in "${SKILLS_WT_GLOBS[@]}"; do
+  has_entry "${g}" || missing_skills_wt+=("${g}")
+done
+if [ "${#missing_skills_wt[@]}" -eq 0 ]; then
+  pass "skills_wt_path_globs_present"
+else
+  fail "skills_wt_path_globs_present" "Missing skills-wt globs: ${missing_skills_wt[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# skills_wt_path_globs_not_duplicated
+# ---------------------------------------------------------------------------
+echo "- skills_wt_path_globs_not_duplicated"
+dupes_skills_wt=()
+for g in "${SKILLS_WT_GLOBS[@]}"; do
+  c="$(count_entry "${g}")"
+  [ "${c}" -eq 1 ] || dupes_skills_wt+=("${g} (count=${c})")
+done
+if [ "${#dupes_skills_wt[@]}" -eq 0 ]; then
+  pass "skills_wt_path_globs_not_duplicated"
+else
+  fail "skills_wt_path_globs_not_duplicated" "Unexpected counts: ${dupes_skills_wt[*]}"
+fi
+
+# ---------------------------------------------------------------------------
 # dot_claude_skills_globs_removed
 # ---------------------------------------------------------------------------
 echo "- dot_claude_skills_globs_removed"
@@ -210,10 +248,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 67 ]; then
+if [ "${total_len}" -eq 72 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 67 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 72 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
