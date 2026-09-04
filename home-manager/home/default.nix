@@ -249,9 +249,21 @@ in
         fi
       done
 
+      # hooks-symlink: begin
       # hooks ディレクトリ内のスクリプトへのシンボリックリンク
       if [ -d "$DOTFILES_CLAUDE/hooks" ]; then
         mkdir -p "$CLAUDE_DIR/hooks"
+
+        # dotfiles 側で削除された hook の dangling symlink を掃除する
+        # (plugin へ移植した hook 等。dotfiles/claude-code/hooks を指すものだけ対象)
+        for t in "$CLAUDE_DIR"/hooks/*; do
+          if [ -L "$t" ] && [ ! -e "$t" ]; then
+            case "$(readlink "$t")" in
+              "$DOTFILES_CLAUDE"/hooks/*) rm -f "$t" ;;
+            esac
+          fi
+        done
+
         for f in "$DOTFILES_CLAUDE"/hooks/*.py "$DOTFILES_CLAUDE"/hooks/*.sh; do
           if [ -f "$f" ]; then
             base="$(basename "$f")"
@@ -266,6 +278,7 @@ in
           fi
         done
       fi
+      # hooks-symlink: end
       )
     '';
 
