@@ -200,16 +200,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# hooks_dot_claude_skills_unchanged
+# hooks_no_dot_claude_skills
 # ---------------------------------------------------------------------------
-echo "- hooks_dot_claude_skills_unchanged"
+echo "- hooks_no_dot_claude_skills"
 count_hooks="$(jq '
     .hooks | [.. | strings | select(contains(".claude/skills"))] | length
   ' "${SETTINGS}")"
-if [ "${count_hooks}" -eq 3 ]; then
-  pass "hooks_dot_claude_skills_unchanged"
+if [ "${count_hooks}" -eq 0 ]; then
+  pass "hooks_no_dot_claude_skills"
 else
-  fail "hooks_dot_claude_skills_unchanged" "Expected 3 occurrences in hooks, got ${count_hooks}"
+  fail "hooks_no_dot_claude_skills" "Expected 0 occurrences in hooks (migrated to plugin hooks.json in skills#572), got ${count_hooks}"
 fi
 
 # ---------------------------------------------------------------------------

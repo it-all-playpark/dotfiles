@@ -30,7 +30,7 @@ Conflict: Safety > Scope > Quality > Speed
 - **No Over-Orchestration**: trivial な単発作業は Workflow 化せず直接ツールを叩く。ultracode でも例外でない
 
 ## Tool Routing
-🟢 全読み（20KB 超の構造化ファイル / 100KB 超）は `pretool-context-guard.sh` が deny し `jq`/`gron`/`yq`/`duckdb`/`rga` を提示する。以下は hook が意図を検知できないので自分で選ぶ:
+🟢 全読み（20KB 超の構造化ファイル / 100KB 超）は `playpark-core` plugin の `pretool-context-guard.sh` hook が deny し `jq`/`gron`/`yq`/`duckdb`/`rga` を提示する。以下は hook が意図を検知できないので自分で選ぶ:
 - **コードベース概観** → `tokei`（読み始める前にまず全体像）
 - **同一パターンを3箇所以上書き換え**（rename・API移行）→ sed でなく `ast-grep --pattern … --rewrite …`（コメント・文字列に誤爆しない）
 - **grep 結果に偽陽性が混ざる検索** → `ast-grep --pattern`（AST ノードのみ）

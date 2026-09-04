@@ -29,19 +29,6 @@
         "matcher": ""
       }
     ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
-            "statusMessage": "出力内の秘匿情報マスク中...",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
     "PreCompact": [
       {
         "hooks": [
@@ -56,18 +43,6 @@
       }
     ],
     "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
-            "if": "Write(*/SKILL.md)",
-            "statusMessage": "SKILL.md frontmatter バリデーション中...",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Write"
-      },
       {
         "hooks": [
           {
@@ -122,22 +97,6 @@
           {
             "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
             "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "args": [
-              "-c",
-              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
-            ],
-            "command": "bash",
-            "timeout": 1,
             "type": "command"
           }
         ],

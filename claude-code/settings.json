@@ -107,25 +107,7 @@
       {
         "hooks": [
           {
-            "command": "bash \"$HOME/.claude/hooks/posttool-secret-mask.sh\"",
-            "statusMessage": "出力内の秘匿情報マスク中...",
-            "timeout": 5,
-            "type": "command"
-          },
-          {
             "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\"",
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" hook-capture",
-            "timeout": 5,
             "type": "command"
           }
         ],
@@ -146,28 +128,6 @@
       }
     ],
     "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/skills/skill-retrospective/scripts/journal.sh\" track-skill",
-            "timeout": 3,
-            "type": "command"
-          }
-        ],
-        "matcher": "Skill"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/validate-skill-frontmatter.sh\"",
-            "if": "Write(*/SKILL.md)",
-            "statusMessage": "SKILL.md frontmatter バリデーション中...",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Write"
-      },
       {
         "hooks": [
           {
@@ -234,39 +194,6 @@
           }
         ],
         "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/pretool-inline-edit-guard.sh\"",
-            "statusMessage": "inline 生成区間ガードチェック中...",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Edit|Write"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/pretool-bash-inline-commit-gate.sh\"",
-            "statusMessage": "inline 同期チェック中...",
-            "timeout": 30,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/pretool-context-guard.sh\"",
-            "statusMessage": "コンテキスト浪費チェック中...",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash|Read"
       }
     ],
     "SessionStart": [
@@ -289,10 +216,6 @@
       },
       {
         "hooks": [
-          {
-            "command": "SCRIPT=\"$HOME/.claude/skills/claude-zombie-kill/scripts/zombie-kill.sh\"; [[ -x \"$SCRIPT\" ]] && bash \"$SCRIPT\" --force --min-hours 48",
-            "type": "command"
-          },
           {
             "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
             "timeout": 5,
@@ -328,27 +251,6 @@
           {
             "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
             "timeout": 5,
-            "type": "command"
-          },
-          {
-            "command": "bash \"$HOME/.claude/hooks/stop-devflow-telemetry.sh\"",
-            "timeout": 15,
-            "type": "command"
-          }
-        ],
-        "matcher": ""
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "args": [
-              "-c",
-              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
-            ],
-            "command": "bash",
-            "timeout": 1,
             "type": "command"
           }
         ],

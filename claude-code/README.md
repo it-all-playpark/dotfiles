@@ -44,21 +44,26 @@ nix run .#update
 
 `settings.json` の `hooks` セクションで wire し、`~/.claude/hooks/` にある実体スクリプトを呼ぶ。
 
+dev-flow / skills 共通の hook（inline 生成区間ガード、inline 同期チェック、dev-flow telemetry、
+コンテキスト浪費ガード、secret マスク、SKILL.md frontmatter 検証、skill 使用ログ、zombie-kill）は
+it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark-skills`）の
+`hooks/hooks.json` へ移植済みで、`${CLAUDE_PLUGIN_ROOT}` 経由で発火する。ここに残るのは
+マシン固有の hook のみ（issue #185）。
+
 | イベント | スクリプト | 役割 |
 |---------|----------|------|
 | `SessionStart` (startup / resume / compact) | `session-start-replay.sh` | 直近の作業状態を再表示 |
-| `SessionStart` (startup) | `claude-zombie-kill` skill | 48h 以上 idle な claude プロセスを kill |
 | `PreCompact` | `pre-compact-dump.sh` | compact 前に session 状態を `claudedocs/session-*.md` へ退避 |
-| `PreToolUse` Skill | `skill-retrospective` の `journal.sh track-skill` | skill 使用ログ |
-| `PreToolUse` Write (`*/SKILL.md`) | `validate-skill-frontmatter.sh` | skill frontmatter 検証 |
 | `PreToolUse` Bash (`git push*`) | `allow-feature-push.sh` | protected branch への push を抑止 |
 | `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを抑止 |
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
-| `PreToolUse` Bash \| Read | `pretool-context-guard.sh` | 20KB 超の構造化ファイル / 100KB 超のファイルの全読みを deny し、`jq`/`gron`/`yq`/`duckdb`/`rga` の代替コマンドを返す |
-| `PostToolUse` 系 | `posttool-secret-mask.sh` | 出力中の secret をマスク |
-| `Stop` | `stop-devflow-telemetry.sh` | dev-flow telemetry の journal flush（失敗時 `~/.claude/logs/stop-devflow-telemetry.log`） |
+| `PermissionRequest` | `permission-journal.sh` | permission 要求を journal に記録 |
+| `PreToolUse` Bash | `pretool-npx-guard.sh` | npx 実行ガード |
+| `PostToolUse` | `memory-monitor.py` | メモリ使用量監視 |
+| `Stop` | `stop-unfinished-guard.sh` | 未完了タスクがあれば停止を抑止 |
+| `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知 |
 
 テストファイル（`*.test.sh`）は symlink 対象外。
 
@@ -110,7 +115,12 @@ hunk-review は plugin ではなく `~/.claude/skills/hunk-review`（home-manage
 拒否するため plugin 内には置けない）。
 
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
-移植予定。
+移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。
+
+hermes コンテナ（`container.settings.json` を `/root/.claude/settings.json` として mount、
+`enabledPlugins` は空）では plugin が動かないため、#185 以降 PostToolUse の secret マスクと
+SKILL.md frontmatter 検証はコンテナ内では発火しない（gateway 側 `security.redact_secrets` は
+継続）。必要なら hermes 側で `playpark-core` plugin を有効化する。
 
 ### 導入手順（skills#571 merge 後）
 
