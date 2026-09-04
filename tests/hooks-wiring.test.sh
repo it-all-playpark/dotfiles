@@ -84,17 +84,39 @@ fi
 
 # ---------------------------------------------------------------------------
 # settings_no_migrated_hooks
+#
+# claude-skill-ctx is intentionally excluded here: the UserPromptSubmit hook
+# that clears /tmp/claude-skill-ctx-<session> has no migration target in any
+# of the 3 plugin hooks.json files (dev-flow / playpark-core / playpark-skills
+# only wire PreToolUse/PostToolUse/PostToolUseFailure/Stop/SessionStart), so it
+# must stay in claude-code/settings.json or skill-retrospective's journal.sh
+# active-skill attribution silently regresses to a 30min-stale fallback.
 # ---------------------------------------------------------------------------
 echo "- settings_no_migrated_hooks"
 count="$(jq '
     [.hooks | .. | strings
-      | select(test("stop-devflow-telemetry|pretool-inline-edit-guard|pretool-bash-inline-commit-gate|pretool-context-guard|posttool-secret-mask|validate-skill-frontmatter|skill-retrospective/scripts/journal\\.sh|zombie-kill|claude-skill-ctx"))
+      | select(test("stop-devflow-telemetry|pretool-inline-edit-guard|pretool-bash-inline-commit-gate|pretool-context-guard|posttool-secret-mask|validate-skill-frontmatter|skill-retrospective/scripts/journal\\.sh|zombie-kill"))
     ] | length
   ' "${SETTINGS}")"
 if [ "${count}" -eq 0 ]; then
   pass "settings_no_migrated_hooks"
 else
   fail "settings_no_migrated_hooks" "Expected 0 references to migrated hooks in settings.json, got ${count}"
+fi
+
+# ---------------------------------------------------------------------------
+# settings_userpromptsubmit_skill_ctx_present
+# ---------------------------------------------------------------------------
+echo "- settings_userpromptsubmit_skill_ctx_present"
+count="$(jq '
+    [.hooks.UserPromptSubmit // [] | .. | strings
+      | select(test("claude-skill-ctx"))
+    ] | length
+  ' "${SETTINGS}")"
+if [ "${count}" -gt 0 ]; then
+  pass "settings_userpromptsubmit_skill_ctx_present"
+else
+  fail "settings_userpromptsubmit_skill_ctx_present" "Expected UserPromptSubmit claude-skill-ctx cleanup hook to remain in settings.json"
 fi
 
 # ---------------------------------------------------------------------------

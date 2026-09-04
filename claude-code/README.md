@@ -48,7 +48,7 @@ dev-flow / skills 共通の hook（inline 生成区間ガード、inline 同期�
 コンテキスト浪費ガード、secret マスク、SKILL.md frontmatter 検証、skill 使用ログ、zombie-kill）は
 it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark-skills`）の
 `hooks/hooks.json` へ移植済みで、`${CLAUDE_PLUGIN_ROOT}` 経由で発火する。ここに残るのは
-マシン固有の hook のみ（issue #185）。
+マシン固有の hook に加え、`UserPromptSubmit`（plugin 側に移植先が無いため維持。下記参照）。
 
 | イベント | スクリプト | 役割 |
 |---------|----------|------|
@@ -64,6 +64,7 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `PostToolUse` | `memory-monitor.py` | メモリ使用量監視 |
 | `Stop` | `stop-unfinished-guard.sh` | 未完了タスクがあれば停止を抑止 |
 | `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知 |
+| `UserPromptSubmit` | inline `rm -f /tmp/claude-skill-ctx-<session>` | `playpark-core` plugin の `skill-retrospective/journal.sh` が使う skill-ctx state file をプロンプト投入毎にクリア。plugin 側 `hooks.json` に `UserPromptSubmit` の移植先が無いため dotfiles 側に維持（journal.sh 側の 30 分 TTL は取りこぼし時の保険） |
 
 テストファイル（`*.test.sh`）は symlink 対象外。
 
@@ -116,6 +117,8 @@ hunk-review は plugin ではなく `~/.claude/skills/hunk-review`（home-manage
 
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
 移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。
+ただし `UserPromptSubmit` の skill-ctx クリアは plugin 側 `hooks.json` 3 種いずれにも移植先が無いため、
+`claude-code/settings.json` に残している（上記 hooks 表参照）。
 
 hermes コンテナ（`container.settings.json` を `/root/.claude/settings.json` として mount、
 `enabledPlugins` は空）では plugin が動かないため、#185 以降 PostToolUse の secret マスクと
