@@ -496,6 +496,8 @@
       "hypothesis-check *",
       "analyze-dev-flow-telemetry",
       "analyze-dev-flow-telemetry *",
+      "dev-flow-prerun",
+      "dev-flow-prerun *",
       "detect-stack",
       "detect-stack *",
       "ac-lint",
