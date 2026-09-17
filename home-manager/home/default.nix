@@ -184,33 +184,6 @@ in
         echo "Warning: $SKILLS_AGENTS does not exist. Skipping agents symlink."
       fi
 
-      # ~/.claude/skills/hunk-review → hunk 同梱スキル（upstream 推奨の symlink 方式）
-      # `hunk skill path` の store path は hunk 更新 + GC で消えるため、
-      # rebuild ごとに現行世代の pkgs.hunk へ貼り直して同期を保つ。
-      #
-      # skills#571 以降、skills 本体は plugin（settings.json の extraKnownMarketplaces、
-      # link mode）で読み、~/.claude/skills の repo symlink は撤去される。hunk-review を
-      # plugin dir（plugins/playpark-skills/）直下に置くことはできない: Claude Code の
-      # link mode は plugin dir の top-level entry を realpath 解決し、dir 外（/nix/store）
-      # を指す entry があると "plugin command source link escapes producer directory" で
-      # install を拒否する。そのため ~/.claude/skills を実 dir として作り user skill として
-      # 読ませる。symlink 撤去前は ~/.claude/skills が repo を指すので従来通り repo 内に
-      # 作られる（repo 側 .gitignore の `hunk-review` で無視される）。
-      # hunk-review-symlink: begin
-      CLAUDE_SKILLS="$CLAUDE_DIR/skills"
-      HUNK_SKILL="$CLAUDE_SKILLS/hunk-review"
-      if [ -L "$CLAUDE_SKILLS" ] && [ ! -e "$CLAUDE_SKILLS" ]; then
-        echo "Warning: $CLAUDE_SKILLS is a dangling symlink. Skipping hunk-review skill symlink."
-      else
-        mkdir -p "$CLAUDE_SKILLS"
-        if [ -L "$HUNK_SKILL" ] || [ ! -e "$HUNK_SKILL" ]; then
-          ln -sfn "${pkgs.hunk}/skills/hunk-review" "$HUNK_SKILL"
-        else
-          echo "Warning: $HUNK_SKILL exists and is not a symlink. Skipping (manual review needed)."
-        fi
-      fi
-      # hunk-review-symlink: end
-
       # settings.json へのシンボリックリンク
       # 既存ファイルがシンボリックリンクでない場合は削除
       if [ -f "$CLAUDE_DIR/settings.json" ] && [ ! -L "$CLAUDE_DIR/settings.json" ]; then

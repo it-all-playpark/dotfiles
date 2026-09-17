@@ -52,7 +52,6 @@ with pkgs;
   ffmpeg
   flyctl
   herdr
-  hunk
   hyperfine # 統計的に妥当なベンチマーク CLI。性能主張を計測で裏付ける (Evidence > assumptions)
   mariadb
   marp-cli
