@@ -7,9 +7,6 @@ set -x SMITHERY_API_KEY '<SMITHERY_API_KEY>'
 set -x SMITHERY_PROFILE '<SMITHERY_PROFILE>'
 set -x MORPH_API_KEY '<MORPH_API_KEY>'
 
-# === Ollama (local LLM) ===
-set -x OLLAMA_API_KEY 'ollama'
-
 # === OpenClaw ===
 set -x SLACK_BOT_TOKEN '<SLACK_BOT_TOKEN>'
 set -x SLACK_APP_TOKEN '<SLACK_APP_TOKEN>'

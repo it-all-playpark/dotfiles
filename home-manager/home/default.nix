@@ -597,12 +597,6 @@ in
     '';
   };
 
-  # Ollama サーバーをログイン時に自動起動
-  # macOS: launchd agent, Linux: systemd user service
-  services.ollama = {
-    enable = true;
-  };
-
   # Syncthing をログイン時に自動起動
   # macOS: launchd agent, Linux: systemd user service
   # MacBook ↔ Mac Studio 間でスクショ等を双方向同期する。回線が切れても復帰時に差分を
@@ -685,6 +679,42 @@ in
         ProcessType = "Background";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/mise-upgrade.log";
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/mise-upgrade.log";
+      };
+    };
+
+    # home-manager の generation を毎週削除して Nix store を痩せさせる。
+    # nix-darwin の nix.gc (root, 日曜 05:00) は /nix/var/nix/profiles しか走査せず、
+    # XDG 配下の ~/.local/state/nix/profiles は対象外 (man nix-collect-garbage)。
+    # そのため home-manager switch のたびに増える generation が GC root として
+    # store path を握り続け、システム側の GC だけでは store が縮まなかった。
+    # home-manager 標準の nix.gc は darwin で options を ProgramArguments の 1 要素として
+    # 渡すため "--delete-older-than 14d" が unrecognised flag になる。よって自前で定義する。
+    # 保持期間はシステム側 (darwin/default.nix の nix.gc) と揃えて 14 日。
+    # システム側 GC の直前 (日曜 04:45) に走らせ、ここで root を外した path を
+    # 05:00 の root GC が回収する。スリープ中だった場合は launchd が復帰時に実行する。
+    nix-gc-user = {
+      enable = true;
+      config = {
+        Label = "com.playpark.nix-gc-user";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''
+            /bin/wait4path /nix/var/nix/daemon-socket/socket \
+              && exec "${pkgs.nix}/bin/nix-collect-garbage" --delete-older-than 14d
+          ''
+        ];
+        StartCalendarInterval = [
+          {
+            Weekday = 0;
+            Hour = 4;
+            Minute = 45;
+          }
+        ];
+        RunAtLoad = false;
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/nix-gc-user.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/nix-gc-user.log";
       };
     };
 

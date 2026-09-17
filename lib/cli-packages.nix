@@ -57,7 +57,6 @@ with pkgs;
   mariadb
   marp-cli
   netlify-cli
-  ollama
   opentofu
   postgresql_17
   procs
