@@ -86,17 +86,6 @@
                 nativeBuildInputs = old.nativeBuildInputs ++ [ prev.cmake ];
               });
             })
-            # ollama 0.30.5 は macOS arm64 で MLX backend がデフォルト有効になり、
-            # Nix サンドボックスに存在しない Xcode の Metal toolchain を要求してビルドに失敗する。
-            # nixpkgs master (0.30.6) と同じく -DOLLAMA_MLX_BACKENDS="" で無効化する。
-            # nixpkgs 更新で 0.30.6 以降が入ったら削除可。
-            (_final: prev: {
-              ollama = prev.ollama.overrideAttrs (old: {
-                preBuild =
-                  builtins.replaceStrings [ "cmake -B build" ] [ "cmake -B build -DOLLAMA_MLX_BACKENDS=\"\"" ]
-                    old.preBuild;
-              });
-            })
             # hunk は flake input から取得（nixpkgs unstable 未着のため overlay で pkgs.hunk を注入。
             # nixpkgs に hunk が降りてきた場合もこの overlay が優先されるが、
             # warnIf が eval warning で「input 削除して pkgs.hunk へ切替可」と通知する）
