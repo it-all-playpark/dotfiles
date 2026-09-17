@@ -621,7 +621,6 @@
     "gws-calendar-insert": "off",
     "gws-docs": "off",
     "gws-docs-write": "off",
-    "hunk-review": "user-invocable-only",
     "image-convert": "user-invocable-only",
     "image-remove-bg": "user-invocable-only",
     "image-resize": "user-invocable-only",

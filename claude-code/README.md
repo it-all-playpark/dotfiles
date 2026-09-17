@@ -111,10 +111,6 @@ PATH から消え、`playpark-local` 側の install も失敗しうるため。5
 `false` へ倒し、マシン上に残っていれば `claude plugin uninstall playpark-skills@playpark`
 で除去する。
 
-hunk-review は plugin ではなく `~/.claude/skills/hunk-review`（home-manager activation が
-`pkgs.hunk` の store path へ symlink を貼る。link mode は plugin dir 直下の外向き symlink を
-拒否するため plugin 内には置けない）。
-
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
 移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。
 ただし `UserPromptSubmit` の skill-ctx クリアは plugin 側 `hooks.json` 3 種いずれにも移植先が無いため、

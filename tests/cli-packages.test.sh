@@ -77,10 +77,7 @@ eval_pkg_names() {
   nix eval --json --impure --expr "
     let
       flake = builtins.getFlake \"${REPO_ROOT}\";
-      pkgs = import flake.inputs.nixpkgs {
-        system = \"${system}\";
-        overlays = [ (_final: _prev: { hunk = flake.inputs.hunk.packages.\"${system}\".default; }) ];
-      };
+      pkgs = import flake.inputs.nixpkgs { system = \"${system}\"; };
     in
       map (p: p.pname or p.name) (
         import ${REPO_ROOT}/lib/cli-packages.nix { inherit pkgs; }
@@ -107,21 +104,8 @@ if [ "${NIX_AVAILABLE}" -eq 1 ]; then
     fail "eval_hostList_excludes_nodejs" \
       "nodejs must NOT appear in cli-packages.nix (managed by mise). Got: ${host_pkgs}"
   fi
-  # -------------------------------------------------------------------------
-  # AC: package list must include hunk (git diff review TUI)
-  # upstream pname is "hunkdiff" (binary is bin/hunk), so use a prefix match.
-  # -------------------------------------------------------------------------
-  echo "- hostList_includes_hunk"
-  if echo "${host_pkgs}" | jq -e 'map(select(startswith("hunk"))) | length > 0' >/dev/null 2>&1; then
-    pass "hostList_includes_hunk"
-  else
-    fail "hostList_includes_hunk" \
-      "Expected hunk* in cli-packages.nix, got: ${host_pkgs}"
-  fi
 else
   skip "eval_hostList_excludes_nodejs" \
-    "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
-  skip "hostList_includes_hunk" \
     "nix daemon unreachable (sandboxed environment) — run outside sandbox for full verification"
 fi
 
