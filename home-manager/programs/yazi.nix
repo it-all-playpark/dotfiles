@@ -6,14 +6,14 @@
     settings = {
       opener.edit = [
         {
-          run = "nvim $@";
+          run = "nvim %s";
           block = true;
         }
       ];
-      manager.show_hidden = true;
+      mgr.show_hidden = true;
     };
     keymap = {
-      manager.keymap = [
+      mgr.keymap = [
         {
           on = "<esc";
           run = "escape";
@@ -684,7 +684,7 @@
         # Tasks (manager 内でタスク表示呼出)
         {
           on = "w";
-          run = "tasks_show";
+          run = "tasks:show";
           desc = "Show task manager";
         }
         # Help
@@ -1231,7 +1231,7 @@
           on = "<Enter>";
           run = [
             "close --submit"
-            "close_input --submit"
+            "input:close --submit"
           ];
           desc = "Submit the completion and input";
         }
