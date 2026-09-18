@@ -51,6 +51,7 @@ with pkgs;
   fastfetch
   ffmpeg
   flyctl
+  google-cloud-sql-proxy # Cloud SQL Auth Proxy v2。Claude Code sandbox からは excludedCommands で非 sandbox 実行し、mysql/mysqldump は 127.0.0.1 経由で接続
   herdr
   hyperfine # 統計的に妥当なベンチマーク CLI。性能主張を計測で裏付ける (Evidence > assumptions)
   mariadb
