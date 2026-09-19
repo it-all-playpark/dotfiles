@@ -130,8 +130,10 @@ git push (https) → credential helper `gh auth git-credential`
    `CLOUDSDK_ACTIVE_CONFIG_NAME`）が既に set なら、判定を飛ばして手順 5 へ。
    初回 login の `GH_CONFIG_DIR=… gh auth login` がそのまま使え、shim が付けた env を
    継承した孫プロセス（gh → git → gh）も二重判定しない
-2. `$PWD` が `$HOME/ghq/github.com/<org>/` に一致すれば `<org>` を取る。一致しなければ
-   `pwd -P`（symlink 解決後）でもう一度試す。どちらも不一致なら判定なしで手順 5 へ
+2. `$PWD` が `$HOME/ghq/github.com/<org>/` または `$HOME/ghq/github.com-<alias>/<org>/`
+   （SSH host alias 経由で `ghq get` した置き場）に一致すれば `<org>` を取る。一致しなければ
+   `pwd -P`（symlink 解決後）でもう一度試す。どちらも不一致なら判定なしで手順 5 へ。
+   `github.com` 以外のホスト（`gitlab.com` 等）は対象外
 3. マップを `jq` で引く。`.orgs[<org>]` が無ければ判定なしで手順 5 へ
 4. 対象キーがあれば `~` を展開して env に set する
 5. 実体を解決して `exec`。解決は **PATH から shim dir を除いた PATH** で
@@ -205,7 +207,8 @@ hooks の追加は無い。
 
 `claude-code/bin/account-exec.test.sh`。既存 `hooks/*.test.sh` と同じ自前 PASS/FAIL
 形式。`$TMPDIR` 配下に一時 `HOME` を作り、その中に
-`ghq/github.com/<org>/repo/.claude/worktrees/x` を掘る。fake の `gh` / `gcloud`
+`ghq/github.com/<org>/repo/.claude/worktrees/x` と `ghq/github.com-<alias>/<org>/repo` を掘る。
+fake の `gh` / `gcloud`
 （受け取った `GH_CONFIG_DIR` / `CLOUDSDK_ACTIVE_CONFIG_NAME` と `argv` を 1 行ずつ
 出力するだけ）を一時 dir に置き、`PATH=<shim dir>:<fake dir>` で shim を呼ぶ。
 `ACCOUNT_MAP` は一時ファイル。
@@ -224,6 +227,7 @@ hooks の追加は無い。
 | 10 | PATH に shim dir しか無い | exit 127（無限再帰しない、1 秒以内に終わる） |
 | 11 | `ACCOUNT_EXEC_DEBUG=1` | stderr に org / env / exec 先が出る |
 | 12 | 実体の exit code が非 0 | shim の exit code も同じ値 |
+| 13 | SSH host alias 置き場 `…/ghq/github.com-<alias>/<org>/repo` で `gh` / `gitlab.com` 配下で `gh` | 前者は 1 と同じ / 後者は env 未設定・stderr 空 |
 
 加えて `nix fmt -- --no-cache` と `nix flake check` が通ること（shellcheck 含む）。
 
@@ -239,7 +243,7 @@ exec $SHELL -l                                        # PATH を取り直す
 確認:
 
 ```bash
-cd ~/ghq/github.com/BusinessProcessDX/<repo>
+cd ~/ghq/github.com/BusinessProcessDX/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/BusinessProcessDX/<repo>
 which gh                      # → ~/.claude/bin/gh
 gh auth status                # → th-it-dev
 gcloud config list            # → th-it-all (account th.it.dev@…)

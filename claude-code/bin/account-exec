@@ -2,7 +2,8 @@
 # account-exec: gh / gcloud の cwd 連動アカウント固定 shim
 #
 # bin/gh と bin/gcloud はこのファイルへの symlink。$0 の basename で対象ツールを判定し、
-# $PWD が $HOME/ghq/github.com/<org>/ 配下なら account-map.json を引いて
+# $PWD が $HOME/ghq/github.com/<org>/ または $HOME/ghq/github.com-<alias>/<org>/ 配下なら
+# account-map.json を引いて
 # GH_CONFIG_DIR / CLOUDSDK_ACTIVE_CONFIG_NAME を付け、PATH から shim dir を除いて
 # 解決した実体を exec する。exec 先の PATH は元のまま（git → gh の credential helper
 # 呼び出しも shim を通り続けるため）。
@@ -37,12 +38,14 @@ warn() {
   echo "account-exec: $*" >&2
 }
 
-# $1 が $HOME/ghq/github.com/<org>/... なら <org> を出力、それ以外は空
+# $1 が $HOME/ghq/github.com/<org>/... または $HOME/ghq/github.com-<alias>/<org>/...
+# (SSH host alias 経由で ghq get した場合の置き場) なら <org> を出力、それ以外は空
 org_of() {
   local rest
   case "$1" in
-  "$HOME/ghq/github.com/"*)
-    rest="${1#"$HOME/ghq/github.com/"}"
+  "$HOME/ghq/github.com/"* | "$HOME/ghq/github.com-"*"/"*)
+    rest="${1#"$HOME/ghq/github.com"}" # "/<org>/..." または "-<alias>/<org>/..."
+    rest="${rest#*/}"                   # "<org>/..."
     printf '%s' "${rest%%/*}"
     ;;
   esac
