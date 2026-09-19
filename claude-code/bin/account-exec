@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# account-exec: gh / gcloud の cwd 連動アカウント固定 shim
+#
+# bin/gh と bin/gcloud はこのファイルへの symlink。$0 の basename で対象ツールを判定し、
+# $PWD が $HOME/ghq/github.com/<org>/ 配下なら account-map.json を引いて
+# GH_CONFIG_DIR / CLOUDSDK_ACTIVE_CONFIG_NAME を付け、PATH から shim dir を除いて
+# 解決した実体を exec する。exec 先の PATH は元のまま（git → gh の credential helper
+# 呼び出しも shim を通り続けるため）。
+#
+# 設計: docs/specs/2026-09-19-claude-account-env-design.md
+#
+# 環境変数:
+#   ACCOUNT_MAP         マップの場所（既定 $HOME/.claude/account-map.json）
+#   ACCOUNT_EXEC_DEBUG  =1 で判定結果を stderr に 1 行出す
+#
+# fail 方針は fail-open: マップ不在 / JSON 不正 / jq 不在 / 値が不正 のときは
+# env を付けずに実体へ passthrough し、stderr に 1 行だけ警告する。
+set -euo pipefail
+
+tool="$(basename "$0")"
+case "$tool" in
+gh)
+  var=GH_CONFIG_DIR
+  key=gh_config_dir
+  ;;
+gcloud)
+  var=CLOUDSDK_ACTIVE_CONFIG_NAME
+  key=gcloud_config
+  ;;
+*)
+  echo "account-exec: unsupported tool name '$tool' (expected gh or gcloud)" >&2
+  exit 2
+  ;;
+esac
+
+warn() {
+  echo "account-exec: $*" >&2
+}
+
+# $1 が $HOME/ghq/github.com/<org>/... なら <org> を出力、それ以外は空
+org_of() {
+  local rest
+  case "$1" in
+  "$HOME/ghq/github.com/"*)
+    rest="${1#"$HOME/ghq/github.com/"}"
+    printf '%s' "${rest%%/*}"
+    ;;
+  esac
+}
+
+org=""
+val=""
+
+# 1. 対象 env が既に set なら判定しない（明示指定、および shim が付けた env を
+#    継承した孫プロセス gh → git → gh の二重判定防止）
+if [ -z "${!var+x}" ]; then
+  # 2. $PWD で判定。不一致なら pwd -P（symlink 解決後）で再試行
+  org="$(org_of "$PWD")"
+  if [ -z "$org" ]; then
+    org="$(org_of "$(pwd -P)")"
+  fi
+
+  # 3. マップを引く
+  if [ -n "$org" ]; then
+    ACCOUNT_MAP="${ACCOUNT_MAP:-$HOME/.claude/account-map.json}"
+    if ! command -v jq >/dev/null 2>&1; then
+      warn "jq not found; passthrough without account mapping"
+    elif [ ! -f "$ACCOUNT_MAP" ]; then
+      warn "account map not found: $ACCOUNT_MAP; passthrough"
+    else
+      # 1 回の jq で「JSON 不正 / 未登録 / 値がオブジェクトでない / 値」を判別する
+      result="$(jq -r --arg org "$org" --arg key "$key" '
+        if type != "object" then "invalid"
+        elif (.orgs | type) != "object" then "unmapped"
+        elif (.orgs[$org] | type) == "null" then "unmapped"
+        elif (.orgs[$org] | type) != "object" then "notobject"
+        else "ok " + ((.orgs[$org][$key] | if type == "string" then . else "" end))
+        end' "$ACCOUNT_MAP" 2>/dev/null)" || result="invalid"
+      case "$result" in
+      invalid) warn "account map is not valid JSON: $ACCOUNT_MAP; passthrough" ;;
+      unmapped) ;;
+      notobject) warn "orgs.$org in $ACCOUNT_MAP is not an object; passthrough" ;;
+      "ok "*) val="${result#ok }" ;;
+      esac
+
+      # 4. 値を検査し、先頭の ~ だけ $HOME に展開して env に set
+      # shellcheck disable=SC2088 # 意図的: パターン/除去とも "~/" は文字列として扱う（展開しない）
+      case "$val" in
+      "") ;;
+      *"'"* | *$'\n'*)
+        warn "orgs.$org.$key in $ACCOUNT_MAP contains a quote or newline; passthrough"
+        val=""
+        ;;
+      "~") val="$HOME" ;;
+      "~/"*) val="$HOME/${val#"~/"}" ;;
+      esac
+      if [ -n "$val" ]; then
+        # shellcheck disable=SC2163
+        export "$var=$val"
+      fi
+    fi
+  fi
+fi
+
+# 5. PATH から shim dir（$HOME/.claude/bin と自身の物理 dir）を除いて実体を解決
+self="$0"
+if resolved="$(readlink -f "$0" 2>/dev/null)" && [ -n "$resolved" ]; then
+  self="$resolved"
+fi
+self_dir="$(cd "$(dirname "$self")" && pwd -P)"
+shim_dirs=":$HOME/.claude/bin:$self_dir:"
+if home_bin_phys="$(cd "$HOME/.claude/bin" 2>/dev/null && pwd -P)"; then
+  shim_dirs="$shim_dirs$home_bin_phys:"
+fi
+
+lookup_path=""
+p_rest="$PATH:"
+while [ -n "$p_rest" ]; do
+  p="${p_rest%%:*}"
+  p_rest="${p_rest#*:}"
+  [ -z "$p" ] && continue
+  p_phys="$(cd "$p" 2>/dev/null && pwd -P)" || p_phys="$p"
+  case "$shim_dirs" in
+  *":$p:"* | *":$p_phys:"*) continue ;;
+  esac
+  lookup_path="${lookup_path:+$lookup_path:}$p"
+done
+
+real=""
+if [ -n "$lookup_path" ]; then
+  real="$(PATH="$lookup_path" command -v "$tool" 2>/dev/null || true)"
+fi
+if [ -z "$real" ]; then
+  echo "account-exec: real '$tool' not found in PATH (shim dirs excluded: $HOME/.claude/bin, $self_dir)" >&2
+  exit 127
+fi
+# 6. 解決先が shim 自身（同一 inode）なら再帰しない
+if [ "$real" -ef "$self" ]; then
+  echo "account-exec: resolved '$tool' is the shim itself ($real); refusing to recurse" >&2
+  exit 127
+fi
+
+if [ "${ACCOUNT_EXEC_DEBUG:-}" = 1 ]; then
+  echo "account-exec: tool=$tool org=${org:-<none>} $var=${!var-<unset>} exec=$real" >&2
+fi
+
+exec "$real" "$@"

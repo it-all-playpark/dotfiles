@@ -244,6 +244,17 @@
           }
         ],
         "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/session-start-account-path.sh\"",
+            "statusMessage": "~/.claude/bin を PATH に追加中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ],
     "Stop": [
@@ -546,13 +557,15 @@
         "~/Library/Caches/treefmt",
         "~/ghq/**/.claude/scheduled_tasks.json",
         "~/ghq/**/.claude/scheduled_tasks.lock",
-        "~/.config/gws"
+        "~/.config/gws",
+        "~/.config/gcloud"
       ],
       "denyRead": [
         "~/.aws/**",
         "~/.ssh/**",
         "~/.gnupg/**",
-        "~/.config/gh/**"
+        "~/.config/gh/**",
+        "~/.config/gh-*/**"
       ]
     },
     "network": {

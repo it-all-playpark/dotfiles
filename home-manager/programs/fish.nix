@@ -9,6 +9,9 @@ in
     shellInit = ''
       # PATH設定
       fish_add_path $HOME/.nix-profile/bin
+      # gh / gcloud の cwd 連動アカウント shim (~/.claude/bin)。fish_add_path は prepend なので
+      # 後に呼ぶこの行が nix-profile より前に来る。設計: docs/specs/2026-09-19-claude-account-env-design.md
+      fish_add_path $HOME/.claude/bin
       ${shellCommon.getPathConfig.darwin}
       ${shellCommon.getPathConfig.linux}
 
