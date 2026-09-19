@@ -58,7 +58,17 @@ GHONLY_REPO="$HOME_T/ghq/github.com/ghonly/repo"
 UNMAPPED_REPO="$HOME_T/ghq/github.com/nobody/repo"
 OUTSIDE_DIR="$HOME_T/elsewhere"
 
-mkdir -p "$FAKE_BIN" "$SHIM_BIN" "$ORG_WT" "$GHONLY_REPO" "$UNMAPPED_REPO" "$OUTSIDE_DIR" "$TMPROOT/empty-bin"
+BASH_JQ_DIR="$TMPROOT/bash-jq-dir"
+mkdir -p "$FAKE_BIN" "$SHIM_BIN" "$ORG_WT" "$GHONLY_REPO" "$UNMAPPED_REPO" "$OUTSIDE_DIR" "$TMPROOT/empty-bin" "$BASH_JQ_DIR"
+
+# Create symlinks to utilities in a dedicated directory (without gh/gcloud)
+# This is used for cases 9 and 10 which need the shim to be executable but no real gh
+for cmd in bash jq basename dirname readlink pwd cd; do
+  cmd_path=$(command -v "$cmd" 2>/dev/null)
+  if [ -n "$cmd_path" ] && [ "$cmd" != "cd" ] && [ "$cmd" != "pwd" ]; then
+    ln -s "$cmd_path" "$BASH_JQ_DIR/$cmd"
+  fi
+done
 
 for t in gh gcloud; do
   cat >"$FAKE_BIN/$t" <<'EOF'
@@ -212,6 +222,90 @@ if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=<unset>" &&
   pass "06b_invalid_json_warns_once_and_passes_through"
 else
   fail "06b_invalid_json_warns_once_and_passes_through" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 7. GH_CONFIG_DIR を事前に set して mapped org で gh → 事前の値を上書きしない
+# ---------------------------------------------------------------------------
+reset_run
+RUN_ENV=("GH_CONFIG_DIR=$TMPROOT/preset-gh")
+run_shim "$ORG_REPO" gh auth status
+if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=$TMPROOT/preset-gh" && [[ -z $ERR ]]; then
+  pass "07_preset_env_is_not_overridden"
+else
+  fail "07_preset_env_is_not_overridden" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 8. 空白・引用符・--flag=value・空文字・$ を含む引数が 1 要素も欠けず壊れず届く
+# ---------------------------------------------------------------------------
+reset_run
+run_shim "$ORG_REPO" gh pr create --title "hello world" --body "it's \"quoted\"" --label=a,b "" '$HOME'
+expected_args='argc=9
+arg=[pr]
+arg=[create]
+arg=[--title]
+arg=[hello world]
+arg=[--body]
+arg=[it'"'"'s "quoted"]
+arg=[--label=a,b]
+arg=[]
+arg=[$HOME]'
+actual_args="$(printf '%s\n' "$OUT" | sed -n '3,$p')"
+if [[ $RC -eq 0 && $actual_args == "$expected_args" ]]; then
+  pass "08_argv_passed_verbatim"
+else
+  fail "08_argv_passed_verbatim" "rc=$RC actual=$actual_args err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 9. 実体が PATH に無い → exit 127、stderr にツール名
+# ---------------------------------------------------------------------------
+reset_run
+RUN_PATH="$SHIM_BIN:$TMPROOT/empty-bin:$BASH_JQ_DIR"
+run_shim "$ORG_REPO" gh auth status
+if [[ $RC -eq 127 ]] && contains "$ERR" "gh" && contains "$ERR" "account-exec:"; then
+  pass "09_missing_real_binary_exits_127"
+else
+  fail "09_missing_real_binary_exits_127" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 10. PATH に shim dir しか無い → exit 127（無限再帰しない）
+# ---------------------------------------------------------------------------
+reset_run
+RUN_PATH="$SHIM_BIN:$BASH_JQ_DIR"
+run_shim "$ORG_REPO" gh auth status
+if [[ $RC -eq 127 ]] && contains "$ERR" "account-exec:"; then
+  pass "10_shim_only_path_exits_127_without_recursion"
+else
+  fail "10_shim_only_path_exits_127_without_recursion" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 11. ACCOUNT_EXEC_DEBUG=1 → stderr に org / env / exec 先
+# ---------------------------------------------------------------------------
+reset_run
+RUN_ENV=("ACCOUNT_EXEC_DEBUG=1")
+run_shim "$ORG_REPO" gh auth status
+if [[ $RC -eq 0 ]] && contains "$ERR" "org=acme" &&
+  contains "$ERR" "GH_CONFIG_DIR=$HOME_T/.config/gh-acme" &&
+  contains "$ERR" "exec=$FAKE_BIN/gh"; then
+  pass "11_debug_prints_decision"
+else
+  fail "11_debug_prints_decision" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 12. 実体の exit code が非 0 → shim の exit code も同じ
+# ---------------------------------------------------------------------------
+reset_run
+RUN_ENV=("FAKE_EXIT=7")
+run_shim "$ORG_REPO" gh auth status
+if [[ $RC -eq 7 ]]; then
+  pass "12_exit_code_propagates"
+else
+  fail "12_exit_code_propagates" "rc=$RC out=$OUT err=$ERR"
 fi
 
 # --- Summary ---------------------------------------------------------------
