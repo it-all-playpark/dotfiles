@@ -67,7 +67,9 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
 ```
 
 - `~/.claude/bin` は home-manager が zsh（`envExtra`）/ fish（`shellInit`）の PATH 先頭に載せる。
-  `which gh` / `which gcloud` は `~/.claude/bin/…` を指すようになる
+  `which gh` / `which gcloud` は `~/.claude/bin/…` を指すようになる。Claude Code セッション内では加えて
+  SessionStart hook `session-start-account-path.sh` が `$CLAUDE_ENV_FILE` に同じ export を書き、
+  起動元の PATH に依存せず shim が効くようにする
 - 同じスクリプト内で `cd org1 && gh …; cd org2 && gh …` としても各呼び出しが独立に解決される。
   `git push`（https）の credential helper `gh auth git-credential` も git が chdir 済みなので同じ dir で解決される
 - **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_ACTIVE_CONFIG_NAME=… gcloud …` のように対象 env が
@@ -124,7 +126,7 @@ gh auth status                # → it-all-playpark
 - shim は毎回 `jq` を起動する（数 ms、gh / gcloud 自体の起動時間に埋もれる）
 - ghq 外に clone した repo では判定できず既定のまま
 
-テスト: `bash claude-code/bin/account-exec.test.sh`（shim、12 ケース）、
+テスト: `bash claude-code/bin/account-exec.test.sh`（shim、12 ケース / 14 assertion）、
 `bash tests/claude-bin-symlink.test.sh`（activation の symlink ロジック）。
 `bin/account-exec` は拡張子が無いため pre-commit の shellcheck 対象外。変更時は
 `nix develop -c shellcheck claude-code/bin/account-exec` を手で回す。
@@ -142,6 +144,7 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | イベント | スクリプト | 役割 |
 |---------|----------|------|
 | `SessionStart` (startup / resume / compact) | `session-start-replay.sh` | 直近の作業状態を再表示 |
+| `SessionStart` (*) | `session-start-account-path.sh` | `~/.claude/bin`（gh / gcloud shim）を `$CLAUDE_ENV_FILE` 経由でセッション PATH 先頭に追加。Claude Code の Bash は起動プロセスの PATH snapshot を使い rc を読み直さないため、rc 側の PATH 追加だけでは desktop app / bg job 起動で欠けることがある |
 | `PreCompact` | `pre-compact-dump.sh` | compact 前に session 状態を `claudedocs/session-*.md` へ退避 |
 | `PreToolUse` Bash (`git push*`) | `allow-feature-push.sh` | protected branch への push を抑止 |
 | `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを抑止 |

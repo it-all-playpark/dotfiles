@@ -244,6 +244,17 @@
           }
         ],
         "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/session-start-account-path.sh\"",
+            "statusMessage": "~/.claude/bin を PATH に追加中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
       }
     ],
     "Stop": [

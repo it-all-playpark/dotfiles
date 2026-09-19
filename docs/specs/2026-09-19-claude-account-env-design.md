@@ -171,6 +171,10 @@ PATH:
   `fish -lc 'which gh'` で shim が先に来ることを確認する
 - `gh` / `gcloud` は `~/.nix-profile/bin` にしか無く mise 管理外なので、shim dir が
   nix-profile より前にあれば足りる
+- Claude Code の Bash ツールは rc を読み直さず起動プロセスの PATH snapshot を使うため、
+  SessionStart hook `hooks/session-start-account-path.sh` が `$CLAUDE_ENV_FILE` に
+  `export PATH="$HOME/.claude/bin:$PATH"` を追記する（cwd 非依存。§3-A で却下したのは
+  「起動 cwd で org を固定する」ことであり、PATH の追加は影響しない）
 
 `which gh` が shim を指すようになる。実体を直接叩きたいときは
 `GH_CONFIG_DIR=… gh` の明示指定（§6-1）か `~/.nix-profile/bin/gh`。
@@ -261,3 +265,5 @@ gh auth status                # → it-all-playpark
   symlink する
 - shim は `jq` を毎回起動する（数 ms）。gh / gcloud 自体の起動時間に埋もれる
 - ghq 外に clone した repo では判定できず、既定（グローバル状態）のまま
+- shim は論理 `$PWD` を優先するため、org A の repo 内から org B の repo への symlink 経由で
+  入った cwd は A のアカウントになる
