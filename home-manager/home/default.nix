@@ -200,6 +200,17 @@ in
         [ -f "$DOTFILES_CLAUDE/$f" ] && ln -sf "$DOTFILES_CLAUDE/$f" "$target"
       done
 
+      # account-map-symlink: begin
+      # gh / gcloud の cwd 連動アカウント shim (bin/account-exec) が引く org → アカウントマップ
+      target="$CLAUDE_DIR/account-map.json"
+      if [ -f "$target" ] && [ ! -L "$target" ]; then
+        rm "$target"
+      fi
+      if [ -f "$DOTFILES_CLAUDE/account-map.json" ]; then
+        ln -sf "$DOTFILES_CLAUDE/account-map.json" "$target"
+      fi
+      # account-map-symlink: end
+
       # MCP_*.md files
       for f in "$DOTFILES_CLAUDE"/MCP_*.md; do
         if [ -f "$f" ]; then
@@ -252,6 +263,40 @@ in
         done
       fi
       # hooks-symlink: end
+
+      # bin-symlink: begin
+      # gh / gcloud の cwd 連動アカウント shim (bin/account-exec と symlink の bin/gh, bin/gcloud) を
+      # ~/.claude/bin/ へ symlink。bin/gh は repo 内で account-exec への symlink なので
+      # ~/.claude/bin/gh → claude-code/bin/gh → account-exec の 2 段になる (ln -sf は dereference しない)
+      if [ -d "$DOTFILES_CLAUDE/bin" ]; then
+        mkdir -p "$CLAUDE_DIR/bin"
+
+        # dotfiles 側で削除された shim の dangling symlink を掃除する
+        # (dotfiles/claude-code/bin を指すものだけ対象)
+        for t in "$CLAUDE_DIR"/bin/*; do
+          if [ -L "$t" ] && [ ! -e "$t" ]; then
+            case "$(readlink "$t")" in
+              "$DOTFILES_CLAUDE"/bin/*) rm -f "$t" ;;
+            esac
+          fi
+        done
+
+        for f in "$DOTFILES_CLAUDE"/bin/*; do
+          # repo 内 symlink (bin/gh) も対象にするため -f ではなく -e / -L で判定
+          if { [ -e "$f" ] || [ -L "$f" ]; } && [ ! -d "$f" ]; then
+            base="$(basename "$f")"
+            case "$base" in
+              *.test.sh) continue ;;
+            esac
+            target="$CLAUDE_DIR/bin/$base"
+            if [ -e "$target" ] && [ ! -L "$target" ]; then
+              rm "$target"
+            fi
+            ln -sf "$f" "$target"
+          fi
+        done
+      fi
+      # bin-symlink: end
       )
     '';
 
