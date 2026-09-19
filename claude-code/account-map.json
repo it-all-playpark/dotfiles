@@ -1,0 +1,24 @@
+{
+  "orgs": {
+    "BusinessProcessDX": {
+      "gcloud_config": "th-it-all",
+      "gh_config_dir": "~/.config/gh-th-it-dev"
+    },
+    "Cistree-dev": {
+      "gcloud_config": "default",
+      "gh_config_dir": "~/.config/gh"
+    },
+    "YujiNaramoto": {
+      "gcloud_config": "default",
+      "gh_config_dir": "~/.config/gh"
+    },
+    "it-all-playpark": {
+      "gcloud_config": "default",
+      "gh_config_dir": "~/.config/gh"
+    },
+    "playpark-llc": {
+      "gcloud_config": "default",
+      "gh_config_dir": "~/.config/gh"
+    }
+  }
+}
