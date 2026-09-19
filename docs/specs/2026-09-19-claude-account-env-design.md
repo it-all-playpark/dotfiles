@@ -1,6 +1,6 @@
 # gh / gcloud の cwd 連動アカウント固定（PATH shim） 設計
 
-- 状態: 設計承認済み（2026-09-19、shim 方式へ改訂）、未実装
+- 状態: 実装済み（2026-09-19、shim 方式へ改訂のうえ実装。`nix run .#update` と初回ログインは §10 参照）
 - 対象リポジトリ: `dotfiles`（`claude-code/bin`, `claude-code/settings.json`,
   `home-manager/home/default.nix`, `home-manager/programs/{zsh,fish}.nix`）
 - 関連: `claude-code/README.md`
