@@ -74,7 +74,7 @@ if [ -z "${!var+x}" ]; then
         elif (.orgs | type) != "object" then "unmapped"
         elif (.orgs[$org] | type) == "null" then "unmapped"
         elif (.orgs[$org] | type) != "object" then "notobject"
-        else "ok " + ((.orgs[$org][$key] // "") | tostring)
+        else "ok " + ((.orgs[$org][$key] | if type == "string" then . else "" end))
         end' "$ACCOUNT_MAP" 2>/dev/null)" || result="invalid"
       case "$result" in
       invalid) warn "account map is not valid JSON: $ACCOUNT_MAP; passthrough" ;;
