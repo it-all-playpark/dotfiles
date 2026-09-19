@@ -75,8 +75,8 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
 - **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_ACTIVE_CONFIG_NAME=… gcloud …` のように対象 env が
   既に set なら判定しない。実体を直接叩きたいときはこれか `~/.nix-profile/bin/gh`
 - **fail-open**: マップ不在 / JSON 不正 / `jq` 不在 / 値に `'` や改行 を含む場合は env を付けずに実体へ
-  passthrough し、stderr に `account-exec: …` を 1 行出す。ghq 外（`~/ghq/github.com/<org>/` に無い cwd）や
-  未登録 org は無言で passthrough（既定のグローバル状態のまま）
+  passthrough し、stderr に `account-exec: …` を 1 行出す。ghq 外（`~/ghq/github.com/<org>/` にも
+  `~/ghq/github.com-<alias>/<org>/` にも無い cwd）や未登録 org は無言で passthrough（既定のグローバル状態のまま）
 - 実体が PATH に無い、または解決先が shim 自身なら exit 127（無限再帰しない）
 - `ACCOUNT_EXEC_DEBUG=1 gh …` で判定結果（org / 付けた env / exec 先）を stderr に 1 行出す
 
@@ -91,7 +91,9 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
 }
 ```
 
-- キーは `~/ghq/github.com/<org>/` の `<org>`。`gh_config_dir` / `gcloud_config` は両方 optional で、
+- キーは `~/ghq/github.com/<org>/` の `<org>`。SSH host alias（`~/.ssh/config` の `Host github.com-<alias>`）
+  経由で `ghq get` した `~/ghq/github.com-<alias>/<org>/` も同じ `<org>` で引く。
+  `gh_config_dir` / `gcloud_config` は両方 optional で、
   無いキーは env を付けない（gcloud を使わない org は `gcloud_config` を省略する）
 - 値の先頭 `~` だけ `$HOME` に展開する。それ以外の展開はしない
 - `gcloud_config` は `gcloud config configurations list` に存在する構成名をそのまま書く
@@ -110,7 +112,7 @@ exec $SHELL -l                                        # PATH を取り直す
 確認:
 
 ```bash
-cd ~/ghq/github.com/BusinessProcessDX/<repo>
+cd ~/ghq/github.com/BusinessProcessDX/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/BusinessProcessDX/<repo>
 which gh                      # → ~/.claude/bin/gh
 gh auth status                # → th-it-dev
 gcloud config list            # → th-it-all (account th.it.dev@…)

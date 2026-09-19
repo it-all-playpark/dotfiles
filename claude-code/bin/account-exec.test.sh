@@ -5,7 +5,8 @@
 #
 # Usage: bash claude-code/bin/account-exec.test.sh
 #
-# $TMPDIR 配下に一時 HOME を作り、ghq/github.com/<org>/repo/.claude/worktrees/x を掘る。
+# $TMPDIR 配下に一時 HOME を作り、ghq/github.com/<org>/repo/.claude/worktrees/x と
+# ghq/github.com-<alias>/<org>/repo（SSH host alias 経由の ghq get 先）を掘る。
 # fake の gh / gcloud（受け取った env と argv を 1 行ずつ出すだけ）を一時 dir に置き、
 # shim dir ($HOME_T/.claude/bin、実運用と同じ位置) から実物の bin/gh, bin/gcloud を
 # symlink して呼ぶ。ACCOUNT_MAP は一時ファイル。
@@ -56,10 +57,12 @@ ORG_REPO="$HOME_T/ghq/github.com/acme/repo"
 ORG_WT="$ORG_REPO/.claude/worktrees/x"
 GHONLY_REPO="$HOME_T/ghq/github.com/ghonly/repo"
 UNMAPPED_REPO="$HOME_T/ghq/github.com/nobody/repo"
+ALIAS_REPO="$HOME_T/ghq/github.com-work/acme/repo"
+OTHER_HOST_REPO="$HOME_T/ghq/gitlab.com/acme/repo"
 OUTSIDE_DIR="$HOME_T/elsewhere"
 
 BASH_JQ_DIR="$TMPROOT/bash-jq-dir"
-mkdir -p "$FAKE_BIN" "$SHIM_BIN" "$ORG_WT" "$GHONLY_REPO" "$UNMAPPED_REPO" "$OUTSIDE_DIR" "$TMPROOT/empty-bin" "$BASH_JQ_DIR"
+mkdir -p "$FAKE_BIN" "$SHIM_BIN" "$ORG_WT" "$GHONLY_REPO" "$UNMAPPED_REPO" "$ALIAS_REPO" "$OTHER_HOST_REPO" "$OUTSIDE_DIR" "$TMPROOT/empty-bin" "$BASH_JQ_DIR"
 
 # Create symlinks to utilities in a dedicated directory (without gh/gcloud)
 # This is used for cases 9 and 10 which need the shim to be executable but no real gh
@@ -308,6 +311,26 @@ if [[ $RC -eq 7 ]]; then
   pass "12_exit_code_propagates"
 else
   fail "12_exit_code_propagates" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 13. ghq の SSH host alias ディレクトリ …/ghq/github.com-<alias>/<org>/repo でも
+#     <org> を判定する。github.com 以外のホスト (gitlab.com 等) は対象外のまま
+# ---------------------------------------------------------------------------
+reset_run
+run_shim "$ALIAS_REPO" gh auth status
+if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=$HOME_T/.config/gh-acme" && [[ -z $ERR ]]; then
+  pass "13a_github_host_alias_dir_sets_config_dir"
+else
+  fail "13a_github_host_alias_dir_sets_config_dir" "rc=$RC out=$OUT err=$ERR"
+fi
+
+reset_run
+run_shim "$OTHER_HOST_REPO" gh auth status
+if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=<unset>" && [[ -z $ERR ]]; then
+  pass "13b_non_github_host_dir_passthrough"
+else
+  fail "13b_non_github_host_dir_passthrough" "rc=$RC out=$OUT err=$ERR"
 fi
 
 # --- Summary ---------------------------------------------------------------
