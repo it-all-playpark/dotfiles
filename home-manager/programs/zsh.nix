@@ -15,6 +15,10 @@ in
 
       # SSH remote commands such as mosh-server run under non-interactive zsh.
       export PATH="$HOME/.nix-profile/bin:/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:$PATH"
+
+      # gh / gcloud の cwd 連動アカウント shim (dotfiles/claude-code/bin → ~/.claude/bin)。
+      # nix-profile の実体より前に置く。設計: docs/specs/2026-09-19-claude-account-env-design.md
+      export PATH="$HOME/.claude/bin:$PATH"
     '';
     initContent = ''
       # terraformをopenTofuで代用
