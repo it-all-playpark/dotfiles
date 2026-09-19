@@ -12,7 +12,7 @@
 
 - 作業ディレクトリは worktree `/Users/naramotoyuuji/ghq/github.com/it-all-playpark/dotfiles/.claude/worktrees/claude-account-env`（ブランチ `worktree-claude-account-env`）。全コマンドをここから実行し、絶対パスを使う
 - `nix run .#update` は agent 実行不可（sandbox）。agent の検証範囲は `nix fmt -- --no-cache` / `nix flake check` / `nix eval` / 各 `*.test.sh` まで。apply は人間（Task 7）
-- `claude-code/settings.json` は agent の sandbox で write deny（自己改変ガード）。agent は Edit/Write を試みず、diff を提示して人間が適用する（Task 5）。`jq` で読む検証は可
+- main checkout の `claude-code/settings.json` は agent の sandbox で write deny（自己改変ガード）。worktree 側のコピーは Task 5 で 1 回だけ Edit を試み、拒否されたら diff を提示して人間が適用する。`jq` で読む検証は可
 - 一時ファイルは `mktemp -d "${TMPDIR:-/tmp}/xxx.XXXXXX"`。`/tmp` 直書き禁止。`$CLAUDE_JOB_DIR/tmp` も使わない
 - shellcheck / shfmt は素の PATH に無い。`nix develop -c shellcheck …` と `nix develop -c treefmt --no-cache --stdin <name>.sh < <file>` で呼ぶ（devShell に `treefmt` wrapper と `shellcheck` が入っていること、`treefmt --stdin` の存在を確認済み）
 - pre-commit hook は staged の `*.sh` にしか shellcheck をかけない。拡張子なしの `claude-code/bin/account-exec` は Task 内で明示的に shellcheck / shfmt する
