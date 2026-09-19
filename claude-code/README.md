@@ -127,6 +127,10 @@ gh auth status                # → it-all-playpark
   `config.yml` だけ symlink する
 - shim は毎回 `jq` を起動する（数 ms、gh / gcloud 自体の起動時間に埋もれる）
 - ghq 外に clone した repo では判定できず既定のまま
+- `gh auth status` の `The token in …/hosts.yml is invalid` は **トークン失効とは限らない**。gh は
+  `GET https://api.github.com/` が 200 以外（一時的な 403 = secondary rate limit 等を含む）なら一律この文言を出す。
+  shim を疑う前に `GH_DEBUG=api gh auth status` で実際のステータスと本文の `message` を見る。
+  数分待って通るなら 403 の一過性で、再ログインは不要
 
 テスト: `bash claude-code/bin/account-exec.test.sh`（shim、12 ケース / 14 assertion）、
 `bash tests/claude-bin-symlink.test.sh`（activation の symlink ロジック）。
