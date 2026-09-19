@@ -240,7 +240,9 @@ fi
 # 8. 空白・引用符・--flag=value・空文字・$ を含む引数が 1 要素も欠けず壊れず届く
 # ---------------------------------------------------------------------------
 reset_run
+# shellcheck disable=SC2016 # 意図的なリテラル: 展開されずに届くことを確認する
 run_shim "$ORG_REPO" gh pr create --title "hello world" --body "it's \"quoted\"" --label=a,b "" '$HOME'
+# shellcheck disable=SC2016 # 意図的なリテラル: 展開されずに届くことを確認する
 expected_args='argc=9
 arg=[pr]
 arg=[create]
