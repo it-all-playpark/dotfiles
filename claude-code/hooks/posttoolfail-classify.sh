@@ -63,9 +63,9 @@ FAILURE_KIND_QUESTIONS='{
     "type": "choice",
     "instructions": "The state describes a tool call made by an AI coding agent that failed, with the tool name, its input, and the error output. Classify the primary cause of the failure.",
     "criteria": {
-      "sandbox_denied": "Blocked by the OS sandbox or filesystem policy: Operation not permitted, read-only file system, EPERM/EACCES on a path, seatbelt or sandbox violation, cannot write to /tmp or a home directory path.",
+      "sandbox_denied": "Blocked by the OS sandbox or filesystem policy: Operation not permitted, read-only file system, EPERM/EACCES on a path, seatbelt or sandbox violation, cannot write to /tmp or a home directory path. Not the worktree isolation guard, which is permission_denied.",
       "network_denied": "Network egress blocked or unreachable: proxy refused the host, connection refused or timed out to a remote host, DNS resolution failed, 403 from a filtering proxy, host not in an allowlist.",
-      "permission_denied": "Blocked by the coding agent'"'"'s permission system or a hook: permission rule denied, user declined the request, a hook returned deny or ask, protected branch push refused.",
+      "permission_denied": "Blocked by the coding agent'"'"'s permission system or a hook: permission rule denied, user declined the request, a hook returned deny or ask, protected branch push refused, or the worktree isolation guard refused the command (message like: This session is isolated in the worktree ... Refusing to run it).",
       "not_found": "A command, file, directory, module or package does not exist: command not found, No such file or directory, ENOENT, module not found, HTTP 404.",
       "syntax_error": "The command or edit itself was malformed: shell syntax error, unknown option or bad argument, JSON/YAML parse error, old_string not found or not unique for an edit.",
       "test_failed": "The program ran to completion but reported failure: failing tests, lint or type errors, compile or build errors, assertion failures, non-zero exit from the program under test.",
