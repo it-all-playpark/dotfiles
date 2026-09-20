@@ -149,7 +149,7 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `SessionStart` (*) | `session-start-account-path.sh` | `~/.claude/bin`（gh / gcloud shim）を `$CLAUDE_ENV_FILE` 経由でセッション PATH 先頭に追加。Claude Code の Bash は起動プロセスの PATH snapshot を使い rc を読み直さないため、rc 側の PATH 追加だけでは desktop app / bg job 起動で欠けることがある |
 | `PreCompact` | `pre-compact-dump.sh` | compact 前に session 状態を `claudedocs/session-*.md` へ退避 |
 | `PreToolUse` Bash (`git push*`) | `allow-feature-push.sh` | protected branch への push を抑止 |
-| `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを抑止 |
+| `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを `ask`。1 段目は正規表現（`$PROD_*` / `.env.prod*` / `aws --profile *prod*`）、2 段目は字面で候補（cloud CLI / DB クライアント / `--context` 等 / prod・live・deploy 語）に絞った上で Jev に「本番に触るか」を判定させ p ≥ 0.7 で `ask`。判定は `~/.claude/logs/credential-guard.jsonl` に記録 |
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
@@ -170,8 +170,10 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 何種か」「このコマンドは read-only か」の判定を Jev（TypeSafe の判定専用モデル。文章を
 生成せず、選択肢ごとの較正済み確率を返す）に投げてラベルを付ける。判定は **記録のみ**に
 使い、permission の allow/deny は従来通り決定論の hook が担う（確率モデルに `allow` を
-出させると `permissions.deny` を短絡するため）。`posttool-injection-screen.sh` だけは
-判定を Claude に見せる（`additionalContext` の注意文）が、これも deny ではなく警告。
+出させると `permissions.deny` を短絡するため）。`posttool-injection-screen.sh` は
+判定を Claude に見せる（`additionalContext` の注意文）が deny ではなく警告。
+`pretool-bash-credential-guard.sh` の 2 段目は唯一 permission に効く（`ask`）が、
+`allow` は出さず、字面の候補選別を通ったコマンドだけを対象にする。
 
 - 経路: Vercel AI Gateway の TypeSafe 互換エンドポイント
   `https://ai-gateway.vercel.sh/typesafe/v1/systemone` を `curl` で直叩き。jevctl / Node 不要。
@@ -190,10 +192,12 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 - `permission-summary.sh --suggest` は Bash について `class == read_only` のものだけを allow 候補にする
 - injection 検査の閾値は `INJECTION_SCREEN_THRESHOLD`（既定 0.6）、Read の対象パスは
   `INJECTION_SCREEN_READ_PATHS`（`:` 区切り、既定 `~/Library/CloudStorage/Box-Box`）
+- credential guard 2 段目は `CREDENTIAL_GUARD_JEV=0` で無効化、閾値は
+  `CREDENTIAL_GUARD_JEV_THRESHOLD`（既定 0.7）
 
 テスト: `bash claude-code/hooks/jev-classify.test.sh` / `permission-journal.test.sh` /
-`permission-summary.test.sh` / `posttoolfail-classify.test.sh` / `posttool-injection-screen.test.sh`
-（PATH 先頭の偽 `curl` で応答を差し替え、ネットワークには出ない）。
+`permission-summary.test.sh` / `posttoolfail-classify.test.sh` / `posttool-injection-screen.test.sh` /
+`pretool-bash-credential-guard.test.sh`（PATH 先頭の偽 `curl` で応答を差し替え、ネットワークには出ない）。
 
 ## settings.json の方針
 
