@@ -75,19 +75,12 @@ FAILURE_KIND_QUESTIONS='{
   }
 }'
 
-# 送信前 redaction（permission-journal.sh と同じ規則。BSD sed に I が無いので perl）
-redact() {
-  perl -pe '
-    s/((?:token|secret|passw(?:or)?d|api[_-]?key|authorization|bearer)\w*[=: ]+)[^\s"\x27]+/$1<redacted>/gi;
-    s/\b(?:vck|ghp|gho|ghu|ghs|ghr|sk|xox[abp]|AKIA)[-_][A-Za-z0-9_-]{8,}/<redacted>/g;
-  '
-}
-
+# 送信前 redaction は jev-classify.sh --redact に任せる
 CLASS=""
 CLASS_P=""
 STATE=$(printf 'tool: %s\ninput: %s\nerror: %s\noutput:\n%s\n' \
   "$TOOL" "$(printf '%s' "$DETAIL" | head -c 2000)" "$(printf '%s' "$ERROR" | head -c 2000)" "$(printf '%s' "$RESPONSE" | head -c 6000)")
-CLASS_JSON=$(printf '%s' "$STATE" | redact | bash "$SCRIPT_DIR/jev-classify.sh" --questions "$FAILURE_KIND_QUESTIONS" 2>/dev/null || true)
+CLASS_JSON=$(printf '%s' "$STATE" | bash "$SCRIPT_DIR/jev-classify.sh" --redact --questions "$FAILURE_KIND_QUESTIONS" 2>/dev/null || true)
 if [[ -n $CLASS_JSON ]]; then
   CLASS=$(echo "$CLASS_JSON" | jq -r '.answers.kind.choice // empty' 2>/dev/null || true)
   CLASS_P=$(echo "$CLASS_JSON" | jq -r '.answers.kind as $k | $k.probabilities[$k.choice] // empty' 2>/dev/null || true)

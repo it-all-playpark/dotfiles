@@ -21,6 +21,8 @@
 #                        "criteria":{"a":"…","b":"…"}}}
 #                  type は noul (yes/no) / choice / score
 #     --max-time   curl の上限秒（既定 $JEV_MAX_TIME または 2）
+#     --redact     送信前に state から token / password / api-key 系の値と
+#                  既知の鍵プレフィックス（vck_ ghp_ sk- AKIA 等）を伏せる
 #   stdout: API レスポンス JSON（.answers.<id> に結果）。失敗時は空
 #   exit:   常に 0（fail-open。hook の本処理を止めない）
 #
@@ -61,6 +63,7 @@ fi
 
 QUESTIONS=""
 MAX_TIME="${JEV_MAX_TIME:-2}"
+REDACT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -71,6 +74,10 @@ while [[ $# -gt 0 ]]; do
   --max-time)
     MAX_TIME="$2"
     shift 2
+    ;;
+  --redact)
+    REDACT=1
+    shift
     ;;
   *)
     debug "unknown option: $1"
@@ -102,8 +109,24 @@ if [[ -z $API_KEY ]]; then
 fi
 
 # --- state ---
+# 送信前 redaction。BSD sed は大文字小文字無視 (I) を持たないので perl（macOS 標準）。
+# 空白区切りを許すのは `--password x` のような CLI フラグ形だけ。散文の
+# "the secrets to me" まで伏せないよう、それ以外は `=` / `:` を必須にする。
+redact() {
+  perl -pe '
+    s/(--(?:token|secret|passw(?:or)?d|api[_-]?key)\w*[= ]+)[^\s"\x27]+/$1<redacted>/gi;
+    s/((?:token|secret|passw(?:or)?d|api[_-]?key)\w*\s*[=:]\s*)[^\s"\x27]+/$1<redacted>/gi;
+    s/((?:authorization\s*:\s*)?(?:bearer|basic)\s+)[^\s"\x27]+/$1<redacted>/gi;
+    s/(authorization\s*:\s*)[^\s"\x27]+/$1<redacted>/gi;
+    s/\b(?:vck|ghp|gho|ghu|ghs|ghr|sk|xox[abp]|AKIA)[-_][A-Za-z0-9_-]{8,}/<redacted>/g;
+  '
+}
 # 上限で切る。UTF-8 の途中で切れても jq -R が置換文字にして JSON としては壊れない。
-STATE=$(head -c "${JEV_STATE_MAX_BYTES:-24000}" | jq -Rs '.' 2>/dev/null || echo '""')
+if [[ $REDACT -eq 1 ]]; then
+  STATE=$(head -c "${JEV_STATE_MAX_BYTES:-24000}" | redact | jq -Rs '.' 2>/dev/null || echo '""')
+else
+  STATE=$(head -c "${JEV_STATE_MAX_BYTES:-24000}" | jq -Rs '.' 2>/dev/null || echo '""')
+fi
 if [[ $STATE == '""' ]]; then
   debug "empty state"
   exit 0
