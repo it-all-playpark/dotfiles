@@ -70,22 +70,14 @@ BASH_KIND_QUESTIONS='{
   }
 }'
 
-# 送信前の redaction: token/secret/password/api-key 系の値と既知の鍵プレフィックスを伏せる。
+# 送信前の redaction は jev-classify.sh --redact に任せる（token/secret/鍵プレフィックス）。
 # 記録側の detail は従来通り（500 文字切り詰めのみ）。
-# BSD sed は大文字小文字無視 (I) を持たないので perl（macOS 標準）を使う。
-redact() {
-  perl -pe '
-    s/((?:token|secret|passw(?:or)?d|api[_-]?key|authorization|bearer)\w*[=: ]+)[^\s"\x27]+/$1<redacted>/gi;
-    s/\b(?:vck|ghp|gho|ghu|ghs|ghr|sk|xox[abp]|AKIA)[-_][A-Za-z0-9_-]{8,}/<redacted>/g;
-  '
-}
-
 CLASS=""
 CLASS_P=""
 if [[ $TOOL == "Bash" ]]; then
   CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
   if [[ -n $CMD ]]; then
-    CLASS_JSON=$(printf '%s' "$CMD" | redact | bash "$SCRIPT_DIR/jev-classify.sh" --questions "$BASH_KIND_QUESTIONS" 2>/dev/null || true)
+    CLASS_JSON=$(printf '%s' "$CMD" | bash "$SCRIPT_DIR/jev-classify.sh" --redact --questions "$BASH_KIND_QUESTIONS" 2>/dev/null || true)
     if [[ -n $CLASS_JSON ]]; then
       CLASS=$(echo "$CLASS_JSON" | jq -r '.answers.kind.choice // empty' 2>/dev/null || true)
       CLASS_P=$(echo "$CLASS_JSON" | jq -r '.answers.kind as $k | $k.probabilities[$k.choice] // empty' 2>/dev/null || true)

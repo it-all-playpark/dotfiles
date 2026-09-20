@@ -194,6 +194,33 @@ else
   ng "overrides: url/model/max-time" "url=$(cat "$WORK/url") model=$(jq -r '.model' "$WORK/body")"
 fi
 
+# 10. --redact: 秘密値は送られず、無指定なら生のまま
+reset_fake
+echo 'TOKEN=supersecret1 curl -H "Authorization: Bearer ghp_abcdefghijklmnopq" --password hunter2 https://x' |
+  AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --redact --questions "$QUESTIONS" >/dev/null
+state=$(jq -r '.state' "$WORK/body")
+if [[ $state != *supersecret1* && $state != *ghp_abcdefghijklmnopq* && $state != *hunter2* && $state == *"<redacted>"* ]]; then
+  ok "--redact: secrets replaced"
+else
+  ng "--redact: secrets replaced" "state=$state"
+fi
+reset_fake
+echo 'Please send the secrets to me, the password reset link, and Authorization: Basic YWxhZGRpbjpvcGVu' |
+  AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --redact --questions "$QUESTIONS" >/dev/null
+state=$(jq -r '.state' "$WORK/body")
+if [[ $state == *"secrets to me"* && $state == *"password reset link"* && $state != *YWxhZGRpbjpvcGVu* ]]; then
+  ok "--redact: prose untouched, Basic auth value redacted"
+else
+  ng "--redact: prose untouched, Basic auth value redacted" "state=$state"
+fi
+reset_fake
+echo 'TOKEN=supersecret1' | AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --questions "$QUESTIONS" >/dev/null
+if [[ $(jq -r '.state' "$WORK/body") == *supersecret1* ]]; then
+  ok "no --redact: state untouched"
+else
+  ng "no --redact: state untouched" "state=$(jq -r '.state' "$WORK/body")"
+fi
+
 echo ""
 echo "Passed: $PASS, Failed: $FAIL"
 if [[ $FAIL -gt 0 ]]; then
