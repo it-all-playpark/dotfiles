@@ -21,8 +21,9 @@
 #                        "criteria":{"a":"…","b":"…"}}}
 #                  type は noul (yes/no) / choice / score
 #     --max-time   curl の上限秒（既定 $JEV_MAX_TIME または 2）
-#     --redact     送信前に state から token / password / api-key 系の値と
-#                  既知の鍵プレフィックス（vck_ ghp_ sk- AKIA 等）を伏せる
+#     --redact     送信前に state から token / password / api-key 系の値、
+#                  URL 埋め込み credential（://user:pass@）、既知の鍵プレフィックス
+#                  （vck_ ghp_ sk- AKIA 等）を伏せる
 #   stdout: API レスポンス JSON（.answers.<id> に結果）。失敗時は空
 #   exit:   常に 0（fail-open。hook の本処理を止めない）
 #
@@ -118,6 +119,7 @@ redact() {
     s/((?:token|secret|passw(?:or)?d|api[_-]?key)\w*\s*[=:]\s*)[^\s"\x27]+/$1<redacted>/gi;
     s/((?:authorization\s*:\s*)?(?:bearer|basic)\s+)[^\s"\x27]+/$1<redacted>/gi;
     s/(authorization\s*:\s*)[^\s"\x27]+/$1<redacted>/gi;
+    s#(://[^/\s:@]+:)[^@/\s]+@#$1<redacted>@#g;
     s/\b(?:vck|ghp|gho|ghu|ghs|ghr|sk|xox[abp]|AKIA)[-_][A-Za-z0-9_-]{8,}/<redacted>/g;
   '
 }

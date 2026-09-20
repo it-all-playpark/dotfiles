@@ -214,6 +214,15 @@ else
   ng "--redact: prose untouched, Basic auth value redacted" "state=$state"
 fi
 reset_fake
+echo 'DATABASE_URL=postgres://app:hunter2@db.internal:5432/app psql; open https://user@example.com/path' |
+  AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --redact --questions "$QUESTIONS" >/dev/null
+state=$(jq -r '.state' "$WORK/body")
+if [[ $state != *hunter2* && $state == *"postgres://app:<redacted>@db.internal"* && $state == *"https://user@example.com/path"* ]]; then
+  ok "--redact: URL credential redacted, user-only URL untouched"
+else
+  ng "--redact: URL credential redacted, user-only URL untouched" "state=$state"
+fi
+reset_fake
 echo 'TOKEN=supersecret1' | AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --questions "$QUESTIONS" >/dev/null
 if [[ $(jq -r '.state' "$WORK/body") == *supersecret1* ]]; then
   ok "no --redact: state untouched"
