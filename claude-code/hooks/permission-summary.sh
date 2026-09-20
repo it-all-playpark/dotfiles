@@ -6,10 +6,19 @@
 #   permission-summary.sh --days 7     # 直近7日
 #   permission-summary.sh --suggest    # allow ルール候補を出力
 #   permission-summary.sh --json       # JSON 形式で出力
+#
+# Bash の記録には permission-journal.sh が Jev で付けた class
+# (read_only / mutating_local / git_mutation / network / destructive) が入る。
+# --suggest は Bash について class == read_only のものだけを候補にする
+# （副作用のある形を allow 候補に混ぜない）。class の無い旧記録・分類失敗分は
+# 候補から除外し、件数だけ表示する。
+#
+# 環境変数:
+#   PERMISSION_JOURNAL_FILE  集計対象（既定 ~/.claude/logs/permission-requests.jsonl）
 
 set -euo pipefail
 
-LOG_FILE="$HOME/.claude/logs/permission-requests.jsonl"
+LOG_FILE="${PERMISSION_JOURNAL_FILE:-$HOME/.claude/logs/permission-requests.jsonl}"
 
 if [ ! -f "$LOG_FILE" ]; then
   echo "ログファイルが存在しません: $LOG_FILE"
@@ -65,6 +74,7 @@ if [ "$JSON_OUT" = true ]; then
       tool: .[0].tool,
       count: length,
       details: (group_by(.detail) | map({detail: .[0].detail, count: length}) | sort_by(-.count) | .[0:10]),
+      classes: (map(.class // "unclassified") | group_by(.) | map({class: .[0], count: length}) | sort_by(-.count)),
       projects: ([.[].project] | unique)
     }) |
     sort_by(-.count)
@@ -74,13 +84,19 @@ fi
 
 if [ "$SUGGEST" = true ]; then
   # allow ルール候補を生成
+  BASH_TOTAL=$(echo "$DATA" | jq -r 'select(.tool == "Bash") | .tool' | wc -l | tr -d ' ')
+  BASH_UNCLASSIFIED=$(echo "$DATA" | jq -r 'select(.tool == "Bash" and (has("class") | not)) | .tool' | wc -l | tr -d ' ')
+  BASH_EXCLUDED=$(echo "$DATA" | jq -r 'select(.tool == "Bash" and has("class") and .class != "read_only") | .tool' | wc -l | tr -d ' ')
+
   echo "# allow ルール候補（頻度順）"
   echo "# 3回以上出現したパターンを抽出"
+  echo "# Bash は Jev 分類が read_only のものだけ対象: 全 ${BASH_TOTAL} 件中、未分類 ${BASH_UNCLASSIFIED} 件・副作用あり ${BASH_EXCLUDED} 件を除外"
   echo ""
 
   echo "$DATA" | jq -r '
     if .tool == "Bash" then
-      # コマンドの先頭2語をパターン化
+      # read_only と分類されたものだけ、コマンドの先頭2語をパターン化
+      select(.class == "read_only") |
       .detail | split(" ") | .[0:2] | join(" ") | "Bash(" + . + ":*)"
     elif .tool == "WebFetch" then
       # ドメイン抽出
@@ -112,6 +128,10 @@ echo ""
 
 echo "--- By Tool ---"
 echo "$DATA" | jq -r '.tool' | sort | uniq -c | sort -rn | head -20
+
+echo ""
+echo "--- By Class (Bash, Jev) ---"
+echo "$DATA" | jq -r 'select(.tool == "Bash") | .class // "unclassified"' | sort | uniq -c | sort -rn
 
 echo ""
 echo "--- Top Commands (Bash) ---"

@@ -96,7 +96,7 @@
         "hooks": [
           {
             "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
-            "statusMessage": "permission request logging...",
+            "statusMessage": "permission request logging (Jev 分類)...",
             "timeout": 5,
             "type": "command"
           }
@@ -109,6 +109,19 @@
         "hooks": [
           {
             "command": "python3 \"$HOME/.claude/hooks/memory-monitor.py\"",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"$HOME/.claude/hooks/posttoolfail-classify.sh\"",
+            "statusMessage": "失敗種別を Jev で分類中...",
+            "timeout": 5,
             "type": "command"
           }
         ],

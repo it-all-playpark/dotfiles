@@ -153,14 +153,42 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
-| `PermissionRequest` | `permission-journal.sh` | permission 要求を journal に記録 |
+| `PermissionRequest` | `permission-journal.sh` | permission 要求を `~/.claude/logs/permission-requests.jsonl` に記録。Bash には Jev で効果種別 `class`（read_only / mutating_local / git_mutation / network / destructive）を付与（下記「Jev 分類」） |
 | `PreToolUse` Bash | `pretool-npx-guard.sh` | npx 実行ガード |
 | `PostToolUse` | `memory-monitor.py` | メモリ使用量監視 |
+| `PostToolUseFailure` | `posttoolfail-classify.sh` | ツール失敗を Jev で `class`（sandbox_denied / network_denied / permission_denied / not_found / syntax_error / test_failed / timeout / other）に分類し `~/.claude/logs/tool-failures.jsonl` に記録。記録のみで挙動は変えない |
 | `Stop` | `stop-unfinished-guard.sh` | 未完了タスクがあれば停止を抑止 |
 | `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知。settings.json 側は `` 参照 1 本で共有。herdr は絶対パス完全一致でしか登録済みと判定しないため、`herdr integration install claude` を再実行した後は追記される絶対パスのエントリを revert すること |
 | `UserPromptSubmit` | inline `rm -f /tmp/claude-skill-ctx-<session>` | `playpark-core` plugin の `skill-retrospective/journal.sh` が使う skill-ctx state file をプロンプト投入毎にクリア。plugin 側 `hooks.json` に `UserPromptSubmit` の移植先が無いため dotfiles 側に維持（journal.sh 側の 30 分 TTL は取りこぼし時の保険） |
 
 テストファイル（`*.test.sh`）は symlink 対象外。
+
+### Jev 分類（`jev-classify.sh`）
+
+`permission-journal.sh` と `posttoolfail-classify.sh` は、正規表現では書けない「この失敗は
+何種か」「このコマンドは read-only か」の判定を Jev（TypeSafe の判定専用モデル。文章を
+生成せず、選択肢ごとの較正済み確率を返す）に投げてラベルを付ける。判定は **記録のみ**に
+使い、permission の allow/deny は従来通り決定論の hook が担う（確率モデルに `allow` を
+出させると `permissions.deny` を短絡するため）。
+
+- 経路: Vercel AI Gateway の TypeSafe 互換エンドポイント
+  `https://ai-gateway.vercel.sh/typesafe/v1/systemone` を `curl` で直叩き。jevctl / Node 不要。
+  課金は AI Gateway（list price そのまま、markup 0、入力 $0.042/M tokens、出力無料。
+  1 判定 ≈ 300〜1500 tokens）
+- 鍵: macOS Keychain から読む（Claude の Bash 環境に env で露出させない）
+  ```bash
+  security add-generic-password -s vercel-ai-gateway -a claude-hooks -w 'vck_…'
+  ```
+  `AI_GATEWAY_API_KEY` env があればそちらを優先（テスト・一時上書き用）
+- fail-open: 鍵なし・timeout（既定 2 秒）・API エラー時は `class` を付けずに記録する。
+  `JEV_DISABLE=1` で完全停止。`JEV_DEBUG=1` で失敗理由を stderr に出す
+- 送信前に token / password / api-key 系の値と既知の鍵プレフィックス（`vck_` `ghp_` `sk-` 等）を
+  伏せる。AI Gateway はプロンプトを保持しないが、上流の扱いが気になるなら Gateway 側で ZDR を有効にする
+- `permission-summary.sh --suggest` は Bash について `class == read_only` のものだけを allow 候補にする
+
+テスト: `bash claude-code/hooks/jev-classify.test.sh` / `permission-journal.test.sh` /
+`permission-summary.test.sh` / `posttoolfail-classify.test.sh`（PATH 先頭の偽 `curl` で応答を
+差し替え、ネットワークには出ない）。
 
 ## settings.json の方針
 
