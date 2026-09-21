@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
-# account-exec: gh / gcloud の cwd 連動アカウント固定 shim
+# account-exec: gh / gcloud / tofu の cwd 連動アカウント固定 shim
 #
-# bin/gh と bin/gcloud はこのファイルへの symlink。$0 の basename で対象ツールを判定し、
-# $PWD が $HOME/ghq/github.com/<org>/ または $HOME/ghq/github.com-<alias>/<org>/ 配下なら
-# account-map.json を引いて
-# GH_CONFIG_DIR / CLOUDSDK_ACTIVE_CONFIG_NAME を付け、PATH から shim dir を除いて
-# 解決した実体を exec する。exec 先の PATH は元のまま（git → gh の credential helper
-# 呼び出しも shim を通り続けるため）。
+# bin/gh, bin/gcloud, bin/tofu はこのファイルへの symlink。$0 の basename で対象ツールを
+# 判定し、$PWD が $HOME/ghq/github.com/<org>/ または $HOME/ghq/github.com-<alias>/<org>/
+# 配下なら account-map.json を引いて
+#   gh              → GH_CONFIG_DIR=<gh_config_dir>
+#   gcloud          → CLOUDSDK_CONFIG=<gcloud_config_dir>
+#   tofu/terraform  → GOOGLE_APPLICATION_CREDENTIALS=<gcloud_config_dir>/application_default_credentials.json
+# を付け、PATH から shim dir を除いて解決した実体を exec する。exec 先の PATH は元のまま
+# （git → gh の credential helper 呼び出しも shim を通り続けるため）。
+#
+# gcloud は構成名（CLOUDSDK_ACTIVE_CONFIG_NAME）ではなく config dir ごと分離する。
+# ADC（application_default_credentials.json）は構成をまたいでグローバルなので、dir を
+# 分けないと `gcloud auth application-default login` が他 org の ADC を上書きする。
+# tofu（Go の x/oauth2）は CLOUDSDK_CONFIG を見ず ~/.config/gcloud/ 固定で ADC を探すため、
+# GOOGLE_APPLICATION_CREDENTIALS でファイルを明示する。
 #
 # 設計: docs/specs/2026-09-19-claude-account-env-design.md
 #
@@ -19,17 +27,24 @@
 set -euo pipefail
 
 tool="$(basename "$0")"
+# suffix: マップの値（dir）の後ろに付けてファイルパスにする（tofu の ADC 用）
+suffix=""
 case "$tool" in
 gh)
   var=GH_CONFIG_DIR
   key=gh_config_dir
   ;;
 gcloud)
-  var=CLOUDSDK_ACTIVE_CONFIG_NAME
-  key=gcloud_config
+  var=CLOUDSDK_CONFIG
+  key=gcloud_config_dir
+  ;;
+tofu | terraform)
+  var=GOOGLE_APPLICATION_CREDENTIALS
+  key=gcloud_config_dir
+  suffix=/application_default_credentials.json
   ;;
 *)
-  echo "account-exec: unsupported tool name '$tool' (expected gh or gcloud)" >&2
+  echo "account-exec: unsupported tool name '$tool' (expected gh, gcloud, tofu or terraform)" >&2
   exit 2
   ;;
 esac
@@ -99,7 +114,7 @@ if [ -z "${!var+x}" ]; then
       esac
       if [ -n "$val" ]; then
         # shellcheck disable=SC2163
-        export "$var=$val"
+        export "$var=$val$suffix"
       fi
     fi
   fi
