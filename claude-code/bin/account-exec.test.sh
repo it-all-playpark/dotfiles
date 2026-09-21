@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # claude-code/bin/account-exec.test.sh
-# gh / gcloud の cwd 連動アカウント shim (account-exec) のテスト。
+# gh / gcloud / tofu の cwd 連動アカウント shim (account-exec) のテスト。
 # 設計: docs/specs/2026-09-19-claude-account-env-design.md §9
 #
 # Usage: bash claude-code/bin/account-exec.test.sh
 #
 # $TMPDIR 配下に一時 HOME を作り、ghq/github.com/<org>/repo/.claude/worktrees/x と
 # ghq/github.com-<alias>/<org>/repo（SSH host alias 経由の ghq get 先）を掘る。
-# fake の gh / gcloud（受け取った env と argv を 1 行ずつ出すだけ）を一時 dir に置き、
-# shim dir ($HOME_T/.claude/bin、実運用と同じ位置) から実物の bin/gh, bin/gcloud を
+# fake の gh / gcloud / tofu（受け取った env と argv を 1 行ずつ出すだけ）を一時 dir に置き、
+# shim dir ($HOME_T/.claude/bin、実運用と同じ位置) から実物の bin/gh, bin/gcloud, bin/tofu を
 # symlink して呼ぶ。ACCOUNT_MAP は一時ファイル。
 
 set -euo pipefail
@@ -20,7 +20,7 @@ if [[ ! -x $SHIM ]]; then
   echo "FAIL: shim not executable: $SHIM" >&2
   exit 1
 fi
-for t in gh gcloud; do
+for t in gh gcloud tofu; do
   if [[ ! -L "$SCRIPT_DIR/$t" || "$(readlink "$SCRIPT_DIR/$t")" != "account-exec" ]]; then
     echo "FAIL: $SCRIPT_DIR/$t must be a symlink to account-exec" >&2
     exit 1
@@ -73,11 +73,12 @@ for cmd in bash jq basename dirname readlink pwd cd; do
   fi
 done
 
-for t in gh gcloud; do
+for t in gh gcloud tofu; do
   cat >"$FAKE_BIN/$t" <<'EOF'
 #!/usr/bin/env bash
 printf 'GH_CONFIG_DIR=%s\n' "${GH_CONFIG_DIR-<unset>}"
-printf 'CLOUDSDK_ACTIVE_CONFIG_NAME=%s\n' "${CLOUDSDK_ACTIVE_CONFIG_NAME-<unset>}"
+printf 'CLOUDSDK_CONFIG=%s\n' "${CLOUDSDK_CONFIG-<unset>}"
+printf 'GOOGLE_APPLICATION_CREDENTIALS=%s\n' "${GOOGLE_APPLICATION_CREDENTIALS-<unset>}"
 printf 'argc=%s\n' "$#"
 for a in "$@"; do printf 'arg=[%s]\n' "$a"; done
 exit "${FAKE_EXIT:-0}"
@@ -90,7 +91,7 @@ done
 cat >"$MAP" <<'EOF'
 {
   "orgs": {
-    "acme": { "gh_config_dir": "~/.config/gh-acme", "gcloud_config": "acme-cfg" },
+    "acme": { "gh_config_dir": "~/.config/gh-acme", "gcloud_config_dir": "~/.config/gcloud-acme" },
     "ghonly": { "gh_config_dir": "~/.config/gh-ghonly" }
   }
 }
@@ -114,7 +115,7 @@ run_shim() {
   local dir="$1" tool="$2"
   shift 2
   set +e
-  OUT="$(cd "$dir" && env -u GH_CONFIG_DIR -u CLOUDSDK_ACTIVE_CONFIG_NAME \
+  OUT="$(cd "$dir" && env -u GH_CONFIG_DIR -u CLOUDSDK_CONFIG -u GOOGLE_APPLICATION_CREDENTIALS \
     HOME="$HOME_T" PATH="$RUN_PATH" ACCOUNT_MAP="$RUN_MAP" \
     ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
     "$SHIM_BIN/$tool" "$@" 2>"$TMPROOT/err")"
@@ -161,22 +162,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. mapped org で gcloud → CLOUDSDK_ACTIVE_CONFIG_NAME
+# 3. mapped org で gcloud → CLOUDSDK_CONFIG（~ 展開済みの dir）
 # ---------------------------------------------------------------------------
 reset_run
 run_shim "$ORG_REPO" gcloud config list
-if [[ $RC -eq 0 ]] && contains "$OUT" "CLOUDSDK_ACTIVE_CONFIG_NAME=acme-cfg"; then
-  pass "03_mapped_org_gcloud_sets_config_name"
+if [[ $RC -eq 0 ]] && contains "$OUT" "CLOUDSDK_CONFIG=$HOME_T/.config/gcloud-acme" &&
+  contains "$OUT" "GOOGLE_APPLICATION_CREDENTIALS=<unset>"; then
+  pass "03_mapped_org_gcloud_sets_config_dir"
 else
-  fail "03_mapped_org_gcloud_sets_config_name" "rc=$RC out=$OUT err=$ERR"
+  fail "03_mapped_org_gcloud_sets_config_dir" "rc=$RC out=$OUT err=$ERR"
 fi
 
 # ---------------------------------------------------------------------------
-# 4. gcloud_config を省略した org で gcloud → env 未設定のまま実体へ
+# 4. gcloud_config_dir を省略した org で gcloud → env 未設定のまま実体へ
 # ---------------------------------------------------------------------------
 reset_run
 run_shim "$GHONLY_REPO" gcloud config list
-if [[ $RC -eq 0 ]] && contains "$OUT" "CLOUDSDK_ACTIVE_CONFIG_NAME=<unset>" && [[ -z $ERR ]]; then
+if [[ $RC -eq 0 ]] && contains "$OUT" "CLOUDSDK_CONFIG=<unset>" && [[ -z $ERR ]]; then
   pass "04_missing_key_leaves_env_unset"
 else
   fail "04_missing_key_leaves_env_unset" "rc=$RC out=$OUT err=$ERR"
@@ -256,7 +258,8 @@ arg=[it'"'"'s "quoted"]
 arg=[--label=a,b]
 arg=[]
 arg=[$HOME]'
-actual_args="$(printf '%s\n' "$OUT" | sed -n '3,$p')"
+# fake は env 3 行を出してから argc / argv を出す
+actual_args="$(printf '%s\n' "$OUT" | sed -n '4,$p')"
 if [[ $RC -eq 0 && $actual_args == "$expected_args" ]]; then
   pass "08_argv_passed_verbatim"
 else
@@ -331,6 +334,53 @@ if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=<unset>" && [[ -z $ERR ]]; 
   pass "13b_non_github_host_dir_passthrough"
 else
   fail "13b_non_github_host_dir_passthrough" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 14. mapped org で tofu → GOOGLE_APPLICATION_CREDENTIALS が
+#     <gcloud_config_dir>/application_default_credentials.json（~ 展開済み）で届く。
+#     CLOUDSDK_CONFIG は tofu には付けない（Go の ADC 探索は見ないため）
+# ---------------------------------------------------------------------------
+reset_run
+run_shim "$ORG_REPO" tofu init
+if [[ $RC -eq 0 ]] &&
+  contains "$OUT" "GOOGLE_APPLICATION_CREDENTIALS=$HOME_T/.config/gcloud-acme/application_default_credentials.json" &&
+  contains "$OUT" "CLOUDSDK_CONFIG=<unset>" && [[ -z $ERR ]]; then
+  pass "14_mapped_org_tofu_sets_adc_path"
+else
+  fail "14_mapped_org_tofu_sets_adc_path" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 15. gcloud_config_dir を省略した org / 未登録 org で tofu → env 未設定のまま実体へ
+# ---------------------------------------------------------------------------
+reset_run
+run_shim "$GHONLY_REPO" tofu init
+if [[ $RC -eq 0 ]] && contains "$OUT" "GOOGLE_APPLICATION_CREDENTIALS=<unset>" && [[ -z $ERR ]]; then
+  pass "15a_tofu_missing_key_leaves_env_unset"
+else
+  fail "15a_tofu_missing_key_leaves_env_unset" "rc=$RC out=$OUT err=$ERR"
+fi
+
+reset_run
+run_shim "$UNMAPPED_REPO" tofu init
+if [[ $RC -eq 0 ]] && contains "$OUT" "GOOGLE_APPLICATION_CREDENTIALS=<unset>" && [[ -z $ERR ]]; then
+  pass "15b_tofu_unmapped_org_passthrough"
+else
+  fail "15b_tofu_unmapped_org_passthrough" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 16. GOOGLE_APPLICATION_CREDENTIALS を事前に set して mapped org で tofu →
+#     事前の値を上書きしない（サービスアカウント鍵の明示指定を尊重）
+# ---------------------------------------------------------------------------
+reset_run
+RUN_ENV=("GOOGLE_APPLICATION_CREDENTIALS=$TMPROOT/sa-key.json")
+run_shim "$ORG_REPO" tofu plan
+if [[ $RC -eq 0 ]] && contains "$OUT" "GOOGLE_APPLICATION_CREDENTIALS=$TMPROOT/sa-key.json" && [[ -z $ERR ]]; then
+  pass "16_tofu_preset_env_is_not_overridden"
+else
+  fail "16_tofu_preset_env_is_not_overridden" "rc=$RC out=$OUT err=$ERR"
 fi
 
 # --- Summary ---------------------------------------------------------------

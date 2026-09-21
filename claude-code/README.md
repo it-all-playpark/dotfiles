@@ -16,8 +16,8 @@ claude-code/
 ├── RULES.md              # 振る舞いのルール（priority / workflow / safety / git 等）
 ├── settings.json         # permissions（allow/deny）+ hooks 設定 + env
 ├── skill-config.json     # it-all-playpark/skills の per-skill デフォルト値
-├── account-map.json      # gh / gcloud の org → アカウントマップ（bin/account-exec が読む）
-├── bin/                  # gh / gcloud の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud）
+├── account-map.json      # gh / gcloud / tofu の org → アカウントマップ（bin/account-exec が読む）
+├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）
 └── hooks/                # SessionStart / PreCompact / Pre|PostToolUse スクリプト
 ```
 
@@ -34,7 +34,7 @@ framework 自体は使っていない。今は普遍的なガードレールと�
 3. `CLAUDE.md` / `PRINCIPLES.md` / `RULES.md` / `FLAGS.md` / `README.md` を symlink（存在するもののみ）
 4. `MCP_*.md` / `MODE_*.md` ファイルがあれば symlink
 5. `hooks/*.{py,sh}` を `~/.claude/hooks/` に symlink（`*.test.sh` は除外）
-6. `bin/*` を `~/.claude/bin/` に symlink（`*.test.sh` は除外。`bin/gh` / `bin/gcloud` は repo 内で
+6. `bin/*` を `~/.claude/bin/` に symlink（`*.test.sh` は除外。`bin/gh` / `bin/gcloud` / `bin/tofu` は repo 内で
    `account-exec` への symlink なので `~/.claude/bin/gh` → `bin/gh` → `account-exec` の 2 段になる）
 7. `account-map.json` を `~/.claude/account-map.json` に symlink
 
@@ -45,12 +45,13 @@ activation 側では触らないので、既存の symlink を壊さない。
 nix run .#update
 ```
 
-## gh / gcloud アカウント shim
+## gh / gcloud / tofu アカウント shim
 
 設計: `docs/specs/2026-09-19-claude-account-env-design.md`
 
-gh と gcloud を複数アカウントで使い分けるとき、`gh auth switch` / `gcloud config configurations activate`
-はグローバル状態（`~/.config/gh/hosts.yml` / `~/.config/gcloud/active_config`）を書き換えるため、
+gh と gcloud を複数アカウントで使い分けるとき、`gh auth switch` / `gcloud config configurations activate` /
+`gcloud auth application-default login` はグローバル状態（`~/.config/gh/hosts.yml` /
+`~/.config/gcloud/active_config` / `~/.config/gcloud/application_default_credentials.json`）を書き換えるため、
 並列セッションや dev-flow の subagent が別 org で動くと互いに壊し合う。`bin/account-exec` は
 **グローバル状態を一切切り替えず**、コマンドを実行した cwd から使うアカウントを決める PATH shim。
 
@@ -61,19 +62,35 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
   └─ ~/.claude/bin/gh → claude-code/bin/gh → account-exec
        ├─ $PWD（不一致なら pwd -P）から org=BusinessProcessDX を取る
        ├─ ~/.claude/account-map.json の .orgs[org] を jq で引く
-       ├─ GH_CONFIG_DIR=~/.config/gh-th-it-dev を export（gcloud なら CLOUDSDK_ACTIVE_CONFIG_NAME）
+       ├─ GH_CONFIG_DIR=~/.config/gh-th-it-dev を export
        └─ exec ~/.nix-profile/bin/gh pr create …
             （PATH から shim dir を除いて解決した実体。exec 先の PATH は元のまま）
 ```
 
+ツールごとに付ける env:
+
+| ツール | env | マップのキー |
+|---|---|---|
+| `gh` | `GH_CONFIG_DIR=<dir>` | `gh_config_dir` |
+| `gcloud` | `CLOUDSDK_CONFIG=<dir>` | `gcloud_config_dir` |
+| `tofu`（`terraform` 名も可） | `GOOGLE_APPLICATION_CREDENTIALS=<dir>/application_default_credentials.json` | `gcloud_config_dir` |
+
+gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir ごと**分離する。ADC
+（`application_default_credentials.json`）は構成をまたいでグローバルなので、dir を分けないと
+`gcloud auth application-default login` が他 org の ADC を上書きし、tofu / クライアントライブラリが
+別アカウントで GCS 等を叩いて 403 になる。tofu（Go の `x/oauth2`）は `CLOUDSDK_CONFIG` を見ず
+`~/.config/gcloud/` 固定で ADC を探すため、`GOOGLE_APPLICATION_CREDENTIALS` でファイルを明示する。
+
 - `~/.claude/bin` は home-manager が zsh（`envExtra`）/ fish（`shellInit`）の PATH 先頭に載せる。
-  `which gh` / `which gcloud` は `~/.claude/bin/…` を指すようになる。Claude Code セッション内では加えて
+  `which gh` / `which gcloud` / `which tofu` は `~/.claude/bin/…` を指すようになる。Claude Code セッション内では加えて
   SessionStart hook `session-start-account-path.sh` が `$CLAUDE_ENV_FILE` に同じ export を書き、
   起動元の PATH に依存せず shim が効くようにする
 - 同じスクリプト内で `cd org1 && gh …; cd org2 && gh …` としても各呼び出しが独立に解決される。
-  `git push`（https）の credential helper `gh auth git-credential` も git が chdir 済みなので同じ dir で解決される
-- **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_ACTIVE_CONFIG_NAME=… gcloud …` のように対象 env が
-  既に set なら判定しない。実体を直接叩きたいときはこれか `~/.nix-profile/bin/gh`
+  `git push`（https）の credential helper `gh auth git-credential` も git が chdir 済みなので同じ dir で解決される。
+  `pnpm tf:init:stg` のような `cd infrastructure/terraform && tofu init …` も repo 内に留まるので同じ org で解決される
+- **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_CONFIG=… gcloud …` /
+  `GOOGLE_APPLICATION_CREDENTIALS=… tofu …` のように対象 env が既に set なら判定しない
+  （サービスアカウント鍵の明示指定もこれで通る）。実体を直接叩きたいときはこれか `~/.nix-profile/bin/gh`
 - **fail-open**: マップ不在 / JSON 不正 / `jq` 不在 / 値に `'` や改行 を含む場合は env を付けずに実体へ
   passthrough し、stderr に `account-exec: …` を 1 行出す。ghq 外（`~/ghq/github.com/<org>/` にも
   `~/ghq/github.com-<alias>/<org>/` にも無い cwd）や未登録 org は無言で passthrough（既定のグローバル状態のまま）
@@ -85,19 +102,20 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
 ```json
 {
   "orgs": {
-    "BusinessProcessDX": { "gcloud_config": "th-it-all", "gh_config_dir": "~/.config/gh-th-it-dev" },
-    "it-all-playpark":   { "gcloud_config": "default",   "gh_config_dir": "~/.config/gh" }
+    "BusinessProcessDX": { "gcloud_config_dir": "~/.config/gcloud-th-it-dev", "gh_config_dir": "~/.config/gh-th-it-dev" },
+    "it-all-playpark":   { "gcloud_config_dir": "~/.config/gcloud",           "gh_config_dir": "~/.config/gh" }
   }
 }
 ```
 
 - キーは `~/ghq/github.com/<org>/` の `<org>`。SSH host alias（`~/.ssh/config` の `Host github.com-<alias>`）
   経由で `ghq get` した `~/ghq/github.com-<alias>/<org>/` も同じ `<org>` で引く。
-  `gh_config_dir` / `gcloud_config` は両方 optional で、
-  無いキーは env を付けない（gcloud を使わない org は `gcloud_config` を省略する）
+  `gh_config_dir` / `gcloud_config_dir` は両方 optional で、
+  無いキーは env を付けない（gcloud を使わない org は `gcloud_config_dir` を省略する）
 - 値の先頭 `~` だけ `$HOME` に展開する。それ以外の展開はしない
-- `gcloud_config` は `gcloud config configurations list` に存在する構成名をそのまま書く
-- dir の存在や構成名の妥当性は shim では検証しない（gh / gcloud が「未ログイン」等を正しく言う）
+- `gcloud_config_dir` は gcloud の config dir（既定 `~/.config/gcloud` に相当）。tofu はこの dir 直下の
+  `application_default_credentials.json` を使う
+- dir の存在や妥当性は shim では検証しない（gh / gcloud が「未ログイン」、tofu が「ファイルが無い」を正しく言う）
 - 編集後は `nix run .#update` 不要（`~/.claude/account-map.json` は symlink）。`nix fmt` がキーをソートする
 
 ### 初回セットアップ（人間の作業）
@@ -107,6 +125,15 @@ gh auth logout -h github.com -u th-it-dev            # ~/.config/gh から失効
 GH_CONFIG_DIR=~/.config/gh-th-it-dev gh auth login    # 分離 dir に th-it-dev を再ログイン
 nix run .#update                                      # symlink / PATH / settings を反映
 exec $SHELL -l                                        # PATH を取り直す
+
+# gcloud: 分離 dir にログイン（shim が cwd から CLOUDSDK_CONFIG を付けるので cd してから）
+cd ~/ghq/github.com/BusinessProcessDX/<repo>
+gcloud auth login                                     # → ~/.config/gcloud-th-it-dev/
+gcloud config set project th-all
+gcloud auth application-default login                 # → ~/.config/gcloud-th-it-dev/application_default_credentials.json
+cd ~/ghq/github.com/playpark-llc/<repo>
+gcloud auth application-default login                 # ~/.config/gcloud/ の ADC が別アカウントで上書きされていたら戻す
+gcloud config configurations delete th-it-all         # 旧構成（~/.config/gcloud 内）は不要になったので消す（任意）
 ```
 
 確認:
@@ -115,20 +142,24 @@ exec $SHELL -l                                        # PATH を取り直す
 cd ~/ghq/github.com/BusinessProcessDX/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/BusinessProcessDX/<repo>
 which gh                      # → ~/.claude/bin/gh
 gh auth status                # → th-it-dev
-gcloud config list            # → th-it-all (account th.it.dev@…)
+gcloud config list            # → account th.it.dev@…（~/.config/gcloud-th-it-dev/）
+ACCOUNT_EXEC_DEBUG=1 tofu version   # stderr: GOOGLE_APPLICATION_CREDENTIALS=…/gcloud-th-it-dev/application_default_credentials.json
 cd ~/ghq/github.com/it-all-playpark/dotfiles
 gh auth status                # → it-all-playpark
+gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud/）
 ```
 
 ### 既知の限界
 
-- gcloud ADC（`application_default_credentials.json`）は構成をまたいでグローバルなので対象外
-- `GH_CONFIG_DIR` を分けると `config.yml`（alias, editor 等）も dir ごとに独立する。共有したくなったら
-  `config.yml` だけ symlink する
+- `GH_CONFIG_DIR` / `CLOUDSDK_CONFIG` を分けると `config.yml` / `configurations/`（alias, editor, project 等）も
+  dir ごとに独立する。共有したくなったら該当ファイルだけ symlink する
+- shim が env を付けるのは `gh` / `gcloud` / `tofu`（と `terraform` 名）だけ。他のクライアント
+  （gsutil、各言語の SDK を直接使うスクリプト等）は env が付かないので既定の `~/.config/gcloud/` を探す。
+  必要になったら `bin/<tool>` symlink と `case` を足す
 - shim は毎回 `jq` を起動する（数 ms、gh / gcloud 自体の起動時間に埋もれる）
 - ghq 外に clone した repo では判定できず既定のまま
 
-テスト: `bash claude-code/bin/account-exec.test.sh`（shim、12 ケース / 14 assertion）、
+テスト: `bash claude-code/bin/account-exec.test.sh`（shim、16 ケース / 20 assertion）、
 `bash tests/claude-bin-symlink.test.sh`（activation の symlink ロジック）。
 `bin/account-exec` は拡張子が無いため pre-commit の shellcheck 対象外。変更時は
 `nix develop -c shellcheck claude-code/bin/account-exec` を手で回す。
@@ -270,5 +301,5 @@ nix run .#update
 # 必要なら symlink を手動で剥がす
 rm ~/.claude/settings.json
 rm ~/.claude/hooks/<name>.sh
-rm ~/.claude/bin/gh ~/.claude/bin/gcloud ~/.claude/bin/account-exec ~/.claude/account-map.json
+rm ~/.claude/bin/gh ~/.claude/bin/gcloud ~/.claude/bin/tofu ~/.claude/bin/account-exec ~/.claude/account-map.json
 ```

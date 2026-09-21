@@ -201,7 +201,7 @@ in
       done
 
       # account-map-symlink: begin
-      # gh / gcloud の cwd 連動アカウント shim (bin/account-exec) が引く org → アカウントマップ
+      # gh / gcloud / tofu の cwd 連動アカウント shim (bin/account-exec) が引く org → アカウントマップ
       target="$CLAUDE_DIR/account-map.json"
       if [ -f "$target" ] && [ ! -L "$target" ]; then
         rm "$target"
@@ -265,7 +265,7 @@ in
       # hooks-symlink: end
 
       # bin-symlink: begin
-      # gh / gcloud の cwd 連動アカウント shim (bin/account-exec と symlink の bin/gh, bin/gcloud) を
+      # gh / gcloud / tofu の cwd 連動アカウント shim (bin/account-exec と symlink の bin/gh, bin/gcloud, bin/tofu) を
       # ~/.claude/bin/ へ symlink。bin/gh は repo 内で account-exec への symlink なので
       # ~/.claude/bin/gh → claude-code/bin/gh → account-exec の 2 段になる (ln -sf は dereference しない)
       if [ -d "$DOTFILES_CLAUDE/bin" ]; then

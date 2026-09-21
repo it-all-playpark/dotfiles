@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SessionStart hook: ~/.claude/bin (gh / gcloud の cwd 連動アカウント shim) を
+# SessionStart hook: ~/.claude/bin (gh / gcloud / tofu の cwd 連動アカウント shim) を
 # セッションの PATH 先頭に載せる。
 #
 # Claude Code の Bash ツールは rc ファイルを読み直さず、claude を起動した
