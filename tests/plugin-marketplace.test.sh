@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 # tests/plugin-marketplace.test.sh
 # Unit test for claude-code/settings.json's extraKnownMarketplaces /
-# enabledPlugins entries introduced for skills#584's 3 plugin split
-# (playpark-core / dev-flow / playpark-skills, marketplace playpark-local,
-# link mode via source: command).
+# enabledPlugins entries for the 3 playpark plugins
+# (playpark-core / dev-flow / playpark-skills). They are installed from the
+# GitHub marketplace "playpark" (it-all-playpark/skills) on every host, so
+# hosts without a local skills checkout track main too (the plugins carry no
+# version, so every commit on main is a new version - skills#722).
 # Run from the repo root: bash tests/plugin-marketplace.test.sh
 # Requires: jq
-#
-# String checks are done with jq's test() rather than grep: the grep
-# resolved in this environment is macOS BSD grep, which does not
-# interpret bracket-expression escapes like \x20, so ASCII/whitespace
-# assertions are expressed with jq (Oniguruma) instead.
 
 set -euo pipefail
 
@@ -55,107 +52,32 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# marketplace_is_inline_settings_source
+# marketplace_is_github_source
 # ---------------------------------------------------------------------------
-echo "- marketplace_is_inline_settings_source"
+echo "- marketplace_is_github_source"
 if jq -e '
-    .extraKnownMarketplaces["playpark-local"].source.source == "settings"
-    and .extraKnownMarketplaces["playpark-local"].source.name == "playpark-local"
+    .extraKnownMarketplaces["playpark"].source
+      == {"source": "github", "repo": "it-all-playpark/skills"}
   ' "${SETTINGS}" >/dev/null 2>&1; then
-  pass "marketplace_is_inline_settings_source"
+  pass "marketplace_is_github_source"
 else
-  fail "marketplace_is_inline_settings_source" "extraKnownMarketplaces.playpark-local.source is not an inline settings-source manifest with matching name"
+  fail "marketplace_is_github_source" "extraKnownMarketplaces.playpark.source is not {source: github, repo: it-all-playpark/skills}"
 fi
 
 # ---------------------------------------------------------------------------
-# marketplace_plugins_are_the_three
+# no_playpark_local_marketplace
 # ---------------------------------------------------------------------------
-echo "- marketplace_plugins_are_the_three"
+# The link-mode inline marketplace and the GitHub marketplace ship plugins
+# with the same names; enabling both would collide on the dev-flow:
+# namespace, so playpark-local must be gone entirely.
+echo "- no_playpark_local_marketplace"
 if jq -e '
-    (.extraKnownMarketplaces["playpark-local"].source.plugins | map(.name))
-      == ["playpark-core", "dev-flow", "playpark-skills"]
+    (.extraKnownMarketplaces | has("playpark-local") | not)
+    and ([.enabledPlugins | keys[] | select(endswith("@playpark-local"))] | length == 0)
   ' "${SETTINGS}" >/dev/null 2>&1; then
-  pass "marketplace_plugins_are_the_three"
+  pass "no_playpark_local_marketplace"
 else
-  fail "marketplace_plugins_are_the_three" "plugins[] names/order != [playpark-core, dev-flow, playpark-skills]"
-fi
-
-# ---------------------------------------------------------------------------
-# plugin_sources_are_command_link
-# ---------------------------------------------------------------------------
-echo "- plugin_sources_are_command_link"
-if jq -e '
-    [.extraKnownMarketplaces["playpark-local"].source.plugins[]
-      | (.source.source == "command" and .source.mode == "link")]
-      | all
-  ' "${SETTINGS}" >/dev/null 2>&1; then
-  pass "plugin_sources_are_command_link"
-else
-  fail "plugin_sources_are_command_link" "Not all 3 plugins have source.source==command and source.mode==link"
-fi
-
-# ---------------------------------------------------------------------------
-# command_points_to_plugin_dir
-# ---------------------------------------------------------------------------
-echo "- command_points_to_plugin_dir"
-mismatched=()
-for name in playpark-core dev-flow playpark-skills; do
-  expected="echo \"\$HOME/ghq/github.com/it-all-playpark/skills/plugins/${name}\""
-  actual="$(jq -r --arg n "${name}" '
-      .extraKnownMarketplaces["playpark-local"].source.plugins[]
-        | select(.name == $n) | .source.command
-    ' "${SETTINGS}")"
-  [ "${actual}" = "${expected}" ] || mismatched+=("${name}: got [${actual}]")
-done
-if [ "${#mismatched[@]}" -eq 0 ]; then
-  pass "command_points_to_plugin_dir"
-else
-  fail "command_points_to_plugin_dir" "Mismatches: ${mismatched[*]}"
-fi
-
-# ---------------------------------------------------------------------------
-# command_is_printable_ascii
-# ---------------------------------------------------------------------------
-echo "- command_is_printable_ascii"
-bad=()
-for name in playpark-core dev-flow playpark-skills; do
-  ok="$(jq -r --arg n "${name}" '
-      (.extraKnownMarketplaces["playpark-local"].source.plugins[]
-        | select(.name == $n) | .source.command) as $c
-      | (($c | test("^[ -~]+$")) and (($c | test("    ")) | not) and ($c | length) <= 500)
-    ' "${SETTINGS}")"
-  [ "${ok}" = "true" ] || bad+=("${name}")
-done
-if [ "${#bad[@]}" -eq 0 ]; then
-  pass "command_is_printable_ascii"
-else
-  fail "command_is_printable_ascii" "Failed ASCII/whitespace/length check: ${bad[*]}"
-fi
-
-# ---------------------------------------------------------------------------
-# command_prints_absolute_plugin_path
-# ---------------------------------------------------------------------------
-echo "- command_prints_absolute_plugin_path"
-FAKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/pm-test.XXXXXX")"
-trap 'rm -rf "${FAKE_HOME}"' EXIT
-
-exec_mismatch=()
-for name in playpark-core dev-flow playpark-skills; do
-  cmd="$(jq -r --arg n "${name}" '
-      .extraKnownMarketplaces["playpark-local"].source.plugins[]
-        | select(.name == $n) | .source.command
-    ' "${SETTINGS}")"
-  out="$(HOME="${FAKE_HOME}" sh -c "${cmd}")" || {
-    exec_mismatch+=("${name}: command exited non-zero")
-    continue
-  }
-  expected_out="${FAKE_HOME}/ghq/github.com/it-all-playpark/skills/plugins/${name}"
-  [ "${out}" = "${expected_out}" ] || exec_mismatch+=("${name}: got [${out}] want [${expected_out}]")
-done
-if [ "${#exec_mismatch[@]}" -eq 0 ]; then
-  pass "command_prints_absolute_plugin_path"
-else
-  fail "command_prints_absolute_plugin_path" "Mismatches: ${exec_mismatch[*]}"
+  fail "no_playpark_local_marketplace" "playpark-local marketplace or an @playpark-local enabledPlugins entry remains"
 fi
 
 # ---------------------------------------------------------------------------
@@ -163,27 +85,51 @@ fi
 # ---------------------------------------------------------------------------
 echo "- enabled_plugins_registered"
 if jq -e '
-    .enabledPlugins["playpark-core@playpark-local"] == true
-    and .enabledPlugins["dev-flow@playpark-local"] == true
-    and .enabledPlugins["playpark-skills@playpark-local"] == true
+    .enabledPlugins["playpark-core@playpark"] == true
+    and .enabledPlugins["dev-flow@playpark"] == true
+    and .enabledPlugins["playpark-skills@playpark"] == true
   ' "${SETTINGS}" >/dev/null 2>&1; then
   pass "enabled_plugins_registered"
 else
-  fail "enabled_plugins_registered" "One or more of playpark-core@playpark-local / dev-flow@playpark-local / playpark-skills@playpark-local is not true"
+  fail "enabled_plugins_registered" "One or more of playpark-core@playpark / dev-flow@playpark / playpark-skills@playpark is not true"
 fi
 
 # ---------------------------------------------------------------------------
-# legacy_playpark_plugin_still_enabled
+# plugin_autoupdate_forced
 # ---------------------------------------------------------------------------
-# NOTE: it-all-playpark/skills#584 (plugin bin/ 化) がまだ未 merge のため、
-# playpark-local 側だけを有効化すると journal / secfloor-classify 等の
-# bare command が PATH から消え、playpark-local の install も失敗しうる。
-# 584 merge 後の別 PR で false に倒すまでは true のまま残す。
-echo "- legacy_playpark_plugin_still_enabled"
-if jq -e '.enabledPlugins["playpark-skills@playpark"] == true' "${SETTINGS}" >/dev/null 2>&1; then
-  pass "legacy_playpark_plugin_still_enabled"
+# DISABLE_AUTOUPDATER=1 also stops plugin auto-updates; FORCE_AUTOUPDATE_PLUGINS=1
+# keeps plugin updates on while Claude Code itself stays pinned (mise).
+echo "- plugin_autoupdate_forced"
+if jq -e '
+    (.env.DISABLE_AUTOUPDATER != "1") or (.env.FORCE_AUTOUPDATE_PLUGINS == "1")
+  ' "${SETTINGS}" >/dev/null 2>&1; then
+  pass "plugin_autoupdate_forced"
 else
-  fail "legacy_playpark_plugin_still_enabled" "enabledPlugins[playpark-skills@playpark] must stay true until skills#584 merges"
+  fail "plugin_autoupdate_forced" "DISABLE_AUTOUPDATER=1 without FORCE_AUTOUPDATE_PLUGINS=1 stops plugin auto-updates"
+fi
+
+# ---------------------------------------------------------------------------
+# excluded_commands_cover_plugin_cache
+# ---------------------------------------------------------------------------
+# Copy-mode plugins run from ~/.claude/plugins/cache/playpark/<plugin>/<version>/;
+# skill scripts that call gh internally need the same 3 launch forms as the
+# skills checkout paths.
+echo "- excluded_commands_cover_plugin_cache"
+missing=()
+for form in \
+  "/Users/naramotoyuuji/.claude/plugins/cache/playpark/*" \
+  "bash /Users/naramotoyuuji/.claude/plugins/cache/playpark/*" \
+  "python3 /Users/naramotoyuuji/.claude/plugins/cache/playpark/*" \
+  'bash $HOME/.claude/plugins/cache/playpark/*' \
+  'python3 $HOME/.claude/plugins/cache/playpark/*'; do
+  if ! jq -e --arg f "${form}" '.sandbox.excludedCommands | index($f) != null' "${SETTINGS}" >/dev/null 2>&1; then
+    missing+=("${form}")
+  fi
+done
+if [ "${#missing[@]}" -eq 0 ]; then
+  pass "excluded_commands_cover_plugin_cache"
+else
+  fail "excluded_commands_cover_plugin_cache" "Missing: ${missing[*]}"
 fi
 
 # ---------------------------------------------------------------------------

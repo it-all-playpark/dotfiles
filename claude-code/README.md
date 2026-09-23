@@ -254,24 +254,29 @@ permission を追加するときは、まず deny ルールに引っかからな
 skills 本体は別 repo（[it-all-playpark/skills](https://github.com/it-all-playpark/skills)）で管理される。
 skills#571 以降は `plugins/{playpark-core,dev-flow,playpark-skills}` の 3 plugin 構成。
 
-自分用は `settings.json` の `extraKnownMarketplaces.playpark-local`（`source: "settings"` の
-inline marketplace）に 3 plugin を `source: "command"` + `mode: "link"` で登録し、
-`enabledPlugins` で `playpark-core@playpark-local` / `dev-flow@playpark-local` /
-`playpark-skills@playpark-local` を有効化している。command は
-`echo "$HOME/ghq/github.com/it-all-playpark/skills/plugins/<plugin>"` で、link mode は
-plugin cache から checkout への symlink を張るので repo の編集が再 install なしで反映される。
+全ホスト共通で `settings.json` の `extraKnownMarketplaces.playpark`（GitHub source
+`it-all-playpark/skills`、既定ブランチ main）から 3 plugin を copy mode で入れ、`enabledPlugins` で
+`playpark-core@playpark` / `dev-flow@playpark` / `playpark-skills@playpark` を有効化している。
+skills の plugin は `version` を持たない（skills#722）ので git commit SHA が version になり、
+main への commit がそのまま更新として配布される。skills repo を checkout できないホストでも
+main に追随できるよう、旧 link mode の inline marketplace `playpark-local` は廃止した
+（同名 plugin を両方有効化すると `dev-flow:` 名前空間が衝突するため併用しない）。
+ローカル checkout の未 merge の変更は plugin には反映されない（merge 後に auto-update で届く）。
+
+自動追随のための設定と前提:
+
+- `env.FORCE_AUTOUPDATE_PLUGINS=1`: `DISABLE_AUTOUPDATER=1`（本体は mise で固定）は plugin の
+  auto-update も止めるため、plugin だけ更新を有効に戻す
+- `autoUpdate: true` は managed settings でしか効かないため、user settings には書けない。
+  各マシンで一度 `/plugin` → Marketplaces → `playpark` の auto-update を有効化する
+- GitHub 由来の plugin は起動時に自動 install されない。各マシンで一度 install する（下記導入手順）
+- auto-update は起動後 0〜10 分の遅延で走り、`/reload-plugins` か次回起動で反映される
 
 `bin/` の bare 名（`journal` / `secfloor-classify` 等）は Claude Code が plugin の `bin/` を
-PATH に載せることで解決する。`sandbox.excludedCommands` には bare 名のみ登録し、
-`~/.claude/skills/*` 系 glob は撤去済み（issue #179）。
-
-旧 copy mode の `playpark-skills@playpark`（github marketplace `playpark`）は、
-[it-all-playpark/skills#584](https://github.com/it-all-playpark/skills/issues/584)
-（plugin `bin/` 化）が未 merge の間は `enabledPlugins` で `true` のまま残す。
-584 merge 前に `false` にすると `journal` / `secfloor-classify` 等の bare command が
-PATH から消え、`playpark-local` 側の install も失敗しうるため。584 merge 後に別 PR で
-`false` へ倒し、マシン上に残っていれば `claude plugin uninstall playpark-skills@playpark`
-で除去する。
+PATH に載せることで解決する。`sandbox.excludedCommands` には bare 名を登録し、
+`~/.claude/skills/*` 系 glob は撤去済み（issue #179）。gh を内部で呼ぶ skill スクリプトを
+パス指定で起動する形は、plugin cache（`~/.claude/plugins/cache/playpark/*`）と skills の
+checkout / `skills-wt/` の両方を bare / `bash` / `python3` の 3 形で登録している。
 
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
 移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。
@@ -283,15 +288,20 @@ hermes コンテナ（`container.settings.json` を `/root/.claude/settings.json
 SKILL.md frontmatter 検証はコンテナ内では発火しない（gateway 側 `security.redact_secrets` は
 継続）。必要なら hermes 側で `playpark-core` plugin を有効化する。
 
-### 導入手順（skills#571 merge 後）
+### 導入手順（各マシンで一度）
 
 1. `nix run .#update` を実行
 2. `~/.claude/skills` / `~/.claude/workflows` / `~/.claude/agents` の repo symlink が残っていれば
    skills 側の手順で撤去
-3. 素の `claude` を起動すると `playpark-local` の 3 plugin が install される
-4. `/dev-flow` が出ることを確認
-5. セッション内で `command -v journal` と `command -v secfloor-classify` が
-   `~/.claude/plugins/cache/playpark-local/...` 配下を返すことを確認
+3. 旧 `playpark-local` の install が残っていれば除去する:
+   `claude plugin uninstall dev-flow@playpark-local`（`playpark-core` / `playpark-skills` も同様）
+4. 3 plugin を install する:
+   `claude plugin install playpark-core@playpark` / `dev-flow@playpark` / `playpark-skills@playpark`
+   （private repo として扱われる環境では git の認証（`gh auth setup-git` 等）が必要）
+5. `/plugin` → Marketplaces → `playpark` で auto-update を有効化
+6. `/dev-flow` が出ることを確認
+7. セッション内で `command -v journal` と `command -v secfloor-classify` が
+   `~/.claude/plugins/cache/playpark/...` 配下を返すことを確認
 
 ## Rollback
 

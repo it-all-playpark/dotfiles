@@ -17,10 +17,9 @@
   "effortLevel": "high",
   "enableAllProjectMcpServers": false,
   "enabledPlugins": {
-    "dev-flow@playpark-local": true,
-    "playpark-core@playpark-local": true,
+    "dev-flow@playpark": true,
+    "playpark-core@playpark": true,
     "playpark-skills@playpark": true,
-    "playpark-skills@playpark-local": true,
     "playwright@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": true,
@@ -32,42 +31,14 @@
   "env": {
     "API_TIMEOUT_MS": "900000",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "DISABLE_AUTOUPDATER": "1"
+    "DISABLE_AUTOUPDATER": "1",
+    "FORCE_AUTOUPDATE_PLUGINS": "1"
   },
   "extraKnownMarketplaces": {
-    "playpark-local": {
+    "playpark": {
       "source": {
-        "name": "playpark-local",
-        "plugins": [
-          {
-            "description": "Shared base for playpark plugins (link mode, local checkout)",
-            "name": "playpark-core",
-            "source": {
-              "command": "echo \"$HOME/ghq/github.com/it-all-playpark/skills/plugins/playpark-core\"",
-              "mode": "link",
-              "source": "command"
-            }
-          },
-          {
-            "description": "dev-flow workflows, skills and agents (link mode, local checkout)",
-            "name": "dev-flow",
-            "source": {
-              "command": "echo \"$HOME/ghq/github.com/it-all-playpark/skills/plugins/dev-flow\"",
-              "mode": "link",
-              "source": "command"
-            }
-          },
-          {
-            "description": "playpark personal skills (link mode, local checkout)",
-            "name": "playpark-skills",
-            "source": {
-              "command": "echo \"$HOME/ghq/github.com/it-all-playpark/skills/plugins/playpark-skills\"",
-              "mode": "link",
-              "source": "command"
-            }
-          }
-        ],
-        "source": "settings"
+        "repo": "it-all-playpark/skills",
+        "source": "github"
       }
     }
   },
@@ -500,6 +471,11 @@
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*",
       "bash $HOME/ghq/github.com/it-all-playpark/skills-wt/*",
       "python3 $HOME/ghq/github.com/it-all-playpark/skills-wt/*",
+      "/Users/naramotoyuuji/.claude/plugins/cache/playpark/*",
+      "bash /Users/naramotoyuuji/.claude/plugins/cache/playpark/*",
+      "python3 /Users/naramotoyuuji/.claude/plugins/cache/playpark/*",
+      "bash $HOME/.claude/plugins/cache/playpark/*",
+      "python3 $HOME/.claude/plugins/cache/playpark/*",
       "cross-repo-artifacts",
       "cross-repo-artifacts *",
       "detect-and-install",
