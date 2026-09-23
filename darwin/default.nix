@@ -18,6 +18,10 @@ in
       # macOS専用のパッケージをここに追加
     ];
 
+  # xcodegen は <bin>/../share/xcodegen/SettingPresets を探す。system profile に
+  # リンクしないと SDKROOT / PRODUCT_NAME 等が抜けた .xcodeproj が生成される
+  environment.pathsToLink = [ "/share/xcodegen" ];
+
   # macOSシステム設定
   system.defaults = {
     dock = {
