@@ -459,8 +459,10 @@
     "autoAllowBashIfSandboxed": true,
     "enabled": true,
     "excludedCommands": [
-      "gh:*",
-      "git:*",
+      "gh",
+      "gh *",
+      "git",
+      "git *",
       "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
