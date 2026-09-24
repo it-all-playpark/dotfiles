@@ -15,6 +15,9 @@
               / `gh api x --jq '.a | b'` (引用符内の | は分割されない)
   sandbox 内: `gh a | head` / `gh a || true` / `cd X && gh a` / `VAR=x gh a`
               / `gh a > file` / `gh a 2>/dev/null` (ファイルへのリダイレクトは全部)
+              / `git -C X push` / `git -c k=v push` / `git --work-tree=X push`
+                (単独でも。-C 等を付けた git は excludedCommands が効かない。
+                 `--no-pager` と `gh -R` は影響しない)
 
 判定:
   1. gh、または git の通信系サブコマンド (push/pull/fetch/clone/ls-remote) を
@@ -22,7 +25,8 @@
   2. 次のどれかに当たれば deny (理由に書き換え方を載せる)
      - パースできない (heredoc 等) / サブシェル・コマンド置換・制御構文
      - fd 複製 (2>&1 等) 以外のリダイレクト
-     - excludedCommands に一致しない部分がある (環境変数の前置を含む)
+     - excludedCommands に一致しない部分がある (環境変数の前置、
+       -C / -c / --work-tree / --git-dir 付きの git を含む)
   excludedCommands は ~/.claude/settings.json から読む (harness と同じ真実)。
 
 出力:
@@ -50,6 +54,9 @@ DEFAULT_EXCLUDED = ["gh", "gh *", "git", "git *"]
 GIT_NETWORK_SUBCOMMANDS = {"push", "pull", "fetch", "clone", "ls-remote"}
 # git のグローバルオプションのうち値を次のトークンに取るもの
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+# 付けると excludedCommands に一致していても sandbox 内で実行される (2026-09-24 実測。
+# --git-dir は worktree ガードに阻まれ未計測だが、対象を変える同類として扱う)
+GIT_SANDBOXING_OPTS = {"-C", "-c", "--git-dir", "--work-tree"}
 PUNCTUATION = "();<>|&\n"
 SEPARATORS = {"&&", "||", ";", "|", "&"}
 CONTROL_WORDS = {
@@ -65,7 +72,8 @@ gh / git が sandbox 外で動くのは、コマンド全体が「excludedComman
 
 書き換え方:
 - 整形は gh の中で: `gh ... --jq '<filter>'` / `-q` / `--template`（引用符内の | は OK）
-- ディレクトリ指定: `cd X && gh ...` → `gh -R owner/repo ...`、`cd X && git push` → `git -C X push`
+- ディレクトリ指定: `cd X && gh ...` → `gh -R owner/repo ...`
+- git の -C / -c / --work-tree / --git-dir は、単独でも sandbox 行きになる（excludedCommands が効かない）。別ディレクトリで push / fetch するときは、`cd X` だけを 1 回の Bash 呼び出しで実行し（cwd は呼び出し間で保持される）、次の呼び出しで素の `git push` を実行する
 - PR/issue 本文: 先に Write ツールでファイルを作り `gh pr create --body-file <path>`（heredoc や $(cat) と連結しない）
 - 加工が必要なら呼び出しを分ける: gh / git だけを単独で実行 → その出力を見て次の Bash 呼び出しで処理
 - 環境変数の前置（VAR=x gh）、ファイルへのリダイレクト（> file、2>/dev/null）、|| true、for ループも sandbox 行きになる。ループはコマンドを並べて && でつなぐ"""
@@ -82,7 +90,21 @@ def load_excluded():
     return sandbox.get("excludedCommands") or DEFAULT_EXCLUDED
 
 
+def has_git_sandboxing_opt(words):
+    """git のサブコマンドより前に -C / -c / --work-tree / --git-dir があるか。"""
+    if not words or os.path.basename(words[0]) != "git":
+        return False
+    i = 1
+    while i < len(words) and words[i].startswith("-"):
+        if words[i].split("=", 1)[0] in GIT_SANDBOXING_OPTS:
+            return True
+        i += 2 if words[i] in GIT_OPTS_WITH_VALUE else 1
+    return False
+
+
 def matches_excluded(segment, patterns):
+    if has_git_sandboxing_opt(segment):
+        return False
     text = " ".join(segment)
     for raw in patterns:
         pat = os.path.expanduser(os.path.expandvars(raw))
