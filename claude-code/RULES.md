@@ -69,6 +69,7 @@ Conflict: Safety > Scope > Quality > Speed
 - **`nix fmt` は `-- --no-cache` を付ける**。treefmt が `~/Library/Caches/treefmt` に
   キャッシュ DB を書こうとして `operation not permitted` で落ちる
   （`allowWrite` に足せば素で通るが、キャッシュなので付けて回避で足りる）
+- **sandbox の書き込み拒否リスト（`denyWithinAllow`）は Bash コマンドにしか効かない**。Edit / Write ツールは permission 側の管轄で、別物。リストに `claude-code/settings.json` があっても、それは main checkout 側のパスで、worktree 内の同じファイルは Edit ツールで編集できる。「書けない」と断言する前にまず試す
 - sandbox で塞がれても `dangerouslyDisableSandbox` は policy で無効。回避不能なら失敗を報告し、settings 調整を提案する（勝手に緩めない）
 - **gh を内部で呼ぶ skill スクリプトは `sandbox.excludedCommands` に登録済みの起動形で呼ぶ**。登録されているのは「スクリプトパスが先頭トークンの bare 形」と `bash <path>` / `python3 <path>` の 2 トークン形（plugin cache `~/.claude/plugins/cache/playpark/`、`~/ghq/github.com/it-all-playpark/skills/` および repo 外 worktree 置き場 `skills-wt/` 配下のパス）のみ。`cd X && script` や `VAR=x script` のような前置形は登録がなく、先頭トークンマッチの仕組み上パターンでも表現できない。登録外の形で呼ぶと、内部で資格情報を要する処理（gh が `~/.config/gh` や keyring を読む等）が失敗する
 
