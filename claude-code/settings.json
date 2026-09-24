@@ -165,7 +165,7 @@
       {
         "hooks": [
           {
-            "command": "python3 \"$HOME/.claude/hooks/pretool-gh-compound-guard.py\"",
+            "command": "f=\"$HOME/.claude/hooks/pretool-gh-compound-guard.py\"; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"",
             "statusMessage": "gh sandbox 実行形チェック中...",
             "timeout": 5,
             "type": "command"
