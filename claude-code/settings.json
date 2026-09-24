@@ -36,6 +36,7 @@
   },
   "extraKnownMarketplaces": {
     "playpark": {
+      "autoUpdate": true,
       "source": {
         "repo": "it-all-playpark/skills",
         "source": "github"
