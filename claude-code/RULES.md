@@ -66,6 +66,15 @@ Conflict: Safety > Scope > Quality > Speed
     ネットワーク自由なので、ここは egress の抜け道になっている。nix 経由の外部取得を
     「許可ドメインの内側だから安全」と考えないこと。未知の flake や URL を
     `nix build` / `nix run` で引く前に、通常の外部アクセスと同じ慎重さで扱う
+- **pnpm は sandbox 内で動かす**（`~/Library/pnpm` を `allowWrite`、2026-09-25 追加）。
+  グローバルの pnpm とプロジェクトの `packageManager` がずれると、pnpm は固定版を
+  `~/Library/pnpm/package-manager-store` に用意しようとしてロックを書き、未許可だと
+  `ERR_PNPM_STORE_DIR_OPEN_OPERATION_LOCK` で全コマンドが落ちる。
+  `excludedCommands` で sandbox 外に出さないこと: install 時の postinstall スクリプトが
+  `~/.ssh` や gh の資格情報を読めてしまう。docker も同様に外に出さない（ソケットが
+  ホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
+- **dev サーバーの起動は許可済み**（`network.allowLocalBinding: true`、2026-09-25 追加）。
+  `next dev` 等で localhost の port を listen できる。外向き通信の制限は変わらない
 - **`nix fmt` は `-- --no-cache` を付ける**。treefmt が `~/Library/Caches/treefmt` に
   キャッシュ DB を書こうとして `operation not permitted` で落ちる
   （`allowWrite` に足せば素で通るが、キャッシュなので付けて回避で足りる）
