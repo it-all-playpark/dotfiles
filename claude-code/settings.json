@@ -448,30 +448,6 @@
   "sandbox": {
     "allowUnsandboxedCommands": false,
     "autoAllowBashIfSandboxed": true,
-    "credentials": {
-      "files": [
-        {
-          "mode": "deny",
-          "path": "~/.aws/**"
-        },
-        {
-          "mode": "deny",
-          "path": "~/.ssh/**"
-        },
-        {
-          "mode": "deny",
-          "path": "~/.gnupg/**"
-        },
-        {
-          "mode": "deny",
-          "path": "~/.config/gh/**"
-        },
-        {
-          "mode": "deny",
-          "path": "~/.config/gh-*/**"
-        }
-      ]
-    },
     "enabled": true,
     "excludedCommands": [
       "gh",
@@ -576,6 +552,13 @@
         "~/ghq/**/.claude/scheduled_tasks.lock",
         "~/.config/gws",
         "~/.config/gcloud"
+      ],
+      "denyRead": [
+        "~/.aws/**",
+        "~/.ssh/**",
+        "~/.gnupg/**",
+        "~/.config/gh/**",
+        "~/.config/gh-*/**"
       ]
     },
     "network": {
