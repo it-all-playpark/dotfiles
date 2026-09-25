@@ -12,6 +12,8 @@
 #   5. feature branch で unstaged 差分があれば exit 2
 #   6. feature branch で staged 差分があれば exit 2
 #   7. detached HEAD では exit 0
+#   8. stop_hook_active=true では exit 0（差し戻し後の再ブロックを防止）
+#   9. stop_hook_active=false / JSON 不正では従来通りブロック
 #
 # 終了コード: 0 = 全テスト pass / 1 = 1 件以上 fail
 
@@ -135,6 +137,39 @@ setup_repo "${REPO9}" "feature/detach"
   echo "dirty" >>initial.txt
 )
 run_case "detached HEAD skips guard" "0" "$(run_hook "${REPO9}")"
+
+# --- Case 10: feature branch, diff, stop_hook_active=true → exit 0 (差し戻し後) ---
+REPO10="${TMPROOT}/feature-stop-hook-active-true"
+setup_repo "${REPO10}" "feature/stop-hook-active-true"
+echo "dirty" >>"${REPO10}/initial.txt"
+rc=0
+(
+  cd "${REPO10}"
+  echo '{"session_id":"test","hook_event_name":"Stop","stop_hook_active":true}' | bash "${HOOK_SCRIPT}" >/dev/null 2>&1
+) || rc=$?
+run_case "stop_hook_active=true bypasses" "0" "${rc}"
+
+# --- Case 11: feature branch, diff, stop_hook_active=false → exit 2 (通常通りブロック) ---
+REPO11="${TMPROOT}/feature-stop-hook-active-false"
+setup_repo "${REPO11}" "feature/stop-hook-active-false"
+echo "dirty" >>"${REPO11}/initial.txt"
+rc=0
+(
+  cd "${REPO11}"
+  echo '{"session_id":"test","hook_event_name":"Stop","stop_hook_active":false}' | bash "${HOOK_SCRIPT}" >/dev/null 2>&1
+) || rc=$?
+run_case "stop_hook_active=false still blocks" "2" "${rc}"
+
+# --- Case 12: feature branch, diff, JSON 不正 → exit 2 (安全側でブロック継続) ---
+REPO12="${TMPROOT}/feature-stop-hook-active-badjson"
+setup_repo "${REPO12}" "feature/stop-hook-active-badjson"
+echo "dirty" >>"${REPO12}/initial.txt"
+rc=0
+(
+  cd "${REPO12}"
+  echo 'not valid json' | bash "${HOOK_SCRIPT}" >/dev/null 2>&1
+) || rc=$?
+run_case "invalid JSON still blocks (fail-safe)" "2" "${rc}"
 
 echo ""
 echo "Total: $((PASS + FAIL))  Pass: ${PASS}  Fail: ${FAIL}"
