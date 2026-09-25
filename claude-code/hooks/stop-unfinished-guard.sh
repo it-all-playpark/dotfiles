@@ -7,6 +7,10 @@
 #
 # 無効化条件（いずれかに該当すると exit 0）:
 #   - 環境変数 CLAUDE_STOP_GUARD=0（escape hatch）
+#   - payload の stop_hook_active が true（この hook 自身による差し戻し後の
+#     ターン。差し戻しは 1 回で足り、2 回目以降も通すのは commit 不能な状況
+#     で無限ループになるのを避けるため。jq 不在・JSON 不正時は安全側（ブロッ
+#     ク判定続行）にフォールバックする）
 #   - カレントディレクトリが git worktree 外
 #   - branch が main / master / dev / develop / development
 #   - detached HEAD（branch 判定不能）
@@ -36,6 +40,15 @@ PAYLOAD=$(cat 2>/dev/null || echo '{}')
 
 # Escape hatch: 環境変数での bypass
 if [[ ${CLAUDE_STOP_GUARD:-1} == "0" ]]; then
+  exit 0
+fi
+
+# stop_hook_active: この hook 自身による差し戻し後のターンでは true。
+# 差し戻しは 1 回で足りるため、2 回目以降は素通りさせる（commit 不能な状況
+# だと無限ループになるため）。jq 不在・JSON 不正時は安全側（ブロック判定続
+# 行）にフォールバックする。
+STOP_HOOK_ACTIVE=$(printf '%s' "${PAYLOAD}" | jq -r '.stop_hook_active // false' 2>/dev/null || echo "false")
+if [[ ${STOP_HOOK_ACTIVE} == "true" ]]; then
   exit 0
 fi
 
