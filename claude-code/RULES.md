@@ -66,10 +66,12 @@ Conflict: Safety > Scope > Quality > Speed
     ネットワーク自由なので、ここは egress の抜け道になっている。nix 経由の外部取得を
     「許可ドメインの内側だから安全」と考えないこと。未知の flake や URL を
     `nix build` / `nix run` で引く前に、通常の外部アクセスと同じ慎重さで扱う
-- **pnpm は sandbox 内で動かす**（`~/Library/pnpm` を `allowWrite`、2026-09-25 追加）。
-  グローバルの pnpm とプロジェクトの `packageManager` がずれると、pnpm は固定版を
-  `~/Library/pnpm/package-manager-store` に用意しようとしてロックを書き、未許可だと
-  `ERR_PNPM_STORE_DIR_OPEN_OPERATION_LOCK` で全コマンドが落ちる。
+- **pnpm は sandbox 内で動かす**（`~/Library/pnpm` と `/private/tmp/pnpm-store-operation-locks-*` を `allowWrite`）。
+  pnpm 12 は store の operation lock を `TMPDIR` を無視して `/tmp/pnpm-store-operation-locks-<uid>/` に作る。
+  ここが未許可だと、エラー文は相対名 `"pnpm-store-operation-locks"` しか出さないまま
+  `ERR_PNPM_STORE_DIR_OPEN_OPERATION_LOCK` で全コマンドが落ちる（`~/Library/pnpm` だけ許可しても直らない）。
+  `/tmp` 全体は開けない: hook が読む `claude-skill-ctx-*` や Claude / Chrome bridge のソケットなど、
+  sandbox 外のプロセスと共有する領域になるため。
   `excludedCommands` で sandbox 外に出さないこと: install 時の postinstall スクリプトが
   `~/.ssh` や gh の資格情報を読めてしまう。docker も同様に外に出さない（ソケットが
   ホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
@@ -78,8 +80,15 @@ Conflict: Safety > Scope > Quality > Speed
 - **`nix fmt` は `-- --no-cache` を付ける**。treefmt が `~/Library/Caches/treefmt` に
   キャッシュ DB を書こうとして `operation not permitted` で落ちる
   （`allowWrite` に足せば素で通るが、キャッシュなので付けて回避で足りる）
-- **sandbox の書き込み拒否リスト（`denyWithinAllow`）は Bash コマンドにしか効かない**。Edit / Write ツールは permission 側の管轄で、別物。リストに `claude-code/settings.json` があっても、それは main checkout 側のパスで、worktree 内の同じファイルは Edit ツールで編集できる。「書けない」と断言する前にまず試す
-- sandbox で塞がれても `dangerouslyDisableSandbox` は policy で無効。回避不能なら失敗を報告し、settings 調整を提案する（勝手に緩めない）
+- **settings.json の編集は自分でやる。「編集できない」「手で足してください」と返さない**。
+  sandbox の書き込み拒否リスト（`denyWithinAllow`）は Bash コマンドにしか効かない。
+  dotfiles に worktree を切れば、`claude-code/settings.json` は Edit ツールで編集できる
+  （拒否されるのは main checkout 側のパスへの Bash 書き込みだけ）。
+  原因を特定して設定変更が要ると判断したら、worktree で Edit し、commit message と PR 本文まで用意する。
+  settings / RULES の commit は auto mode classifier が Self-Modification として止めることがある。
+  止められたら回避せず、worktree パスと実行コマンド（commit → push → PR）を渡して止まる。
+  許可範囲を広げる変更は差分と理由を PR 本文に書き、merge 判断で確認を取る（これが「勝手に緩めない」の意味）
+- sandbox で塞がれても `dangerouslyDisableSandbox` は policy で無効。その場で回避せず、上の settings 変更 PR で直す
 - **gh を内部で呼ぶ skill スクリプトは `sandbox.excludedCommands` に登録済みの起動形で呼ぶ**。登録されているのは「スクリプトパスが先頭トークンの bare 形」と `bash <path>` / `python3 <path>` の 2 トークン形（plugin cache `~/.claude/plugins/cache/playpark/`、`~/ghq/github.com/it-all-playpark/skills/` および repo 外 worktree 置き場 `skills-wt/` 配下のパス）のみ。`cd X && script` や `VAR=x script` のような前置形は登録がなく、先頭トークンマッチの仕組み上パターンでも表現できない。登録外の形で呼ぶと、内部で資格情報を要する処理（gh が `~/.config/gh` や keyring を読む等）が失敗する
 
 ## Failure Investigation
