@@ -561,6 +561,7 @@
         "~/Library/CloudStorage/Box-Box",
         "~/Library/Caches/treefmt",
         "~/Library/pnpm",
+        "/private/tmp/pnpm-store-operation-locks-*",
         "~/ghq/**/.claude/scheduled_tasks.json",
         "~/ghq/**/.claude/scheduled_tasks.lock",
         "~/.config/gws",
