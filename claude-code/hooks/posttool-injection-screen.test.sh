@@ -41,6 +41,8 @@ chmod +x "$WORK/bin/curl"
 
 export FAKE_CURL_DIR="$WORK"
 export PATH="$WORK/bin:$PATH"
+# 実機の jev-broker ソケットを拾わない（鍵なしで Jev を呼ばないことを検証するケースがある）
+export JEV_BROKER_SOCKET="$WORK/no-broker.sock"
 export JEV_KEYCHAIN_SERVICE="injection-screen-test-nonexistent-service"
 export INJECTION_SCREEN_LOG="$WORK/screen.jsonl"
 export INJECTION_SCREEN_READ_PATHS="$WORK/box"
