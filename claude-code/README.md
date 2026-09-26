@@ -211,11 +211,17 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
   `https://ai-gateway.vercel.sh/typesafe/v1/systemone` を `curl` で直叩き。jevctl / Node 不要。
   課金は AI Gateway（list price そのまま、markup 0、入力 $0.042/M tokens、出力無料。
   1 判定 ≈ 300〜1500 tokens）
-- 鍵: macOS Keychain から読む（Claude の Bash 環境に env で露出させない）
+- 鍵: macOS Keychain に置く（Claude の Bash 環境に env で露出させない）
   ```bash
   security add-generic-password -s vercel-ai-gateway -a claude-hooks -w 'vck_…'
   ```
-  `AI_GATEWAY_API_KEY` env があればそちらを優先（テスト・一時上書き用）
+  経路は `AI_GATEWAY_API_KEY` env（テスト・一時上書き用）> jev-broker のソケット
+  （`~/.local/state/jev-broker/jev.sock`）> Keychain の直接読み出し、の順。Keychain の解除は
+  監査セッションごとに効くので、sandbox 内の Bash と bg job からは解除済みでも `security` が
+  exit 36 になる。gui ドメインの LaunchAgent `com.playpark.jev-broker`
+  （`home-manager/programs/jev-broker.nix`）が鍵をメモリに持って中継するのはこのため。
+  broker の状態は `launchctl print gui/$(id -u)/com.playpark.jev-broker` と
+  `~/.local/state/jev-broker.err.log` で見る
 - fail-open: 鍵なし・timeout（既定 2 秒）・API エラー時は `class` を付けずに記録する。
   `JEV_DISABLE=1` で完全停止。`JEV_DEBUG=1` で失敗理由を stderr に出す
 - `--redact` で送信前に token / password / api-key 系の値（`KEY=v` / `key: v` / `--password v` /
