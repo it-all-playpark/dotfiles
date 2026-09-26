@@ -578,7 +578,8 @@
     "network": {
       "allowLocalBinding": true,
       "allowUnixSockets": [
-        "/nix/var/nix/daemon-socket/socket"
+        "/nix/var/nix/daemon-socket/socket",
+        "/Users/naramotoyuuji/.local/state/jev-broker/jev.sock"
       ],
       "allowedDomains": [
         "github.com",

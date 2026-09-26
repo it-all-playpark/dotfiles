@@ -59,6 +59,8 @@ chmod +x "$WORK/bin/curl"
 
 export FAKE_CURL_DIR="$WORK"
 export PATH="$WORK/bin:$PATH"
+# 実機の jev-broker ソケットを拾わない（broker 経路は skills 側の jev-classify.bats で検証する）
+export JEV_BROKER_SOCKET="$WORK/no-broker.sock"
 # Keychain には触らない（env で鍵を渡す。key 無しケースでは unset する）
 export JEV_KEYCHAIN_SERVICE="jev-classify-test-nonexistent-service"
 

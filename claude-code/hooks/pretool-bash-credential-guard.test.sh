@@ -46,6 +46,8 @@ EOF
 chmod +x "$WORK/bin/curl"
 export FAKE_CURL_DIR="$WORK"
 export PATH="$WORK/bin:$PATH"
+# 実機の jev-broker ソケットを拾わない（鍵なしで Jev を呼ばないことを検証するケースがある）
+export JEV_BROKER_SOCKET="$WORK/no-broker.sock"
 export JEV_KEYCHAIN_SERVICE="credential-guard-test-nonexistent-service"
 export CREDENTIAL_GUARD_LOG="$WORK/log.jsonl"
 unset AI_GATEWAY_API_KEY

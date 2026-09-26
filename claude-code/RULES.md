@@ -66,6 +66,13 @@ Conflict: Safety > Scope > Quality > Speed
     ネットワーク自由なので、ここは egress の抜け道になっている。nix 経由の外部取得を
     「許可ドメインの内側だから安全」と考えないこと。未知の flake や URL を
     `nix build` / `nix run` で引く前に、通常の外部アクセスと同じ慎重さで扱う
+- **Jev は jev-broker のソケット経由で呼ぶ**（`~/.local/state/jev-broker/jev.sock`、2026-09-26 追加）。
+  API 鍵は login keychain にあるが、sandbox 内の Bash と bg job（別の監査セッション）からは
+  解除済みでも `security` が exit 36 になり読めない。gui ドメインの LaunchAgent
+  （`home-manager/programs/jev-broker.nix`）が鍵をメモリに持って中継し、`jev-classify.sh` は
+  ソケットがあればそちらを使う。exit 36 を見て Keychain のロック解除を試さないこと
+  - **代償**: ソケットに届くプロセスは Jev を課金付きで呼べる（鍵そのものと Jev 以外のモデルには届かない。
+    broker が model と転送先を固定する）
 - **pnpm は sandbox 内で動かす**（`~/Library/pnpm` と `/private/tmp/pnpm-store-operation-locks-*` を `allowWrite`）。
   pnpm 12 は store の operation lock を `TMPDIR` を無視して `/tmp/pnpm-store-operation-locks-<uid>/` に作る。
   ここが未許可だと、エラー文は相対名 `"pnpm-store-operation-locks"` しか出さないまま
