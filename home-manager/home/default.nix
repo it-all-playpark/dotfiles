@@ -300,6 +300,16 @@ in
       )
     '';
 
+    # mise の claude-code 実体を固定パスへ移す (TCC の許可を版をまたいで保つ。詳細は pin-claude-code.sh)。
+    # 通常は mise の postinstall が行うので、ここは導入時と取りこぼしの回収用。失敗しても activation は止めない。
+    activation.pinClaudeCode = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      claude_dir="$(${pkgs.mise}/bin/mise where claude-code 2>/dev/null || true)"
+      if [ -n "$claude_dir" ]; then
+        run /bin/sh ${./file/mise/pin-claude-code.sh} "$claude_dir" \
+          || echo "Warning: pin-claude-code failed for $claude_dir"
+      fi
+    '';
+
     # Codex 設定を dotfiles/codex/ から同期
     # runtime データを維持しつつ、静的設定のみを管理する
     activation.setupCodex = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -678,8 +688,13 @@ in
           "/bin/sh"
           "-c"
           ''
-            /bin/wait4path "${pkgs.mise}/bin/mise" \
-              && exec "${pkgs.mise}/bin/mise" upgrade --yes
+            /bin/wait4path "${pkgs.mise}/bin/mise" || exit 1
+            "${pkgs.mise}/bin/mise" upgrade --yes
+            rc=$?
+            # config.toml の postinstall が upgrade 経路で走らなかった場合の保険 (冪等)
+            /bin/sh "$HOME/.config/mise/pin-claude-code.sh" \
+              "$("${pkgs.mise}/bin/mise" where claude-code)" || rc=1
+            exit $rc
           ''
         ];
         EnvironmentVariables = {
