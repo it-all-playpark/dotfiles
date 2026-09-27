@@ -10,6 +10,8 @@ let
   ];
 in
 {
+  imports = [ ./remote-access.nix ];
+
   # システムで使用するパッケージ群（Nix経由）
   environment.systemPackages =
     packages.commonPackages
@@ -182,22 +184,5 @@ in
   security.pam.services.sudo_local.touchIdAuth = true; # Touch IDでsudoを有効化
   security.pam.services.sudo_local.reattach = true; # tmuxなどでTouch IDを動作させるためのpam_reattachを有効化
 
-  # Tailscale VPN（CLIのみ、インターネット越しSSH用）
-  services.tailscale.enable = true;
   documentation.enable = false;
-
-  # 24/7 稼働のリモートアクセスサーバー (Mac Studio) でのみ sleep を無効化する。
-  # 同一 dotfiles を MacBook にも適用するため host 判定はハードコードせず、
-  # hermes-gateway の二重起動防止と同じ opt-in マーカーファイル方式にする。
-  # 有効化: touch /Users/${username}/.config/dotfiles/.no-sleep-server
-  # 無効化 (通常運用に戻す): rm /Users/${username}/.config/dotfiles/.no-sleep-server && sudo darwin-rebuild switch
-  system.activationScripts.pmsetServerConfig.text = ''
-    MARKER="/Users/${username}/.config/dotfiles/.no-sleep-server"
-    if [ -f "$MARKER" ]; then
-      echo "pmsetServerConfig: $MARKER found — disabling sleep for 24/7 remote access"
-      /usr/bin/pmset -a sleep 0
-      /usr/bin/pmset -a disksleep 0
-      /usr/bin/pmset -a womp 1
-    fi
-  '';
 }
