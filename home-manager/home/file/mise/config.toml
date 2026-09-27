@@ -17,7 +17,8 @@ uv = "latest"
 "npm:repomix" = "latest"
 "pipx:whisply" = "latest"
 "pipx:mlx-whisper" = "latest"
-"claude-code" = "latest"
+# 実体を ~/.local/opt/claude-code/claude へ固定し TCC の許可を版をまたいで保つ (詳細は pin-claude-code.sh)
+"claude-code" = { version = "latest", postinstall = 'sh "$HOME/.config/mise/pin-claude-code.sh"' }
 pnpm = "latest"
 "npm:yarn" = "latest"
 rust = "latest"
