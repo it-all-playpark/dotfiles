@@ -10,7 +10,11 @@ let
   ];
 in
 {
-  imports = [ ./remote-access.nix ];
+  imports = [
+    ./homebrew.nix
+    ./nix.nix
+    ./remote-access.nix
+  ];
 
   # システムで使用するパッケージ群（Nix経由）
   environment.systemPackages =
@@ -51,124 +55,7 @@ in
   system.primaryUser = username;
   system.tools.darwin-uninstaller.enable = false;
 
-  # Nixビルドユーザーグループの設定（GID不一致エラー対応）
-  ids.gids.nixbld = 350;
-
-  # Homebrewの統合設定
-  homebrew = {
-    enable = true; # Homebrewを有効化
-    onActivation = {
-      # Homebrew有効化時の挙動設定
-      autoUpdate = true; # brewの自動更新を有効化
-      upgrade = true; # 古いバージョンがあれば自動でアップグレード
-      # Brewfileにないものをアンインストール。
-      # nix-darwin が `--force-cleanup` を自動で付けるので extraFlags での指定は不要
-      cleanup = "uninstall";
-    };
-    taps = [
-      "rjyo/moshi" # moshi-hook 配布用 tap (formula は moshi-hook のみで、完全修飾名により trust 済み)
-    ];
-    brews = [
-      {
-        # コーディングエージェント(Claude Code等)のイベントを iOS アプリ Moshi に中継する常駐デーモン
-        # brew の tap trust は完全修飾名の formula にしか効かない (非修飾名だと
-        # trusted: true が無視され、bundle cleanup が trust store を Brewfile 由来で
-        # 全置換するため手動 `brew trust` も activation の度に消される)。
-        name = "rjyo/moshi/moshi-hook";
-        start_service = true;
-        restart_service = "changed";
-      }
-    ];
-    casks = [
-      # インストールするCaskアプリケーションのリスト
-      "antigravity"
-      "blackhole-2ch"
-      "box-drive"
-      "box-tools"
-      "chatgpt"
-      "claude"
-      "deepl"
-      "font-hack-nerd-font"
-      "google-chrome"
-      "google-drive"
-      "google-japanese-ime"
-      "ghostty"
-      "hhkb"
-      "jump-desktop-connect"
-      "monitorcontrol"
-      "microsoft-excel"
-      "microsoft-teams"
-      "microsoft-powerpoint"
-      "microsoft-word"
-      "obsidian"
-      "onedrive"
-      "orbstack"
-      "postman"
-      "raycast"
-      "sequel-ace"
-      "setapp"
-      "slack"
-      "zed"
-      "zoom"
-      "1password"
-      "1password-cli"
-    ];
-    masApps = {
-      # Mac App Storeからインストールするアプリケーションのリスト
-      "1Password for Safari" = 1569813296;
-      LINE = 539883307;
-      Xcode = 497799835;
-    };
-  };
-  # NixデーモンやNixコマンドの設定
   system.stateVersion = 4; # システムの状態バージョン（推奨値に更新）
-  nix.settings = {
-    experimental-features = [
-      "nix-command"
-      "flakes"
-    ]; # 実験的機能を有効化
-    trusted-users = [ "@admin" ]; # 管理者ユーザーを信頼
-  };
-
-  # Nix store の自動 GC（毎週日曜 5:00、mise upgrade の 04:30 と競合しない時間帯）
-  # --delete-older-than 14d により直近 2 週間の generation は保持し、rollback 可能性を確保
-  nix.gc = {
-    automatic = true;
-    interval = {
-      Weekday = 0;
-      Hour = 5;
-      Minute = 0;
-    };
-    options = "--delete-older-than 14d";
-  };
-
-  # store 内の同一内容ファイルを hardlink 化してディスク使用量を削減
-  nix.optimise.automatic = true;
-
-  # Linux builder（macOS 上で linux 用 derivation を build する VM）
-  # hermes-agent 用 Docker image (dockerTools.buildLayeredImage) は Linux 専用のため
-  # darwin から build するには linux-builder が必須。
-  # ephemeral = true により VM は必要時のみ起動しリソース消費を抑える。
-  nix.linux-builder = {
-    enable = true;
-    ephemeral = true;
-    maxJobs = 4;
-    config = {
-      virtualisation.cores = 6;
-      virtualisation.darwin-builder = {
-        memorySize = 12288;
-        diskSize = 40960;
-      };
-      # qemu 11.1 以降、HVF は GICv2 エミュレーションを拒否して起動直後に落ちる
-      # (qemu-system-aarch64: HVF does not support GICv2 emulation)。
-      # nixpkgs の nixos/lib/qemu-common.nix が aarch64-darwin ホスト向けに
-      # `-machine virt,gic-version=2,accel=hvf:tcg` を固定で渡しており NixOS
-      # オプションからは差し替えられないため、コマンドラインの後段に置かれる
-      # qemu.options で gic-version だけ上書きする
-      # （qemu の -machine は merge_lists なので同じキーは後勝ちになる）。
-      virtualisation.qemu.options = [ "-machine gic-version=3" ];
-    };
-  };
 
   # シェルの有効化設定
   programs.fish.enable = true; # デフォルトシェルとしてfishを有効化
