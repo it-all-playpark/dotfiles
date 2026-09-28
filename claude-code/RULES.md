@@ -84,6 +84,11 @@ Conflict: Safety > Scope > Quality > Speed
   ホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
 - **dev サーバーの起動は許可済み**（`network.allowLocalBinding: true`、2026-09-25 追加）。
   `next dev` 等で localhost の port を listen できる。外向き通信の制限は変わらない
+- **neonctl は sandbox 内で動く**（`console.neon.tech` / `oauth2.neon.tech` と `~/.config/neon` を許可、2026-09-29 追加）。
+  API とトークン更新（`credentials.json` と refresh lock の書き戻し）に必要な分だけ。
+  テレメトリ送信先の `track.neon.tech` は許可していないので、`--no-analytics` を付ける
+  （付けないと終了時の `closeAndFlush` が拒否された送信を待つ）。`neonctl auth` の初回 OAuth はブラウザを開くので通常ターミナルで
+  - **代償**: sandbox 内のプロセスが Neon の API を持ち主の権限で叩ける（branch / DB の削除も可能）
 - **`nix fmt` は `-- --no-cache` を付ける**。treefmt が `~/Library/Caches/treefmt` に
   キャッシュ DB を書こうとして `operation not permitted` で落ちる
   （`allowWrite` に足せば素で通るが、キャッシュなので付けて回避で足りる）
