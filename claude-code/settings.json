@@ -565,7 +565,8 @@
         "~/ghq/**/.claude/scheduled_tasks.json",
         "~/ghq/**/.claude/scheduled_tasks.lock",
         "~/.config/gws",
-        "~/.config/gcloud"
+        "~/.config/gcloud",
+        "~/.config/neon"
       ],
       "denyRead": [
         "~/.aws/**",
@@ -614,7 +615,9 @@
         "qiita.com",
         "zenn.dev",
         "api.slack.com",
-        "fonts.googleapis.com"
+        "fonts.googleapis.com",
+        "console.neon.tech",
+        "oauth2.neon.tech"
       ],
       "strictAllowlist": true
     }
