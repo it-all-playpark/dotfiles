@@ -73,10 +73,12 @@ Conflict: Safety > Scope > Quality > Speed
   ソケットがあればそちらを使う。exit 36 を見て Keychain のロック解除を試さないこと
   - **代償**: ソケットに届くプロセスは Jev を課金付きで呼べる（鍵そのものと Jev 以外のモデルには届かない。
     broker が model と転送先を固定する）
-- **pnpm は sandbox 内で動かす**（`~/Library/pnpm` と `/private/tmp/pnpm-store-operation-locks-*` を `allowWrite`）。
+- **pnpm は sandbox 内で動かす**（`~/Library/pnpm` と `/private/tmp/pnpm-store-operation-locks-*` / `…-*/**` を `allowWrite`）。
   pnpm 12 は store の operation lock を `TMPDIR` を無視して `/tmp/pnpm-store-operation-locks-<uid>/` に作る。
   ここが未許可だと、エラー文は相対名 `"pnpm-store-operation-locks"` しか出さないまま
   `ERR_PNPM_STORE_DIR_OPEN_OPERATION_LOCK` で全コマンドが落ちる（`~/Library/pnpm` だけ許可しても直らない）。
+  glob を含む `allowWrite` エントリはそのパス自体にしか一致しない（リテラルのエントリは配下まで効く）。
+  `-*` だけだと lock ディレクトリの作成しか通らず、既存の `all-stores.lock` を開き直す 2 回目以降が落ちるので `-*/**` も要る。
   `/tmp` 全体は開けない: hook が読む `claude-skill-ctx-*` や Claude / Chrome bridge のソケットなど、
   sandbox 外のプロセスと共有する領域になるため。
   `excludedCommands` で sandbox 外に出さないこと: install 時の postinstall スクリプトが
