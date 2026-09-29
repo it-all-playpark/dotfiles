@@ -9,6 +9,8 @@
 # - glob（* ? [ を含む）エントリ: パス全体に一致する正規表現になる（`*`→`[^/]*`、
 #   `**/`→`(.*/)?`、`**`→`.*`）。そのパス自体にしか効かず、配下には効かない
 # - リテラルのエントリ: subpath 扱いで、そのパスと配下すべてに効く
+# - 判定の前に末尾の `/**` を剥がす（Claude Code の allowWrite.map(pg)）。
+#   `-*/**` は `-*` と同じになり、配下には効かない
 # `/private/tmp/pnpm-store-operation-locks-*` だけではディレクトリ作成しか通らず、
 # 既存の all-stores.lock を開き直す 2 回目以降の pnpm が EPERM で落ちていた。
 
@@ -67,7 +69,8 @@ write_allowed() {
         | gsub("\u0002"; ".*")
       ) + "$";
     def expand_home: if startswith("~/") then $home + .[1:] else . end;
-    map(expand_home)
+    def strip_globstar_suffix: sub("/\\*\\*$"; "") | if . == "" then "/" else . end;
+    map(expand_home | strip_globstar_suffix)
     | any(
         . as $e
         | if $e | test("[*?\\[]") then
@@ -132,6 +135,7 @@ not_expected=(
   "/private/tmp/claude-skill-ctx-probe"
   "/private/tmp/pnpm-store-operation-locks"
   "/private/tmp/other-dir/pnpm-store-operation-locks-502/all-stores.lock"
+  "${LOCK_DIR}/sub/deeper.lock"
 )
 leaked=()
 for p in "${not_expected[@]}"; do
@@ -153,6 +157,18 @@ if [ "${total_len}" -eq "${unique_len}" ]; then
   pass "no_duplicate_entries"
 else
   fail "no_duplicate_entries" "length=${total_len} unique=${unique_len}"
+fi
+
+# ---------------------------------------------------------------------------
+# no_globstar_suffix_entries
+# ---------------------------------------------------------------------------
+echo "- no_globstar_suffix_entries"
+# 末尾 `/**` は Claude Code が剥がすので、書いても配下に効かない（効くと誤解させるだけ）
+globstar_entries="$(jq -r '.[] | select(endswith("/**"))' <<<"${ALLOW_WRITE_JSON}")"
+if [ -z "${globstar_entries}" ]; then
+  pass "no_globstar_suffix_entries"
+else
+  fail "no_globstar_suffix_entries" "Entries ending in /** (stripped by Claude Code): ${globstar_entries//$'\n'/ }"
 fi
 
 # ---------------------------------------------------------------------------
