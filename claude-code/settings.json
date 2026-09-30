@@ -534,7 +534,6 @@
         "~/.claude/journal",
         "~/.claude/logs",
         "~/.claude/memory",
-        "~/.claude/jobs",
         "~/.claude/channels",
         "~/Documents/meetings",
         "~/Library/CloudStorage/Box-Box",
