@@ -11,9 +11,8 @@ home-manager の `activation.setupClaudeCode` が `~/.claude/` 配下に symlink
 ```
 claude-code/
 ├── README.md             # このファイル
-├── CLAUDE.md             # global Claude Code instructions（PRINCIPLES.md / RULES.md を import）
-├── PRINCIPLES.md         # ソフトウェアエンジニアリングの原則
-├── RULES.md              # 振る舞いのルール（priority / workflow / safety / git 等）
+├── CLAUDE.md             # global Claude Code instructions（RULES.md を import）
+├── RULES.md              # 振る舞いのルール（engineering / subagent / tool routing / git / sandbox）
 ├── settings.json         # permissions（allow/deny）+ hooks 設定 + env
 ├── skill-config.json     # it-all-playpark/skills の per-skill デフォルト値
 ├── account-map.json      # gh / gcloud / tofu の org → アカウントマップ（bin/account-exec が読む）
@@ -21,9 +20,11 @@ claude-code/
 └── hooks/                # SessionStart / PreCompact / Pre|PostToolUse スクリプト
 ```
 
-`PRINCIPLES.md` / `RULES.md` はかつて SuperClaude framework の一部として導入したが、
-framework 自体は使っていない。今は普遍的なガードレールとしてのテキストのみを残し、
-`CLAUDE.md` から `@PRINCIPLES.md` / `@RULES.md` で import している。
+`RULES.md` はかつて SuperClaude framework の一部として `PRINCIPLES.md` と共に導入したが、
+Opus 5.5 / Sonnet 5.5 向けに公式 best practice に沿って削った（2026-09-30）。方針は
+「消したら Claude がミスる行だけ残す」: モデルの既定動作、harness が既に指示していること、
+hook が強制していることは書かない。強調（IMPORTANT / 絵文字の優先度）は過剰発火するので使わない。
+経緯・根拠は HTML コメント（context 注入前に剥がされる）に残す。`CLAUDE.md` から `@RULES.md` で import している。
 
 ## activation
 
@@ -31,7 +32,7 @@ framework 自体は使っていない。今は普遍的なガードレールと�
 
 1. `~/.claude/` ディレクトリ作成（無ければ）
 2. `settings.json` を symlink
-3. `CLAUDE.md` / `PRINCIPLES.md` / `RULES.md` / `FLAGS.md` / `README.md` を symlink（存在するもののみ）
+3. `CLAUDE.md` / `RULES.md` / `FLAGS.md` / `README.md` を symlink（存在するもののみ）
 4. `MCP_*.md` / `MODE_*.md` ファイルがあれば symlink
 5. `hooks/*.{py,sh}` を `~/.claude/hooks/` に symlink（`*.test.sh` は除外）
 6. `bin/*` を `~/.claude/bin/` に symlink（`*.test.sh` は除外。`bin/gh` / `bin/gcloud` / `bin/tofu` は repo 内で
