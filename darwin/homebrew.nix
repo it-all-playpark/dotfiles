@@ -26,7 +26,6 @@ _: {
     ];
     casks = [
       # インストールするCaskアプリケーションのリスト
-      "antigravity"
       "blackhole-2ch"
       "box-drive"
       "box-tools"
@@ -41,10 +40,7 @@ _: {
       "hhkb"
       "jump-desktop-connect"
       "monitorcontrol"
-      "microsoft-excel"
       "microsoft-teams"
-      "microsoft-powerpoint"
-      "microsoft-word"
       "obsidian"
       "onedrive"
       "orbstack"
@@ -53,7 +49,6 @@ _: {
       "sequel-ace"
       "setapp"
       "slack"
-      "zed"
       "zoom"
       "1password"
       "1password-cli"
