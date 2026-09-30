@@ -40,13 +40,14 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 コマンド側で避ける:
 - bg セッションでも一時ファイルは `$TMPDIR`。`$CLAUDE_JOB_DIR/tmp` は system prompt が案内しても書けない（`~/.claude/jobs` は組み込みガードで write deny）
 - process substitution `<(…)` は使わない（`/dev/fd/*` が塞がれる）。tempfile に落としてから渡す
-- `it-all-playpark/skills` repo（`~/.claude/skills` / `agents` の実体）は repo 内の worktree も含めて書けない。編集は repo 外の `~/ghq/github.com/it-all-playpark/skills-wt/<branch>` に worktree を切る
+- `~/ghq/github.com/it-all-playpark/skills` は `~/.claude/skills` として読み込まれている live checkout。sandbox から書けず、作業ツリーを書き換える git も hook が止める。skills の開発は通常の clone `~/ghq/github.com/it-all-playpark/skills-dev`（無ければ `git clone https://github.com/it-all-playpark/skills.git` で作る）で行う。そこでは git・`npm ci`・テスト・worktree が sandbox 内で普通に動く。live checkout の更新は merge 後に人間が pull する
+- Bash から書けない場所（sandbox 外で実行されるので書き換えが脱出口になる）: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.claude/skills` と `.husky`。編集は Edit / Write ツールで行う（dotfiles の 2 つは worktree 側なら Bash でも書ける）
 - gh を内部で呼ぶ skill スクリプトは、スクリプトパスが先頭の bare 形か `bash <path>` / `python3 <path>` で呼ぶ。`cd X &&` や `VAR=x` 前置の形は `excludedCommands` に一致せず、sandbox 内で gh の資格情報が読めずに落ちる
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
 
 worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガードが「git に届かないと証明できない」コマンドを拒否する（設定では外せない）。拒否されない形で書く:
-- cwd はもう自分の worktree。`cd <worktree> &&` や `git -C` を付けず相対パスで叩く。git は素の形で 1 呼び出し 1 コマンド（`&&` 連結・`$(git …)` も拒否）。skills-wt では `git -C` が sandbox 行きになり `skills/.git/worktrees/*/index.lock` が書けずに落ちる
+- cwd はもう自分の worktree。`cd <worktree> &&` や `git -C` を付けず相対パスで叩く。git は素の形で 1 呼び出し 1 コマンド（`&&` 連結・`$(git …)` も拒否）
 - ファイル作成は heredoc（`cat > f <<'EOF'`）ではなく Write ツール
 - 変数は必ずダブルクォート（`"$TMPDIR/x"`）。`$(…)` の結果を変数に入れて渡す形、`HOME=` 前置、`source` / `eval` を含む形も拒否される。`nix eval` も名前だけで拒否されるので、隔離中は `nix flake check` / `nix build` で確かめる
 
@@ -57,6 +58,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 
 sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
+- `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin cache の CLI、live skills checkout のスクリプト）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
 - auto mode classifier が settings / RULES の commit を Self-Modification として止めたら回避しない。worktree パスと実行コマンド（commit → push → PR）を渡して止まる
 - Unix ソケットへの接続は `filesystem.allowWrite` では開かない。`sandbox.network.allowUnixSockets` にパスを足す（`allowAllUnixSockets` は使わない）
 
@@ -77,7 +79,15 @@ sandbox に塞がれたら:
   track.neon.tech は未許可なので --no-analytics がないと closeAndFlush が拒否された送信を待つ。
   代償: sandbox 内のプロセスが Neon の API を持ち主の権限で叩ける（branch / DB の削除も可能）。
 - nix fmt: treefmt が ~/Library/Caches/treefmt にキャッシュ DB を書こうとして落ちる。allowWrite に足せば通るが、キャッシュなので --no-cache で足りる。
-- skill スクリプトの excludedCommands 登録: plugin cache ~/.claude/plugins/cache/playpark/、~/ghq/github.com/it-all-playpark/skills/、
-  skills-wt/ 配下を bare / bash / python3 の 3 形で登録。前置形は先頭トークンマッチの仕組み上パターンで表現できない。
+- skill スクリプトの excludedCommands 登録: plugin cache ~/.claude/plugins/cache/playpark/ と ~/ghq/github.com/it-all-playpark/skills/ を
+  bare / bash / python3 の 3 形で登録。前置形は先頭トークンマッチの仕組み上パターンで表現できない。
+- 2026-09-30 脱出口の封鎖: skills-wt/*・`bats:*`・`bash tests/run-all-bats.sh` の除外を撤去。skills-wt の worktree は git メタデータが
+  保護された skills/.git にあり sandbox 内で git すら動かないため、作業全体を除外で逃がしていた（30 日で 1,000 回超、エージェント自作の
+  使い捨てスクリプトも sandbox 外で走っていた）。通常 clone（skills-dev）なら vitest 2573 件・bats 47 ファイル・sync-inlines・
+  worktree / commit が全部 sandbox 内で通ることを実測して移行。あわせて dotfiles の claude-code/bin・hooks（hook と gh shim の実体）、
+  **/.claude/skills（daily-blog-factory の除外先）、**/.husky（hooksPath が作業ツリー内。素の git commit で sandbox 外実行されることを実測）を
+  denyWrite。husky の install は sandbox 内だと git config が先に拒否されて何も書かずに返るので影響しない。
+  Claude Code 側が既に塞いでいるもの（実測）: ~/ghq 配下の .git/hooks・.git/config への書き込み、git config / git worktree / git init --template
+  の sandbox 実行、PATH 上のディレクトリへの書き込み。
 - dangerouslyDisableSandbox は policy で無効。
 -->
