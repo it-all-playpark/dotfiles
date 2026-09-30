@@ -40,7 +40,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 コマンド側で避ける:
 - bg セッションでも一時ファイルは `$TMPDIR`。`$CLAUDE_JOB_DIR/tmp` は system prompt が案内しても書けない（`~/.claude/jobs` は組み込みガードで write deny）
 - process substitution `<(…)` は使わない（`/dev/fd/*` が塞がれる）。tempfile に落としてから渡す
-- `it-all-playpark/skills` repo（`~/.claude/skills` / `agents` の実体）は repo 内の worktree も含めて書けない。編集は repo 外の `~/ghq/github.com/it-all-playpark/skills-wt/<branch>` に worktree を切る
+- `it-all-playpark/skills` repo（`~/.claude/skills` / `agents` の実体）は repo 内の worktree も含めて書けない。編集用の worktree は `~/.claude/bin/skills-worktree-add <branch>`（絶対パスで呼ぶ）で repo 外の `skills-wt/<branch>` に origin/main から作る。`git worktree add` は `git *` に一致しても sandbox 内で走り、skills では必ず EPERM になる。作った worktree の中では素の git で commit / push できる
 - gh を内部で呼ぶ skill スクリプトは、スクリプトパスが先頭の bare 形か `bash <path>` / `python3 <path>` で呼ぶ。`cd X &&` や `VAR=x` 前置の形は `excludedCommands` に一致せず、sandbox 内で gh の資格情報が読めずに落ちる
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う

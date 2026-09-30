@@ -521,7 +521,9 @@
       "codex:*",
       "zernio:*",
       "bash tests/run-all-bats.sh",
-      "bats:*"
+      "bats:*",
+      "/Users/naramotoyuuji/.claude/bin/skills-worktree-add *",
+      "$HOME/.claude/bin/skills-worktree-add *"
     ],
     "failIfUnavailable": true,
     "filesystem": {
@@ -553,6 +555,10 @@
         "~/.gnupg/**",
         "~/.config/gh/**",
         "~/.config/gh-*/**"
+      ],
+      "denyWrite": [
+        "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/bin",
+        "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks"
       ]
     },
     "network": {
