@@ -191,8 +191,8 @@
           {
             "command": "bash \"$HOME/.claude/hooks/allow-pr-merge.sh\"",
             "if": "Bash(gh pr merge*)",
-            "statusMessage": "PR merge ブランチチェック中...",
-            "timeout": 15,
+            "statusMessage": "PR merge 確認中...",
+            "timeout": 5,
             "type": "command"
           }
         ],
@@ -203,39 +203,12 @@
       {
         "hooks": [
           {
-            "args": [
-              "Context compacted. Reminder: Read CLAUDE.md for project context. Run git status before making changes."
-            ],
-            "command": "echo",
-            "type": "command"
-          },
-          {
             "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
             "timeout": 5,
             "type": "command"
           }
         ],
         "matcher": "compact"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "startup"
-      },
-      {
-        "hooks": [
-          {
-            "command": "bash \"$HOME/.claude/hooks/session-start-replay.sh\"",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "resume"
       },
       {
         "hooks": [
