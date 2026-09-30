@@ -192,7 +192,7 @@ in
       ln -sf "$DOTFILES_CLAUDE/settings.json" "$CLAUDE_DIR/settings.json"
 
       # markdown files へのシンボリックリンク
-      for f in CLAUDE.md PRINCIPLES.md RULES.md FLAGS.md README.md; do
+      for f in CLAUDE.md RULES.md FLAGS.md README.md; do
         target="$CLAUDE_DIR/$f"
         if [ -f "$target" ] && [ ! -L "$target" ]; then
           rm "$target"

@@ -42,7 +42,7 @@ dotconfig/
 │   └── programs/          # 各プログラム（fish, zsh, git, neovim など）の設定
 ├── common/                # 全ユーザー共通の Nix モジュール（packages.nix など）
 ├── lib/                   # Flake 内ヘルパー（cli-packages.nix など）
-├── claude-code/           # Claude Code 設定（settings.json / hooks / PRINCIPLES.md / RULES.md）
+├── claude-code/           # Claude Code 設定（settings.json / hooks / RULES.md）
 ├── codex/                 # Codex CLI 設定（config / prompts / policy / rules）
 └── scripts/
     └── setup-skills.sh    # Agent Skills セットアップスクリプト
@@ -54,7 +54,7 @@ dotconfig/
 
 | ディレクトリ | 概要 | ドキュメント |
 |------------|------|------------|
-| `claude-code/` | Claude Code 用の `settings.json`（permissions / hooks）・guardrail hooks・`PRINCIPLES.md` / `RULES.md` | [claude-code/README.md](claude-code/README.md) |
+| `claude-code/` | Claude Code 用の `settings.json`（permissions / hooks）・guardrail hooks・`RULES.md` | [claude-code/README.md](claude-code/README.md) |
 | `codex/` | Codex CLI の base config・prompts・policy・rules を dotfiles で管理し、`~/.codex/` へ展開 | [codex/README.md](codex/README.md) |
 
 hermes-agent (全社横断 ChatOps 基盤) は個人PC設定とは性質が異なるため、
