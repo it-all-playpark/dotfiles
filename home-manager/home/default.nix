@@ -109,10 +109,6 @@ in
         source = ./file/mise;
         recursive = true;
       };
-      ".config/zed" = {
-        source = ./file/zed;
-        recursive = true;
-      };
       "Library/Application Support/lazygit" = {
         source = ./file/lazygit;
         recursive = true;

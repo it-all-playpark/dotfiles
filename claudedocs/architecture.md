@@ -29,7 +29,6 @@
 │   │       ├── fish/
 │   │       ├── git/
 │   │       ├── ghostty/
-│   │       ├── zed/
 │   │       ├── lazygit/
 │   │       ├── mise/
 │   │       └── ...
