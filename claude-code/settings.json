@@ -177,6 +177,17 @@
       {
         "hooks": [
           {
+            "command": "f=\"$HOME/.claude/hooks/pretool-live-skills-git-guard.py\"; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"",
+            "statusMessage": "live skills checkout の git チェック中...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
             "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
             "if": "Bash(git worktree add*)",
             "statusMessage": ".worktreeinclude 自動生成チェック中...",
@@ -444,11 +455,6 @@
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash $HOME/ghq/github.com/it-all-playpark/skills/*",
       "python3 $HOME/ghq/github.com/it-all-playpark/skills/*",
-      "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*",
-      "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*",
-      "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills-wt/*",
-      "bash $HOME/ghq/github.com/it-all-playpark/skills-wt/*",
-      "python3 $HOME/ghq/github.com/it-all-playpark/skills-wt/*",
       "/Users/naramotoyuuji/.claude/plugins/cache/playpark/*",
       "bash /Users/naramotoyuuji/.claude/plugins/cache/playpark/*",
       "python3 /Users/naramotoyuuji/.claude/plugins/cache/playpark/*",
@@ -519,11 +525,7 @@
       "yt-chorus-extract",
       "yt-chorus-extract *",
       "codex:*",
-      "zernio:*",
-      "bash tests/run-all-bats.sh",
-      "bats:*",
-      "/Users/naramotoyuuji/.claude/bin/skills-worktree-add *",
-      "$HOME/.claude/bin/skills-worktree-add *"
+      "zernio:*"
     ],
     "failIfUnavailable": true,
     "filesystem": {
@@ -558,7 +560,9 @@
       ],
       "denyWrite": [
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/bin",
-        "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks"
+        "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks",
+        "~/ghq/**/.claude/skills",
+        "~/ghq/**/.husky"
       ]
     },
     "network": {
