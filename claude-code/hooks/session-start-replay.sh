@@ -5,7 +5,7 @@
 #   pre-compact-dump.sh が <project-root>/claudedocs/session-YYYYMMDD-HHMMSS.md を出力する。
 #   本スクリプトは現在の cwd から project root を解決し、最新の session-*.md を cat する。
 #   Claude Code の SessionStart hook は stdout の additionalContext を context に注入する
-#   (startup / resume / compact のいずれでも動作)。
+#   settings.json では compact 時だけ登録している (startup で無関係な過去 session の dump を拾わないため)。
 #
 # stdin JSON (Claude Code SessionStart hook):
 #   {
