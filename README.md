@@ -123,6 +123,16 @@ nix run .#update
 
 flake.nix内のアップデートスクリプトが、home-managerとnix-darwinの両方の設定を切り替えます。
 
+switch 時の Homebrew は Brewfile との差分（追加・削除）だけを反映し、既存パッケージの更新はしません。
+Homebrew / App Store アプリも更新したいときは `--full` を付けます。
+
+```bash
+nix run .#update -- --full
+```
+
+普段の更新は launchd agent `com.playpark.brew-upgrade` が毎日 04:00 に行います（ログ: `~/Library/Logs/brew-upgrade.log`）。
+sudo が必要な `.pkg` 系 cask は無人では更新できずログに `FAILED:` と残るので、`--full` で拾ってください。
+
 ## Agent Skills
 
 本リポジトリは [Agent Skills](https://agentskills.io) をサポートしており、複数のAIエージェントツール間でスキルを共有できます。

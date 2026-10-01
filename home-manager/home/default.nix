@@ -711,6 +711,53 @@ in
       };
     };
 
+    # Homebrew の formula / cask と App Store アプリを毎日自動更新する。
+    # nix-darwin の switch からは brew update / upgrade を外している (darwin/homebrew.nix) ので、
+    # 日々の追随はここで行う。brew と mas はユーザー権限で動くため sudo 不要。
+    # ただし .pkg インストーラの cask (box-drive 等) は brew が内部で sudo を呼び、
+    # 無人ではパスワード / Touch ID 待ちで止まる。cask は 1 つずつ timeout 付きで回し、
+    # 止まったものだけ諦めて残りを続ける (取りこぼしは `nix run .#update -- --full` で拾う)。
+    # 04:00 にスリープ中だった場合は launchd が復帰時にまとめて実行する。
+    brew-upgrade = {
+      enable = true;
+      config = {
+        Label = "com.playpark.brew-upgrade";
+        ProgramArguments = [
+          "/bin/sh"
+          "-c"
+          ''
+            /bin/wait4path /opt/homebrew/bin/brew || exit 1
+            timeout="${pkgs.coreutils}/bin/timeout"
+            rc=0
+            echo "=== brew-upgrade $(date) ==="
+            "$timeout" 600 brew update || rc=1
+            "$timeout" 1800 brew upgrade --formula || rc=1
+            for cask in $(brew outdated --cask --quiet); do
+              "$timeout" 900 brew upgrade --cask "$cask" </dev/null || { echo "FAILED: $cask"; rc=1; }
+            done
+            if command -v mas >/dev/null; then
+              "$timeout" 1800 mas upgrade || rc=1
+            fi
+            exit $rc
+          ''
+        ];
+        EnvironmentVariables = {
+          PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+          HOME = config.home.homeDirectory;
+        };
+        StartCalendarInterval = [
+          {
+            Hour = 4;
+            Minute = 0;
+          }
+        ];
+        RunAtLoad = false;
+        ProcessType = "Background";
+        StandardOutPath = "${config.home.homeDirectory}/Library/Logs/brew-upgrade.log";
+        StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/brew-upgrade.log";
+      };
+    };
+
     # home-manager の generation を毎週削除して Nix store を痩せさせる。
     # nix-darwin の nix.gc (root, 日曜 05:00) は /nix/var/nix/profiles しか走査せず、
     # XDG 配下の ~/.local/state/nix/profiles は対象外 (man nix-collect-garbage)。

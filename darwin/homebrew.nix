@@ -4,8 +4,11 @@ _: {
     enable = true; # Homebrewを有効化
     onActivation = {
       # Homebrew有効化時の挙動設定
-      autoUpdate = true; # brewの自動更新を有効化
-      upgrade = true; # 古いバージョンがあれば自動でアップグレード
+      # switch では Brewfile との差分 (追加・削除) だけを反映する。
+      # brew update / upgrade と mas upgrade を毎回走らせると switch が大幅に遅くなるため、
+      # 更新は `nix run .#update -- --full` と launchd の brew-upgrade (毎日 04:00) に分離している。
+      autoUpdate = false;
+      upgrade = false;
       # Brewfileにないものをアンインストール。
       # nix-darwin が `--force-cleanup` を自動で付けるので extraFlags での指定は不要
       cleanup = "uninstall";
