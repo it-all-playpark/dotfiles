@@ -49,6 +49,22 @@ in
       Clicking = true; # タップでクリック
       TrackpadThreeFingerDrag = true; # 3本指ドラッグ
     };
+
+    # macOS 本体の自動アップデート (システム設定 → 一般 → ソフトウェアアップデート → 自動アップデート)
+    SoftwareUpdate.AutomaticallyInstallMacOSUpdates = true;
+
+    # 専用オプションが無い項目は system 全体の plist へフルパスで書く (activation が root で defaults write する)
+    CustomSystemPreferences = {
+      "/Library/Preferences/com.apple.SoftwareUpdate" = {
+        AutomaticCheckEnabled = true; # アップデートを確認
+        AutomaticDownload = true; # 新しいアップデートをダウンロード
+        CriticalUpdateInstall = true; # セキュリティ対応とシステムファイルをインストール
+        ConfigDataInstall = true; # 同上 (XProtect 等のデータファイル)
+      };
+      # App Store から入れたアプリ (homebrew.masApps) の自動アップデート。
+      # mas は使わず、これらの更新は macOS に任せる
+      "/Library/Preferences/com.apple.commerce".AutoUpdate = true;
+    };
   };
 
   # プライマリユーザーの設定（システムデフォルト設定の適用対象）
