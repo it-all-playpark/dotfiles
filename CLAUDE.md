@@ -8,7 +8,7 @@ Nix Flakes dotfiles for macOS (nix-darwin + home-manager). Multi-user, multi-pla
 nix run .#update              # Apply config (default: naramotoyuuji)
 nix run .#update <username>   # Apply config for specific user
 nix run .#update-all          # Apply all users
-nix run .#update -- --full    # Also brew update/upgrade, mas upgrade only if mas is installed (daily 04:00 via launchd brew-upgrade)
+nix run .#update -- --full    # Also brew update/upgrade (daily 04:00 via launchd brew-upgrade)
 nix fmt                       # Format all files
 nix flake check               # Check formatting (CI)
 ```
