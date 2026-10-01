@@ -1,4 +1,5 @@
-_: {
+{ lib, ... }:
+{
   # Nixビルドユーザーグループの設定（GID不一致エラー対応）
   ids.gids.nixbld = 350;
 
@@ -29,7 +30,12 @@ _: {
   # Linux builder（macOS 上で linux 用 derivation を build する VM）
   # hermes-agent 用 Docker image (dockerTools.buildLayeredImage) は Linux 専用のため
   # darwin から build するには linux-builder が必須。
-  # ephemeral = true により VM は必要時のみ起動しリソース消費を抑える。
+  # ephemeral = true は「起動のたびにディスクを初期化する」意味で、起動タイミングは変えない。
+  # nix-darwin 標準の launchd daemon は RunAtLoad + KeepAlive で常駐するため、
+  # 滅多に使わない VM が常時メモリを握る。下の launchd.daemons.linux-builder で
+  # 常駐を外し、Linux 向け build の前後だけ手動で起動・停止する:
+  #   sudo launchctl kickstart system/org.nixos.linux-builder   # 起動（ssh 待受まで数十秒）
+  #   sudo launchctl kill TERM system/org.nixos.linux-builder   # 停止
   nix.linux-builder = {
     enable = true;
     ephemeral = true;
@@ -37,7 +43,7 @@ _: {
     config = {
       virtualisation.cores = 6;
       virtualisation.darwin-builder = {
-        memorySize = 12288;
+        memorySize = 6144;
         diskSize = 40960;
       };
       # qemu 11.1 以降、HVF は GICv2 エミュレーションを拒否して起動直後に落ちる
@@ -49,5 +55,11 @@ _: {
       # （qemu の -machine は merge_lists なので同じキーは後勝ちになる）。
       virtualisation.qemu.options = [ "-machine gic-version=3" ];
     };
+  };
+
+  # linux-builder モジュールが true で定義するため mkForce で上書きする
+  launchd.daemons.linux-builder.serviceConfig = {
+    RunAtLoad = lib.mkForce false;
+    KeepAlive = lib.mkForce false;
   };
 }
