@@ -60,6 +60,16 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "permission_prompt"
       }
     ],
     "PermissionRequest": [
@@ -69,6 +79,15 @@
             "command": "bash \"$HOME/.claude/hooks/permission-journal.sh\"",
             "statusMessage": "permission request logging (Jev 分類)...",
             "timeout": 5,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "async": false,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -93,6 +112,26 @@
           }
         ],
         "matcher": "WebFetch|WebSearch|Bash|Read|mcp__claude_ai_Gmail__get_message|mcp__claude_ai_Gmail__get_thread|mcp__claude_ai_Gmail__search_threads|mcp__claude_ai_Google_Drive__read_file_content|mcp__claude_ai_Google_Drive__download_file_content"
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode"
       }
     ],
     "PostToolUseFailure": [
@@ -208,6 +247,37 @@
           }
         ],
         "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -241,6 +311,15 @@
           }
         ],
         "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "type": "command"
+          }
+        ]
       }
     ],
     "Stop": [
@@ -249,6 +328,15 @@
           {
             "command": "bash \"$HOME/.claude/hooks/stop-unfinished-guard.sh\"",
             "timeout": 5,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -264,6 +352,15 @@
             ],
             "command": "bash",
             "timeout": 1,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
