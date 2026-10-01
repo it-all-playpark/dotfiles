@@ -738,8 +738,9 @@ in
             if command -v mas >/dev/null; then
               "$timeout" 1800 mas upgrade || rc=1
             else
+              # mas は意図して入れていない (masApps の更新は App Store の自動アップデートに任せる)。
+              # 失敗扱いにはせず、飛ばしたことだけログに残す
               echo "SKIPPED: mas not installed"
-              rc=1
             fi
             exit $rc
           ''

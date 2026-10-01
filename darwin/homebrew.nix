@@ -17,9 +17,6 @@ _: {
       "rjyo/moshi" # moshi-hook 配布用 tap (formula は moshi-hook のみで、完全修飾名により trust 済み)
     ];
     brews = [
-      # masApps の更新 (`mas upgrade`) を launchd の brew-upgrade と `--full` から呼ぶため常駐させる。
-      # Brewfile に無いと cleanup = "uninstall" で消され、mas upgrade が黙ってスキップされる
-      "mas"
       {
         # コーディングエージェント(Claude Code等)のイベントを iOS アプリ Moshi に中継する常駐デーモン
         # brew の tap trust は完全修飾名の formula にしか効かない (非修飾名だと

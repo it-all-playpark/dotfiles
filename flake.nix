@@ -196,6 +196,8 @@
                 brew upgrade
                 if command -v mas >/dev/null; then
                   mas upgrade
+                else
+                  echo "SKIPPED: mas not installed (App Store apps are left to App Store auto-update)"
                 fi
               }
 
@@ -286,6 +288,8 @@
                 brew upgrade
                 if command -v mas >/dev/null; then
                   mas upgrade
+                else
+                  echo "SKIPPED: mas not installed (App Store apps are left to App Store auto-update)"
                 fi
               }
 
