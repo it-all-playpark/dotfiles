@@ -158,7 +158,7 @@
             nixpkgsFor.${system}.writeShellScript "update-script" ''
               set -e
               # 引数: [username] [--full]
-              # --full を付けたときだけ switch 後に Homebrew / App Store アプリも更新する
+              # --full を付けたときだけ switch 後に Homebrew のパッケージも更新する
               FULL=0
               USERNAME=naramotoyuuji
               for arg in "$@"; do
@@ -191,12 +191,9 @@
               # nix-darwin の switch では brew update / upgrade をしない (darwin/homebrew.nix)。
               # 更新は --full 指定時のここか、launchd の brew-upgrade (毎日 04:00) で行う
               brew_full_upgrade() {
-                echo "Upgrading Homebrew packages and App Store apps..."
+                echo "Upgrading Homebrew packages..."
                 brew update
                 brew upgrade
-                if command -v mas >/dev/null; then
-                  mas upgrade
-                fi
               }
 
               # システムタイプに基づいて適切な設定を使用
@@ -248,7 +245,7 @@
           program = toString (
             nixpkgsFor.${system}.writeShellScript "update-all-script" ''
               set -e
-              # 引数: [--full]  (switch 後に Homebrew / App Store アプリも更新する)
+              # 引数: [--full]  (switch 後に Homebrew のパッケージも更新する)
               FULL=0
               for arg in "$@"; do
                 case "$arg" in
@@ -281,12 +278,9 @@
               # nix-darwin の switch では brew update / upgrade をしない (darwin/homebrew.nix)。
               # 更新は --full 指定時のここか、launchd の brew-upgrade (毎日 04:00) で行う
               brew_full_upgrade() {
-                echo "Upgrading Homebrew packages and App Store apps..."
+                echo "Upgrading Homebrew packages..."
                 brew update
                 brew upgrade
-                if command -v mas >/dev/null; then
-                  mas upgrade
-                fi
               }
 
               # システムタイプに基づいて処理

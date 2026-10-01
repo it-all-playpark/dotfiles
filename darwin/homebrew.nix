@@ -5,7 +5,7 @@ _: {
     onActivation = {
       # Homebrew有効化時の挙動設定
       # switch では Brewfile との差分 (追加・削除) だけを反映する。
-      # brew update / upgrade と mas upgrade を毎回走らせると switch が大幅に遅くなるため、
+      # brew update / upgrade を毎回走らせると switch が大幅に遅くなるため、
       # 更新は `nix run .#update -- --full` と launchd の brew-upgrade (毎日 04:00) に分離している。
       autoUpdate = false;
       upgrade = false;

@@ -124,7 +124,7 @@ nix run .#update
 flake.nix内のアップデートスクリプトが、home-managerとnix-darwinの両方の設定を切り替えます。
 
 switch 時の Homebrew は Brewfile との差分（追加・削除）だけを反映し、既存パッケージの更新はしません。
-Homebrew / App Store アプリも更新したいときは `--full` を付けます。
+Homebrew のパッケージも更新したいときは `--full` を付けます（App Store アプリは macOS の自動アップデートに任せます）。
 
 ```bash
 nix run .#update -- --full
