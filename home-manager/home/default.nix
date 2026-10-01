@@ -737,6 +737,9 @@ in
             done
             if command -v mas >/dev/null; then
               "$timeout" 1800 mas upgrade || rc=1
+            else
+              echo "SKIPPED: mas not installed"
+              rc=1
             fi
             exit $rc
           ''
