@@ -157,8 +157,17 @@
           program = toString (
             nixpkgsFor.${system}.writeShellScript "update-script" ''
               set -e
-              # デフォルトユーザー名を設定
-              USERNAME=''${1:-naramotoyuuji}
+              # 引数: [username] [--full]
+              # --full を付けたときだけ switch 後に Homebrew / App Store アプリも更新する
+              FULL=0
+              USERNAME=naramotoyuuji
+              for arg in "$@"; do
+                case "$arg" in
+                  --full) FULL=1 ;;
+                  -*) echo "Unknown option: $arg"; exit 1 ;;
+                  *) USERNAME="$arg" ;;
+                esac
+              done
               BACKUP_EXT="backup-$(date +%Y%m%d%H%M%S)"
 
               echo "Updating flake for user: $USERNAME..."
@@ -179,6 +188,17 @@
                 fi
               }
 
+              # nix-darwin の switch では brew update / upgrade をしない (darwin/homebrew.nix)。
+              # 更新は --full 指定時のここか、launchd の brew-upgrade (毎日 04:00) で行う
+              brew_full_upgrade() {
+                echo "Upgrading Homebrew packages and App Store apps..."
+                brew update
+                brew upgrade
+                if command -v mas >/dev/null; then
+                  mas upgrade
+                fi
+              }
+
               # システムタイプに基づいて適切な設定を使用
               if [[ "$(uname)" == "Darwin" ]]; then
                 # macOS系の場合
@@ -192,6 +212,10 @@
 
                 echo "Updating nix-darwin..."
                 sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
+
+                if [[ "$FULL" == 1 ]]; then
+                  brew_full_upgrade
+                fi
               else
                 # Linux系の場合（WSLを含む）
                 echo "Detected Linux environment"
@@ -224,6 +248,14 @@
           program = toString (
             nixpkgsFor.${system}.writeShellScript "update-all-script" ''
               set -e
+              # 引数: [--full]  (switch 後に Homebrew / App Store アプリも更新する)
+              FULL=0
+              for arg in "$@"; do
+                case "$arg" in
+                  --full) FULL=1 ;;
+                  *) echo "Unknown option: $arg"; exit 1 ;;
+                esac
+              done
               # すべてのユーザー名を配列で定義
               USERNAMES=("naramotoyuuji" "yuji_naramoto")
               BACKUP_EXT="backup-$(date +%Y%m%d%H%M%S)"
@@ -243,6 +275,17 @@
                 else
                   echo "WARNING: updated inputs failed to build. Rolling back flake.lock to the previous (working) revision..."
                   mv "$LOCK_BACKUP" flake.lock
+                fi
+              }
+
+              # nix-darwin の switch では brew update / upgrade をしない (darwin/homebrew.nix)。
+              # 更新は --full 指定時のここか、launchd の brew-upgrade (毎日 04:00) で行う
+              brew_full_upgrade() {
+                echo "Upgrading Homebrew packages and App Store apps..."
+                brew update
+                brew upgrade
+                if command -v mas >/dev/null; then
+                  mas upgrade
                 fi
               }
 
@@ -266,6 +309,10 @@
                   echo "Updating nix-darwin for user: $USERNAME..."
                   sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake .#MyMBP-''${USERNAME}
                 done
+
+                if [[ "$FULL" == 1 ]]; then
+                  brew_full_upgrade
+                fi
               else
                 # Linux系の場合
                 echo "Detected Linux environment"
