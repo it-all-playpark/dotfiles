@@ -703,7 +703,8 @@
         "api.slack.com",
         "fonts.googleapis.com",
         "console.neon.tech",
-        "oauth2.neon.tech"
+        "oauth2.neon.tech",
+        "sales-prod-playpark-llc.aws-ap-northeast-1.turso.io"
       ],
       "strictAllowlist": true
     }
