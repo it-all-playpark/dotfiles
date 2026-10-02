@@ -50,42 +50,6 @@
         system:
         import nixpkgs {
           inherit system;
-          overlays = [
-            # direnv の checkPhase は macOS Nix サンドボックス内でハングするため無効化
-            (_final: prev: {
-              direnv = prev.direnv.overrideAttrs (_: {
-                doCheck = false;
-              });
-            })
-            # mise の checkPhase は Nix サンドボックスが setuid bit 付与を許可しないため
-            # oci::layer::tests::preserve_metadata_dir_layer_keeps_special_permission_bits が失敗する。
-            # nixpkgs 側でこのテストが skip されたら削除可。
-            # cmake は nixpkgs 側で nativeCheckInputs にあるため doCheck = false で PATH から外れるが、
-            # mise 2026.7.17 で追加された libz-ng-sys の build.rs が buildPhase で cmake を要求する。
-            # nativeBuildInputs に明示的に足さないと "is `cmake` not installed?" でビルドが落ちる。
-            (_final: prev: {
-              mise = prev.mise.overrideAttrs (old: {
-                doCheck = false;
-                nativeBuildInputs = old.nativeBuildInputs ++ [ prev.cmake ];
-              });
-            })
-            # starship 1.26.0 は darwin で cctools ld64 がクラッシュしビルド失敗する
-            # (nixpkgs#540450, ld64 の libc++ hardening 問題)。
-            # upstream fix (nixpkgs#540463) と同じく lld でリンクして回避。
-            # nixpkgs#540463 が nixos-unstable channel に到達したら削除可。
-            (_final: prev: {
-              starship =
-                if prev.stdenv.hostPlatform.isDarwin then
-                  prev.starship.overrideAttrs (old: {
-                    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ prev.llvmPackages.lld ];
-                    env = (old.env or { }) // {
-                      NIX_CFLAGS_LINK = "-fuse-ld=lld";
-                    };
-                  })
-                else
-                  prev.starship;
-            })
-          ];
         }
       );
 
