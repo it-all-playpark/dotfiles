@@ -29,6 +29,9 @@
     "vercel@claude-plugins-official": true
   },
   "env": {
+    "AGENT_BROWSER_EXECUTABLE_PATH": "/Users/naramotoyuuji/.nix-profile/bin/agent-browser-chrome",
+    "AGENT_BROWSER_PROXY": "direct://",
+    "AGENT_BROWSER_SOCKET_DIR": "/private/tmp/claude/agent-browser",
     "API_TIMEOUT_MS": "900000",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "DISABLE_AUTOUPDATER": "1",
@@ -666,7 +669,8 @@
       "allowLocalBinding": true,
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
-        "/Users/naramotoyuuji/.local/state/jev-broker/jev.sock"
+        "/Users/naramotoyuuji/.local/state/jev-broker/jev.sock",
+        "/private/tmp/claude/agent-browser"
       ],
       "allowedDomains": [
         "github.com",
