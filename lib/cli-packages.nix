@@ -63,6 +63,8 @@ with pkgs;
   python313Packages.deepl
   rclone
   tbls
+  # Claude Code sandbox 内で立てられる使い捨ての Postgres（PGlite over TCP）。詳細は ./pglite-server/default.nix
+  (callPackage ./pglite-server { })
 ]
 ++ lib.optionals stdenv.hostPlatform.isDarwin [
   # agent-browser 用の headless Chromium（claude-code/settings.json の env AGENT_BROWSER_EXECUTABLE_PATH から使う）。
