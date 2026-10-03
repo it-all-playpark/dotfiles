@@ -2,6 +2,9 @@
 {
   projectRootFile = "flake.nix";
 
+  # npm が書いた形のまま保つ（buildNpmPackage は npmDeps に保存した lockfile と内容一致を要求する）
+  settings.global.excludes = [ "**/package-lock.json" ];
+
   programs.nixfmt.enable = true;
 
   programs.ruff-check.enable = true;

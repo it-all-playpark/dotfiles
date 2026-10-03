@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@electric-sql/pglite-socket": "0.2.11"
+  },
+  "description": "pglite-server (PGlite over TCP) pinned for nix. Used as a Postgres that runs inside the Claude Code sandbox.",
+  "name": "pglite-server-nix",
+  "private": true,
+  "version": "0.2.11"
+}
