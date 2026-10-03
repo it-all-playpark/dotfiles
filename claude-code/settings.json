@@ -33,9 +33,11 @@
     "AGENT_BROWSER_PROXY": "direct://",
     "AGENT_BROWSER_SOCKET_DIR": "/private/tmp/claude/agent-browser",
     "API_TIMEOUT_MS": "900000",
+    "CHOKIDAR_USEPOLLING": "true",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "DISABLE_AUTOUPDATER": "1",
-    "FORCE_AUTOUPDATE_PLUGINS": "1"
+    "FORCE_AUTOUPDATE_PLUGINS": "1",
+    "WATCHPACK_POLLING": "true"
   },
   "extraKnownMarketplaces": {
     "playpark": {
@@ -670,7 +672,8 @@
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
         "/Users/naramotoyuuji/.local/state/jev-broker/jev.sock",
-        "/private/tmp/claude/agent-browser"
+        "/private/tmp/claude/agent-browser",
+        "/private/tmp/claude-502"
       ],
       "allowedDomains": [
         "github.com",
