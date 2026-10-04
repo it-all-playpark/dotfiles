@@ -233,6 +233,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# sandbox_pg_entries_present
+# ---------------------------------------------------------------------------
+echo "- sandbox_pg_entries_present"
+# lib/sandbox-pg（nix store の固定目的コマンド）。bare 名と引数付きの 2 形だけを 1 回ずつ持つ
+if [ "$(count_entry "sandbox-pg")" -eq 1 ] && [ "$(count_entry "sandbox-pg *")" -eq 1 ] &&
+  [ "$(jq '[.[] | select(startswith("sandbox-pg"))] | length' <<<"${EXCLUDED_JSON}")" -eq 2 ]; then
+  pass "sandbox_pg_entries_present"
+else
+  fail "sandbox_pg_entries_present" "Expected exactly 'sandbox-pg' and 'sandbox-pg *'"
+fi
+
+# ---------------------------------------------------------------------------
 # no_duplicate_entries
 # ---------------------------------------------------------------------------
 echo "- no_duplicate_entries"
