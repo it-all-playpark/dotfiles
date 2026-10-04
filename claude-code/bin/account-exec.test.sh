@@ -100,12 +100,14 @@ EOF
 # account-exec のシェバン行 (#!/usr/bin/env bash) 解決と、shim 内部が呼ぶ実 jq の
 # 解決用に、それぞれの実ディレクトリだけを PATH 末尾へ足す（shim dir 除外ロジックの
 # 対象外の場所なので、gh/gcloud の実体解決には影響しない）。
+# shim が使う basename / dirname / readlink は bash と同じ場所にあるとは限らない
+# （nix devShell の bash は単独の store path）ので、BASH_JQ_DIR も末尾に足す。
 BASH_DIR="$(dirname "$BASH")"
 JQ_DIR="$(dirname "$(command -v jq)")"
 
 # run_shim <cwd> <tool> [args...]
 #   RUN_PATH / RUN_MAP / RUN_ENV (配列) で上書き可。結果は OUT / ERR / RC に入る。
-RUN_PATH="$SHIM_BIN:$FAKE_BIN:$BASH_DIR:$JQ_DIR"
+RUN_PATH="$SHIM_BIN:$FAKE_BIN:$BASH_DIR:$JQ_DIR:$BASH_JQ_DIR"
 RUN_MAP="$MAP"
 RUN_ENV=()
 OUT=""
@@ -125,7 +127,7 @@ run_shim() {
 }
 
 reset_run() {
-  RUN_PATH="$SHIM_BIN:$FAKE_BIN:$BASH_DIR:$JQ_DIR"
+  RUN_PATH="$SHIM_BIN:$FAKE_BIN:$BASH_DIR:$JQ_DIR:$BASH_JQ_DIR"
   RUN_MAP="$MAP"
   RUN_ENV=()
 }

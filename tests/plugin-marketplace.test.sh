@@ -134,10 +134,13 @@ fi
 
 # ---------------------------------------------------------------------------
 # no_dot_claude_skills_outside_hooks (AC1)
+# 対象はユーザー単位の ~/.claude/skills（plugin 化前の置き場）だけ。
+# repo 内の <repo>/.claude/skills（corporate-site の daily-blog-factory や
+# denyWrite の ~/ghq/**/.claude/skills）は意図した参照なので数えない。
 # ---------------------------------------------------------------------------
 echo "- no_dot_claude_skills_outside_hooks"
 count_outside="$(jq '
-    del(.hooks) | [.. | strings | select(contains(".claude/skills"))] | length
+    del(.hooks) | [.. | strings | select(test("(~|\\$HOME|/Users/[^/]+)/\\.claude/skills"))] | length
   ' "${SETTINGS}")"
 if [ "${count_outside}" -eq 0 ]; then
   pass "no_dot_claude_skills_outside_hooks"
