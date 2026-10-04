@@ -15,35 +15,12 @@
     "output_dir": "claudedocs",
     "prevent_future_links": true
   },
-  "blog-mv-date": {
-    "content_dir": "content/blog",
-    "image_dir": "public/blog",
-    "image_ext": ".webp",
-    "seed_dir": "seed",
-    "sns_post_dir": "post/blog"
-  },
-  "blog-schedule-overview": {
-    "lookahead_days": 30,
-    "lookback_days": 7,
-    "publish_days": [
-      "monday",
-      "thursday"
-    ]
-  },
   "blog-seo-improve": {
     "output_dir": "claudedocs",
     "thresholds": {
-      "high_bounce": 0.75,
       "low_ctr": 0.02,
       "min_impressions": 50
     }
-  },
-  "blog-swap-dates": {
-    "content_dir": "content/blog",
-    "image_dir": "public/blog",
-    "image_ext": ".webp",
-    "seed_dir": "seed",
-    "sns_post_dir": "post/blog"
   },
   "cross-post-publish": {
     "content_dir": "content/blog",

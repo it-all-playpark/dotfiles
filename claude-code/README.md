@@ -193,7 +193,7 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `PostToolUseFailure` | `posttoolfail-classify.sh` | ツール失敗を Jev で `class`（sandbox_denied / network_denied / permission_denied / not_found / syntax_error / test_failed / timeout / other）に分類し `~/.claude/logs/tool-failures.jsonl` に記録。記録のみで挙動は変えない |
 | `Stop` | `stop-unfinished-guard.sh` | 未完了タスクがあれば停止を抑止 |
 | `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知。settings.json 側は `` 参照 1 本で共有。herdr は絶対パス完全一致でしか登録済みと判定しないため、`herdr integration install claude` を再実行した後は追記される絶対パスのエントリを revert すること |
-| `UserPromptSubmit` | inline `rm -f /tmp/claude-skill-ctx-<session>` | `playpark-core` plugin の `skill-retrospective/journal.sh` が使う skill-ctx state file をプロンプト投入毎にクリア。plugin 側 `hooks.json` に `UserPromptSubmit` の移植先が無いため dotfiles 側に維持（journal.sh 側の 30 分 TTL は取りこぼし時の保険） |
+| `UserPromptSubmit` | inline `rm -f /tmp/claude-skill-ctx-<session>` | `playpark-core` plugin の `journal/scripts/journal.sh` が使う skill-ctx state file をプロンプト投入毎にクリア。plugin 側 `hooks.json` に `UserPromptSubmit` の移植先が無いため dotfiles 側に維持（journal.sh 側の 30 分 TTL は取りこぼし時の保険） |
 
 テストファイル（`*.test.sh`）は symlink 対象外。
 

@@ -89,13 +89,13 @@ fi
 # that clears /tmp/claude-skill-ctx-<session> has no migration target in any
 # of the 3 plugin hooks.json files (dev-flow / playpark-core / playpark-skills
 # only wire PreToolUse/PostToolUse/PostToolUseFailure/Stop/SessionStart), so it
-# must stay in claude-code/settings.json or skill-retrospective's journal.sh
+# must stay in claude-code/settings.json or playpark-core's journal.sh
 # active-skill attribution silently regresses to a 30min-stale fallback.
 # ---------------------------------------------------------------------------
 echo "- settings_no_migrated_hooks"
 count="$(jq '
     [.hooks | .. | strings
-      | select(test("stop-devflow-telemetry|pretool-inline-edit-guard|pretool-bash-inline-commit-gate|pretool-context-guard|posttool-secret-mask|validate-skill-frontmatter|skill-retrospective/scripts/journal\\.sh|zombie-kill"))
+      | select(test("stop-devflow-telemetry|pretool-inline-edit-guard|pretool-bash-inline-commit-gate|pretool-context-guard|posttool-secret-mask|validate-skill-frontmatter|journal/scripts/journal\\.sh|zombie-kill"))
     ] | length
   ' "${SETTINGS}")"
 if [ "${count}" -eq 0 ]; then

@@ -89,7 +89,6 @@ BARE_NAMES=(
   "repo-pr"
   "qiita-publish"
   "zenn-publish"
-  "yt-chorus-extract"
 )
 
 # ---------------------------------------------------------------------------
