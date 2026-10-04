@@ -624,6 +624,8 @@
       "zenn-publish *",
       "yt-chorus-extract",
       "yt-chorus-extract *",
+      "sandbox-pg",
+      "sandbox-pg *",
       "codex:*",
       "zernio:*"
     ],

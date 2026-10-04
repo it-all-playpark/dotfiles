@@ -63,6 +63,10 @@ with pkgs;
   python313Packages.deepl
   rclone
   tbls
+
+  # Claude Code sandbox から本物の Postgres（docker）を起動・停止するだけの固定目的コマンド。
+  # settings.json の excludedCommands で sandbox 外実行。詳細は ./sandbox-pg/sandbox-pg.sh
+  (callPackage ./sandbox-pg { })
 ]
 ++ lib.optionals stdenv.hostPlatform.isDarwin [
   # agent-browser 用の headless Chromium（claude-code/settings.json の env AGENT_BROWSER_EXECUTABLE_PATH から使う）。
