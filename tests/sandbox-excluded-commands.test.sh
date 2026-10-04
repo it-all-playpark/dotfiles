@@ -70,7 +70,6 @@ BARE_NAMES=(
   "redgreen-verify"
   "secfloor-classify"
   "structural-classify"
-  "ui-verify-server"
   "veridelta-archive"
   "worktree-diff-hash"
   "worktree-teardown"
@@ -208,6 +207,18 @@ if [ "${#still_present[@]}" -eq 0 ]; then
   pass "dot_claude_skills_globs_removed"
 else
   fail "dot_claude_skills_globs_removed" "Should be removed but present: ${still_present[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# ui_verify_server_removed
+# ui-verify-server は repo が宣言した dev コマンド（repo の任意コード）を実行するので、
+# sandbox 外に出すと脱出口になる。dev-flow の ui_verify は sandbox 内で回す（skills #766）。
+# ---------------------------------------------------------------------------
+echo "- ui_verify_server_removed"
+if has_entry "ui-verify-server" || has_entry "ui-verify-server *"; then
+  fail "ui_verify_server_removed" "ui-verify-server must not be in excludedCommands"
+else
+  pass "ui_verify_server_removed"
 fi
 
 # ---------------------------------------------------------------------------

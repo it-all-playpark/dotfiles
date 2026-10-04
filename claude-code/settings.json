@@ -582,8 +582,6 @@
       "secfloor-classify *",
       "structural-classify",
       "structural-classify *",
-      "ui-verify-server",
-      "ui-verify-server *",
       "veridelta-archive",
       "veridelta-archive *",
       "worktree-diff-hash",
