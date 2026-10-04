@@ -2,7 +2,7 @@
 # PostToolUseFailure hook: ツール失敗を Jev で分類して JSONL に記録
 #
 # 目的:
-#   skill-retrospective が失敗の再発パターンを見つけるとき、エラー文字列の
+#   失敗の再発パターンを見つけるとき、エラー文字列の
 #   sed 正規化に頼らず固定ラベルで集計できるようにする。RULES.md の
 #   Sandbox Hygiene に並ぶ項目（/tmp 直書き・process substitution・未許可
 #   ホスト等）は、どれも「同じ種類の失敗が何度も起きた」ことから書かれた。
