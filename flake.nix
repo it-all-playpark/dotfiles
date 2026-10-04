@@ -121,6 +121,8 @@
           program = toString (
             nixpkgsFor.${system}.writeShellScript "update-script" ''
               set -e
+              # commit / push 前の検査（.githooks）を有効にする
+              bash scripts/install-git-hooks.sh || echo "WARNING: git hooks を設置できなかった"
               # 引数: [username] [--full]
               # --full を付けたときだけ switch 後に Homebrew のパッケージも更新する
               FULL=0
@@ -209,6 +211,8 @@
           program = toString (
             nixpkgsFor.${system}.writeShellScript "update-all-script" ''
               set -e
+              # commit / push 前の検査（.githooks）を有効にする
+              bash scripts/install-git-hooks.sh || echo "WARNING: git hooks を設置できなかった"
               # 引数: [--full]  (switch 後に Homebrew のパッケージも更新する)
               FULL=0
               for arg in "$@"; do
@@ -328,7 +332,7 @@
         }
       );
 
-      # 開発シェル（リンター等の追加ツール + pre-commit hook 自動設置）
+      # 開発シェル（リンター・テスト依存 + .githooks の有効化）
       devShells = forAllSystems (
         system:
         let
@@ -341,34 +345,20 @@
             packages = [
               treefmtWrapper
               pkgs.shellcheck
+              # tests/run-all.sh の依存（CI も pre-push もこの shell で走らせる）
+              pkgs.bash
+              pkgs.bats
+              pkgs.git
+              pkgs.jq
+              pkgs.python3
+              pkgs.yq-go
             ];
+            # hook の本体は追跡している .githooks/（pre-commit: 整形 + shellcheck、pre-push: CI と同じ検査）。
+            # Claude の sandbox からは .git/hooks に書けないので、Claude のセッションでは設置しない
             shellHook = ''
-                            if [ -d .git ]; then
-                              mkdir -p .git/hooks
-                              cat > .git/hooks/pre-commit << 'HOOK'
-              #!/usr/bin/env bash
-              set -euo pipefail
-
-              # Get staged files
-              STAGED=$(git diff --cached --name-only --diff-filter=ACM)
-              [ -z "$STAGED" ] && exit 0
-
-              # Format staged files with treefmt (skip if not in devShell)
-              if command -v treefmt &>/dev/null; then
-                echo "$STAGED" | xargs treefmt
-                echo "$STAGED" | xargs git add
-              else
-                echo "pre-commit: treefmt not found, skipping format (run 'nix develop' first)"
+              if [ -z "''${CLAUDECODE:-}" ] && [ -f scripts/install-git-hooks.sh ]; then
+                bash scripts/install-git-hooks.sh
               fi
-
-              # Lint: shellcheck
-              SH_FILES=$(echo "$STAGED" | grep '\.sh$' || true)
-              if [ -n "$SH_FILES" ] && command -v shellcheck &>/dev/null; then
-                echo "$SH_FILES" | xargs shellcheck
-              fi
-              HOOK
-                              chmod +x .git/hooks/pre-commit
-                            fi
             '';
           };
         }

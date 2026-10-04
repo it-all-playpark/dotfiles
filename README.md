@@ -190,16 +190,31 @@ nix fmt
 # フォーマット違反がないかチェック（CI向け）
 nix flake check
 
+# 全テストを並列実行（依存は devShell が揃える）
+nix develop --command tests/run-all.sh
+
 # devShell に入る（shellcheck 等のリンターが使える）
 nix develop
 ```
 
-### Pre-commit Hook
+### CI と Git Hooks
 
-`nix develop` で devShell に入ると、`.git/hooks/pre-commit` が自動設置されます。
-以降のコミット時に treefmt + shellcheck が自動実行され、フォーマット済みのコードのみがコミットされます。
+PR と main への push で GitHub Actions（`.github/workflows/ci.yml`、macOS）が
+`nix flake check`・darwin / home-manager 設定の評価・`tests/run-all.sh` を走らせます。
 
-devShell 外からのコミットではフォーマットはスキップされます（警告メッセージを表示）。
+ローカルでは追跡している `.githooks/` の hook が動きます。
+
+- pre-commit: staged ファイルを treefmt で整形して add し直し、`.sh` を shellcheck
+- pre-push: `nix flake check` + `tests/run-all.sh`（CI と同じ検査。飛ばすなら `git push --no-verify`）
+
+`nix run .#update` か `nix develop` を一度実行すると、`scripts/install-git-hooks.sh` が
+git の hooks ディレクトリに `.githooks/` を呼ぶ shim を置きます（worktree でも各ブランチの `.githooks` が効く）。
+devShell の外で commit しても、hook が devShell に入り直して treefmt を実行します。
+
+Claude Code のセッション（`CLAUDECODE=1`）では hook は何もしません。Claude の git は sandbox 外で動くため、
+作業ツリーのスクリプトを hook から実行すると sandbox の脱出口になるからです。Claude の push は CI が検査します。
+
+テストは `*.test.sh` / `*_test.sh` / `test-*.sh` / `*.bats`（`tests/`・`claude-code/`・`scripts/` 配下）の命名にすれば自動で拾われます。
 
 ## 注意事項
 

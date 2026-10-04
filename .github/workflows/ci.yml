@@ -1,0 +1,48 @@
+# フォーマット・nix 設定の評価・全テスト。ローカルでは .githooks/pre-push が同じ検査を走らせる。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # aarch64-darwin だけを対象にしている（Intel Mac は使わない）
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      # テストが一時 repo に commit するとき用
+      GIT_AUTHOR_NAME: ci
+      GIT_AUTHOR_EMAIL: ci@example.invalid
+      GIT_COMMITTER_NAME: ci
+      GIT_COMMITTER_EMAIL: ci@example.invalid
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Format (nix flake check)
+        run: nix flake check
+
+      # 実ビルドはせず評価だけ（nix の書き間違い・存在しない option を拾う）
+      - name: Evaluate darwin / home-manager configs
+        run: |
+          nix build --dry-run \
+            .#darwinConfigurations.MyMBP-naramotoyuuji.system \
+            .#darwinConfigurations.MyMBP-yuji_naramoto.system \
+            .#homeConfigurations.naramotoyuuji-darwin.activationPackage \
+            .#homeConfigurations.yuji_naramoto-darwin.activationPackage
+
+      - name: Tests
+        run: nix develop --command tests/run-all.sh

@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# push 前に CI（.github/workflows/ci.yml）と同じ検査を走らせる: フォーマット + 全テスト。
+# 検査対象は作業ツリー（未 commit の変更も含む）。急ぎで飛ばすなら git push --no-verify。
+set -euo pipefail
+
+# Claude Code の git は sandbox 外で動くので、ここで作業ツリーのテストを実行すると脱出口になる。
+# Claude の push は CI で検査する（テストは Claude 側が sandbox 内で走らせる）。
+[ -n "${CLAUDECODE:-}" ] && exit 0
+
+# ブランチ削除だけの push では検査しない
+pushes_commits=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  case "$local_sha" in
+    *[!0]*) pushes_commits=1 ;;
+  esac
+done
+[ "$pushes_commits" -eq 1 ] || exit 0
+
+echo "pre-push: nix flake check（フォーマット）"
+nix flake check
+
+echo "pre-push: tests/run-all.sh"
+nix develop --command tests/run-all.sh
