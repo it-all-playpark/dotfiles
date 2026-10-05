@@ -80,8 +80,6 @@ BARE_NAMES=(
   "journal"
   "check-ci"
   "analyze-issue"
-  "hypothesis-check"
-  "analyze-dev-flow-telemetry"
   "detect-stack"
   "ac-lint"
   "dep-guardian-discover-prs"
@@ -323,10 +321,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 80 ]; then
+if [ "${total_len}" -eq 76 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 80 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 76 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
