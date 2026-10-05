@@ -50,27 +50,27 @@ echo "=== permission-summary.sh ==="
 
 # 1. --suggest: read_only の Bash と WebFetch は候補、network / 未分類 Bash は出ない
 out=$(bash "$SCRIPT" --suggest)
-if echo "$out" | grep -q 'Bash(grep -n:\*)'; then
+if grep -q 'Bash(grep -n:\*)' <<<"$out"; then
   ok "suggest: read_only bash is a candidate"
 else
   ng "suggest: read_only bash is a candidate" "$out"
 fi
-if ! echo "$out" | grep -q 'Bash(gh pr:\*)'; then
+if ! grep -q 'Bash(gh pr:\*)' <<<"$out"; then
   ok "suggest: network bash is excluded"
 else
   ng "suggest: network bash is excluded" "$out"
 fi
-if ! echo "$out" | grep -q 'Bash(rm -f:\*)'; then
+if ! grep -q 'Bash(rm -f:\*)' <<<"$out"; then
   ok "suggest: unclassified bash is excluded"
 else
   ng "suggest: unclassified bash is excluded" "$out"
 fi
-if echo "$out" | grep -q 'WebFetch(domain:example.com)'; then
+if grep -q 'WebFetch(domain:example.com)' <<<"$out"; then
   ok "suggest: non-bash tools unaffected"
 else
   ng "suggest: non-bash tools unaffected" "$out"
 fi
-if echo "$out" | grep -q '全 9 件中、未分類 3 件・副作用あり 3 件を除外'; then
+if grep -q '全 9 件中、未分類 3 件・副作用あり 3 件を除外' <<<"$out"; then
   ok "suggest: exclusion counts shown"
 else
   ng "suggest: exclusion counts shown" "$out"
@@ -78,10 +78,10 @@ fi
 
 # 2. summary: By Class
 out=$(bash "$SCRIPT")
-if echo "$out" | grep -q 'By Class (Bash, Jev)' &&
-  echo "$out" | grep -qE '3 read_only' &&
-  echo "$out" | grep -qE '3 network' &&
-  echo "$out" | grep -qE '3 unclassified'; then
+if grep -q 'By Class (Bash, Jev)' <<<"$out" &&
+  grep -qE '3 read_only' <<<"$out" &&
+  grep -qE '3 network' <<<"$out" &&
+  grep -qE '3 unclassified' <<<"$out"; then
   ok "summary: class breakdown"
 else
   ng "summary: class breakdown" "$out"

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# staged ファイルを treefmt で整形して add し直し、.sh を shellcheck にかける。
+# scripts/install-git-hooks.sh が置く shim から呼ばれる（nix develop / nix run .#update が設置）。
+set -euo pipefail
+
+# Claude Code の git は sandbox 外で動くので、ここで作業ツリーのスクリプトや flake.nix
+# （nix develop の shellHook）を実行すると脱出口になる。Claude の commit / push は CI で検査する。
+[ -n "${CLAUDECODE:-}" ] && exit 0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$STAGED" ] && exit 0
+
+# devShell の外（普段の git commit）なら devShell に入り直して自分を実行する
+if ! command -v treefmt >/dev/null 2>&1; then
+  if [ -n "${IN_NIX_SHELL:-}" ]; then
+    echo "pre-commit: treefmt が見つからない" >&2
+    exit 1
+  fi
+  exec nix develop --command "$0" "$@"
+fi
+
+echo "$STAGED" | xargs treefmt --no-cache
+echo "$STAGED" | xargs git add
+
+SH_FILES=$(echo "$STAGED" | grep '\.sh$' || true)
+if [ -n "$SH_FILES" ]; then
+  echo "$SH_FILES" | xargs shellcheck
+fi

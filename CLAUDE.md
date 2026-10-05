@@ -11,9 +11,10 @@ nix run .#update-all          # Apply all users
 nix run .#update -- --full    # Also brew update/upgrade (daily 04:00 via launchd brew-upgrade)
 nix fmt                       # Format all files
 nix flake check               # Check formatting (CI)
+bash tests/run-all.sh         # Run all tests in parallel (CI: nix develop --command tests/run-all.sh)
 ```
 
-Pre-commit hook (treefmt + shellcheck) auto-installs via `nix develop`.
+CI (`.github/workflows/ci.yml`) runs flake check, darwin/home config evaluation and `tests/run-all.sh` on every PR. Tracked hooks live in `.githooks/` (pre-commit: treefmt + shellcheck, pre-push: same checks as CI); `nix run .#update` / `nix develop` install shims via `scripts/install-git-hooks.sh`. The hooks do nothing inside Claude Code (`CLAUDECODE=1`) because Claude's git runs outside the sandbox — run `bash tests/run-all.sh` yourself before pushing.
 
 ## Edit Paths
 

@@ -41,7 +41,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - bg セッションでも一時ファイルは `$TMPDIR`。`$CLAUDE_JOB_DIR/tmp` は system prompt が案内しても書けない（`~/.claude/jobs` は組み込みガードで write deny）
 - process substitution `<(…)` は使わない（`/dev/fd/*` が塞がれる）。tempfile に落としてから渡す
 - `~/ghq/github.com/it-all-playpark/skills` は `~/.claude/skills` として読み込まれている live checkout。sandbox から書けず、作業ツリーを書き換える git も hook が止める。skills の開発は通常の clone `~/ghq/github.com/it-all-playpark/skills-dev`（無ければ `git clone https://github.com/it-all-playpark/skills.git` で作る）で行う。そこでは git・`npm ci`・テスト・worktree が sandbox 内で普通に動く。live checkout の更新は merge 後に人間が pull する
-- Bash から書けない場所（sandbox 外で実行されるので書き換えが脱出口になる）: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.claude/skills` と `.husky`。編集は Edit / Write ツールで行う（dotfiles の 2 つは worktree 側なら Bash でも書ける）
+- Bash から書けない場所（sandbox 外で実行されるので書き換えが脱出口になる）: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.claude/skills`・`.husky`・`.githooks`。編集は Edit / Write ツールで行う（dotfiles の 2 つは worktree 側なら Bash でも書ける）
 - gh を内部で呼ぶ skill スクリプトは、スクリプトパスが先頭の bare 形か `bash <path>` / `python3 <path>` で呼ぶ。`cd X &&` や `VAR=x` 前置の形は `excludedCommands` に一致せず、sandbox 内で gh の資格情報が読めずに落ちる
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
@@ -89,5 +89,8 @@ sandbox に塞がれたら:
   denyWrite。husky の install は sandbox 内だと git config が先に拒否されて何も書かずに返るので影響しない。
   Claude Code 側が既に塞いでいるもの（実測）: ~/ghq 配下の .git/hooks・.git/config への書き込み、git config / git worktree / git init --template
   の sandbox 実行、PATH 上のディレクトリへの書き込み。
+- 2026-10-05 dotfiles の .githooks（pre-commit: 整形、pre-push: flake check + tests/run-all.sh）: .git/hooks の shim が作業ツリーの
+  .githooks を呼ぶ。Claude の git は sandbox 外なので、shim は CLAUDECODE=1 なら何も呼ばない（Claude の push は CI が検査）。
+  shim は sandbox から書けない .git/hooks にあるのでこの判定は外せない。.githooks 自体も **/.githooks として denyWrite。
 - dangerouslyDisableSandbox は policy で無効。
 -->

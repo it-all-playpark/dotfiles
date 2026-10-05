@@ -88,7 +88,7 @@ echo "=== jev-classify.sh ==="
 
 # 1. 正常系: レスポンスがそのまま返り、リクエストが正しく組み立てられる
 reset_fake
-out=$(echo "git status" | AI_GATEWAY_API_KEY=vck_test_key FAKE_CURL_MODE=ok bash "$HOOK" --questions "$QUESTIONS")
+out=$(AI_GATEWAY_API_KEY=vck_test_key FAKE_CURL_MODE=ok bash "$HOOK" --questions "$QUESTIONS" <<<"git status")
 if [[ $(echo "$out" | jq -r '.answers.kind.choice') == "read_only" ]]; then
   ok "ok: returns response with answers"
 else
@@ -114,7 +114,7 @@ fi
 
 # 2. JEV_DISABLE=1: curl を呼ばず無出力
 reset_fake
-out=$(echo "x" | AI_GATEWAY_API_KEY=vck_test_key JEV_DISABLE=1 bash "$HOOK" --questions "$QUESTIONS")
+out=$(AI_GATEWAY_API_KEY=vck_test_key JEV_DISABLE=1 bash "$HOOK" --questions "$QUESTIONS" <<<"x")
 if [[ -z $out && ! -f "$WORK/argv" ]]; then
   ok "disable: no call, no output"
 else
@@ -123,7 +123,7 @@ fi
 
 # 3. 鍵なし: curl を呼ばず無出力
 reset_fake
-out=$(echo "x" | env -u AI_GATEWAY_API_KEY bash "$HOOK" --questions "$QUESTIONS")
+out=$(env -u AI_GATEWAY_API_KEY bash "$HOOK" --questions "$QUESTIONS" <<<"x")
 if [[ -z $out && ! -f "$WORK/argv" ]]; then
   ok "no key: no call, no output"
 else
@@ -133,7 +133,7 @@ fi
 # 4. curl 失敗: 無出力 exit 0
 reset_fake
 set +e
-out=$(echo "x" | AI_GATEWAY_API_KEY=vck_test_key FAKE_CURL_MODE=fail bash "$HOOK" --questions "$QUESTIONS")
+out=$(AI_GATEWAY_API_KEY=vck_test_key FAKE_CURL_MODE=fail bash "$HOOK" --questions "$QUESTIONS" <<<"x")
 rc=$?
 set -e
 if [[ -z $out && $rc -eq 0 ]]; then
@@ -144,7 +144,7 @@ fi
 
 # 5. 非 JSON レスポンス: 無出力
 reset_fake
-out=$(echo "x" | AI_GATEWAY_API_KEY=vck_test_key FAKE_CURL_MODE=garbage bash "$HOOK" --questions "$QUESTIONS")
+out=$(AI_GATEWAY_API_KEY=vck_test_key FAKE_CURL_MODE=garbage bash "$HOOK" --questions "$QUESTIONS" <<<"x")
 if [[ -z $out ]]; then
   ok "garbage response: empty"
 else
@@ -153,14 +153,14 @@ fi
 
 # 6. --questions 無し / 不正: curl を呼ばない
 reset_fake
-out=$(echo "x" | AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK")
+out=$(AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" <<<"x")
 if [[ -z $out && ! -f "$WORK/argv" ]]; then
   ok "missing --questions: no call"
 else
   ng "missing --questions: no call" "output=$out"
 fi
 reset_fake
-out=$(echo "x" | AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --questions 'not json')
+out=$(AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --questions 'not json' <<<"x")
 if [[ -z $out && ! -f "$WORK/argv" ]]; then
   ok "invalid --questions: no call"
 else
@@ -178,7 +178,9 @@ fi
 
 # 8. state の切り詰め
 reset_fake
-head -c 5000 /dev/zero | tr '\0' 'a' | AI_GATEWAY_API_KEY=vck_test_key JEV_STATE_MAX_BYTES=100 bash "$HOOK" --questions "$QUESTIONS" >/dev/null
+# pipe で渡すと hook が 100 バイトで読むのをやめた時点で tr が SIGPIPE を受け、pipefail で落ちる
+long_state=$(head -c 5000 /dev/zero | tr '\0' 'a')
+AI_GATEWAY_API_KEY=vck_test_key JEV_STATE_MAX_BYTES=100 bash "$HOOK" --questions "$QUESTIONS" <<<"$long_state" >/dev/null
 if [[ $(jq -r '.state | length' "$WORK/body") -eq 100 ]]; then
   ok "state truncated to JEV_STATE_MAX_BYTES"
 else
@@ -187,7 +189,7 @@ fi
 
 # 9. --max-time / JEV_API_URL / JEV_MODEL の上書き
 reset_fake
-echo "x" | AI_GATEWAY_API_KEY=vck_test_key JEV_API_URL=https://example.test/v1/systemone JEV_MODEL=typesafe-ai/jev-1.13.0 bash "$HOOK" --questions "$QUESTIONS" --max-time 7 >/dev/null
+AI_GATEWAY_API_KEY=vck_test_key JEV_API_URL=https://example.test/v1/systemone JEV_MODEL=typesafe-ai/jev-1.13.0 bash "$HOOK" --questions "$QUESTIONS" --max-time 7 <<<"x" >/dev/null
 if [[ $(cat "$WORK/url") == "https://example.test/v1/systemone" ]] &&
   [[ $(jq -r '.model' "$WORK/body") == "typesafe-ai/jev-1.13.0" ]] &&
   grep -qx -- '7' "$WORK/argv"; then
@@ -225,7 +227,7 @@ else
   ng "--redact: URL credential redacted, user-only URL untouched" "state=$state"
 fi
 reset_fake
-echo 'TOKEN=supersecret1' | AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --questions "$QUESTIONS" >/dev/null
+AI_GATEWAY_API_KEY=vck_test_key bash "$HOOK" --questions "$QUESTIONS" <<<'TOKEN=supersecret1' >/dev/null
 if [[ $(jq -r '.state' "$WORK/body") == *supersecret1* ]]; then
   ok "no --redact: state untouched"
 else

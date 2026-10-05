@@ -63,7 +63,12 @@ assert_eq "join no match returns empty" "" "$(printf '%s' "$sessions" | cca_join
 # 上流(cca_live/cca_enumerate)を fixture に差し替え、fzf/zellij を「呼ばれたら失敗」スタブにして
 # --list がデータパイプ(cca_live|cca_enumerate|cca_render)のみで完結し、fzf/zellij を一切呼ばないことを検証する。
 cca_live() { printf '%s\n' /home/u/alpha /home/u/beta; }
-cca_enumerate() { printf '%s\n' $'/home/u/alpha\tfeat/x\t3000' $'/home/u/beta\t\t1000'; }
+# 本物と同じく stdin を読み切る。読まずに返すと前段の cca_live が SIGPIPE で落ち、cca の pipefail で
+# 負荷が高いとき（並列実行）だけテストが止まる。
+cca_enumerate() {
+  cat >/dev/null
+  printf '%s\n' $'/home/u/alpha\tfeat/x\t3000' $'/home/u/beta\t\t1000'
+}
 fzf() {
   echo FZF-CALLED >&2
   return 99
