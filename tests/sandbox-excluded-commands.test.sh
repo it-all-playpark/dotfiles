@@ -4,10 +4,12 @@
 # Run from the repo root: bash tests/sandbox-excluded-commands.test.sh
 # Requires: jq
 #
-# Verifies that the bin/ bare command names (28 names, resolved via PATH
+# Verifies that the bin/ bare command names (30 names, resolved via PATH
 # once skills#582 (dev-flow/playpark-core) and skills#585 (playpark-skills)'s
 # bin/ wrappers are installed) are registered in both their argument-less
-# form (`<name>`) and argument-taking form (`<name> *`), and that the
+# form (`<name>`) and argument-taking form (`<name> *`), that every bin in
+# the skills checkout's plugins/*/bin/ is registered or listed in
+# UNREGISTERED_BINS with a reason (issue #238), and that the
 # pre-existing entries (path globs, gh / git, etc.) are preserved
 # unchanged. The .claude/skills 系 9 件は issue #179 で削除済み
 # （skills#584 の 3 plugin 化に追従）。
@@ -73,6 +75,8 @@ BARE_NAMES=(
   "veridelta-archive"
   "worktree-diff-hash"
   "worktree-teardown"
+  "merge-tier-facts"
+  "dev-flow-ready-set"
   "journal"
   "check-ci"
   "analyze-issue"
@@ -121,6 +125,78 @@ if [ "${#dupes[@]}" -eq 0 ]; then
   pass "bare_name_entries_not_duplicated"
 else
   fail "bare_name_entries_not_duplicated" "Unexpected counts: ${dupes[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# skills_bins_registered / skills_bins_check_detects_unregistered
+# skills の plugins/*/bin/ にある bare 名は、sandbox 外で動かす必要がある
+# （gh を呼ぶ・git object を書く）ので excludedCommands に登録する。
+# 登録し忘れると sandbox 内で落ちる（merge-tier-facts / dev-flow-ready-set, issue #238）。
+# 意図的に登録しない bin は理由つきでここに書く（"<name>|<reason>"）。
+# ---------------------------------------------------------------------------
+UNREGISTERED_BINS=(
+  "ui-verify-stack|repo の dev コマンドを実行する。sandbox 外に出すと脱出口になる（skills #766）"
+  "workspace-prebuild|repo の pnpm build を実行する。sandbox 外に出すと脱出口になる"
+  "ci-wait|gh も git 書き込みも呼ばない"
+  "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
+  "gmail-receipts|gws の資格情報（~/.config/gws）は sandbox 内で読める"
+  "blog-cross-post-resolve-source|gh も git 書き込みも呼ばない"
+  "dep-guardian-classify-pr|gh も git 書き込みも呼ばない"
+  "skill-creator-init|gh も git 書き込みも呼ばない"
+  "sns-announce-check-length|gh も git 書き込みも呼ばない"
+  "sns-announce-extract-metadata|gh も git 書き込みも呼ばない"
+  "sns-announce-get-posting-time|gh も git 書き込みも呼ばない"
+  "sns-announce-load-config|gh も git 書き込みも呼ばない"
+)
+SKILLS_PLUGINS_DIR="${SKILLS_PLUGINS_DIR:-${HOME}/ghq/github.com/it-all-playpark/skills/plugins}"
+
+is_intentionally_unregistered() {
+  local entry
+  for entry in "${UNREGISTERED_BINS[@]}"; do
+    [ "${entry%%|*}" = "$1" ] && return 0
+  done
+  return 1
+}
+
+# plugins dir の bin のうち、bare 形・` *` 形のどちらかが未登録で、許可リストにも無いものを出す
+unregistered_skills_bins() {
+  local bin name
+  for bin in "$1"/*/bin/*; do
+    [ -f "${bin}" ] || continue
+    name="$(basename "${bin}")"
+    is_intentionally_unregistered "${name}" && continue
+    if ! has_entry "${name}" || ! has_entry "${name} *"; then
+      echo "${name}"
+    fi
+  done
+}
+
+echo "- skills_bins_registered"
+if [ -d "${SKILLS_PLUGINS_DIR}" ]; then
+  unregistered="$(unregistered_skills_bins "${SKILLS_PLUGINS_DIR}" | tr '\n' ' ')"
+  if [ -z "${unregistered}" ]; then
+    pass "skills_bins_registered"
+  else
+    fail "skills_bins_registered" "Not in excludedCommands nor UNREGISTERED_BINS: ${unregistered}"
+  fi
+else
+  echo "  SKIP: skills_bins_registered (${SKILLS_PLUGINS_DIR} not found)"
+fi
+
+# 突き合わせ自体が未登録の bin を検出できることを fixture で確かめる（checkout 無しでも走る）
+echo "- skills_bins_check_detects_unregistered"
+FIXTURE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sandbox-excluded-fixture.XXXXXX")"
+trap 'rm -rf "${FIXTURE_DIR}"' EXIT
+mkdir -p "${FIXTURE_DIR}/dev-flow/bin" "${FIXTURE_DIR}/playpark-core/bin"
+touch "${FIXTURE_DIR}/dev-flow/bin/merge-tier-facts" \
+  "${FIXTURE_DIR}/dev-flow/bin/ci-wait" \
+  "${FIXTURE_DIR}/dev-flow/bin/unregistered-fixture-bin" \
+  "${FIXTURE_DIR}/playpark-core/bin/journal"
+detected="$(unregistered_skills_bins "${FIXTURE_DIR}")"
+if [ "${detected}" = "unregistered-fixture-bin" ]; then
+  pass "skills_bins_check_detects_unregistered"
+else
+  fail "skills_bins_check_detects_unregistered" "Expected only unregistered-fixture-bin, got: ${detected:-<none>}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -247,10 +323,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 76 ]; then
+if [ "${total_len}" -eq 80 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 76 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 80 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
