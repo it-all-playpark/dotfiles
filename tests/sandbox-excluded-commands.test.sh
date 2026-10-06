@@ -78,6 +78,7 @@ BARE_NAMES=(
   "merge-tier-facts"
   "dev-flow-ready-set"
   "pr-push"
+  "pr-iterate-prerun"
   "journal"
   "check-ci"
   "analyze-issue"
@@ -132,6 +133,7 @@ fi
 UNREGISTERED_BINS=(
   "ui-verify-stack|repo の dev コマンドを実行する。sandbox 外に出すと脱出口になる（skills #766）"
   "workspace-prebuild|repo の pnpm build を実行する。sandbox 外に出すと脱出口になる"
+  "run-tests|repo の tests/run-*.sh や pnpm test を実行する。sandbox 外に出すと脱出口になる"
   "ci-wait|gh も git 書き込みも呼ばない"
   "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "gmail-receipts|gws の資格情報（~/.config/gws）は sandbox 内で読める"
@@ -318,10 +320,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 70 ]; then
+if [ "${total_len}" -eq 72 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 70 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 72 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
