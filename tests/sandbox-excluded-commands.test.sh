@@ -85,10 +85,6 @@ BARE_NAMES=(
   "dep-guardian-discover-prs"
   "dep-guardian-test-pr"
   "dep-guardian-merge-prs"
-  "repo-commit"
-  "repo-export"
-  "repo-issue"
-  "repo-pr"
   "qiita-publish"
   "zenn-publish"
 )
@@ -321,10 +317,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 76 ]; then
+if [ "${total_len}" -eq 68 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 76 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 68 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
