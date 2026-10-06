@@ -598,6 +598,8 @@
       "dev-flow-prerun *",
       "dev-flow-ready-set",
       "dev-flow-ready-set *",
+      "pr-push",
+      "pr-push *",
       "merge-tier-facts",
       "merge-tier-facts *",
       "detect-stack",

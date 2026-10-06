@@ -77,6 +77,7 @@ BARE_NAMES=(
   "worktree-teardown"
   "merge-tier-facts"
   "dev-flow-ready-set"
+  "pr-push"
   "journal"
   "check-ci"
   "analyze-issue"
@@ -317,10 +318,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 68 ]; then
+if [ "${total_len}" -eq 70 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 68 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 70 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
