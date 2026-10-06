@@ -598,6 +598,8 @@
       "dev-flow-prerun *",
       "dev-flow-ready-set",
       "dev-flow-ready-set *",
+      "pr-iterate-prerun",
+      "pr-iterate-prerun *",
       "pr-push",
       "pr-push *",
       "merge-tier-facts",
