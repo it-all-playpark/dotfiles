@@ -17,6 +17,7 @@ claude-code/
 ├── skill-config.json     # it-all-playpark/skills の per-skill デフォルト値
 ├── account-map.json      # gh / gcloud / tofu の org → アカウントマップ（bin/account-exec が読む）
 ├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）
+│                         # と、本体の上流 proxy を agent-vault に向ける claude wrapper
 └── hooks/                # SessionStart / PreCompact / Pre|PostToolUse スクリプト
 ```
 
@@ -164,6 +165,66 @@ gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud
 `bash tests/claude-bin-symlink.test.sh`（activation の symlink ロジック）。
 `bin/account-exec` は拡張子が無いため pre-commit の shellcheck 対象外。変更時は
 `nix develop -c shellcheck claude-code/bin/account-exec` を手で回す。
+
+## agent-vault（sandbox 内の git / gh の認証）
+
+sandbox 内の git / gh に資格情報を持たせずに GitHub へ認証する。経路は
+sandbox 内の git / gh → Claude Code の proxy（`allowedDomains` で通信先を確認）→
+agent-vault（`127.0.0.1:14322`、owner ごとの PAT を付与）→ GitHub。検証の経緯は dotfiles#247。
+
+| 部品 | 場所 |
+|------|------|
+| binary（v0.40.0 固定。更新手順は冒頭コメント） | `lib/agent-vault/default.nix` |
+| LaunchAgent `com.playpark.agent-vault` | `home-manager/programs/agent-vault.nix` |
+| 起動（Keychain のマスターパスワードを `--password-stdin` で渡し、CA bundle を書く） | `home-manager/home/file/agent-vault/agent-vault-server.sh` |
+| services（owner ごとの git / REST の振り分け） | `home-manager/home/file/agent-vault/services.yaml` |
+| Claude Code 本体に `HTTPS_PROXY` と CA を付ける wrapper | `bin/claude` |
+
+`bin/claude` は `~/.claude/bin`（PATH 先頭）から実体の claude を exec する前に、
+`~/.agent-vault/proxy-token` を読んで `HTTPS_PROXY` / `HTTP_PROXY` を
+`http://<proxy token>:default@127.0.0.1:14322` にし、`~/.local/state/agent-vault/ca-bundle.pem`
+（システムの CA + agent-vault の CA）を `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `GIT_SSL_CAINFO` に、
+ダミーの `GH_TOKEN` を付ける（gh は token が無いと通信しない。Authorization は agent-vault が上書きする）。
+bg job を動かす daemon は claude から on-demand で起動されるので、この env を継承する。
+sandbox 内のコマンドの `HTTPS_PROXY` は Claude Code 自身の proxy に置き換わるので token は見えない。
+`~/.agent-vault`（DB・CA 鍵・proxy token）は `settings.json` の `denyRead` で sandbox から読めない。
+token ファイルが無い・agent-vault が落ちているときは env を付けずに起動する（後者は 1 行警告）。
+
+### 初回セットアップ（人間の作業）
+
+`nix run .#update` の後、通常のターミナル（Aqua セッション）で行う。`bin/claude` は新規ファイルなので
+activation で `~/.claude/bin/claude` が張られる。
+
+```bash
+# 0. 手で起動した agent-vault（/usr/local/bin の install script 版）があれば止め、binary を消す
+agent-vault server stop
+# 1. マスターパスワードを login keychain に置く（既存の ~/.agent-vault を使うならその password）
+security add-generic-password -s agent-vault -a master-password -w
+launchctl kickstart -k gui/$(id -u)/com.playpark.agent-vault
+# 2. credential（PAT は owner ごとの fine-grained PAT。Contents / Pull requests の write）
+agent-vault vault credential set GITHUB_GIT_USERNAME=x-access-token
+agent-vault vault credential set GITHUB_PAT_IT_ALL_PLAYPARK=… GITHUB_PAT_PLAYPARK_LLC=… GITHUB_PAT_CISTREE_DEV=…
+# 3. services
+agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles/home-manager/home/file/agent-vault/services.yaml
+# 4. Claude Code 用の agent と proxy token
+agent-vault agent create claude-code --vault default:proxy --token-only > ~/.agent-vault/proxy-token
+chmod 600 ~/.agent-vault/proxy-token
+```
+
+状態は `launchctl print gui/$(id -u)/com.playpark.agent-vault` と `~/.local/state/agent-vault.err.log` で見る。
+token を替えるときは `agent-vault agent rotate claude-code` の出力で `proxy-token` を書き換え、claude を起動し直す。
+
+### 決めたこと
+
+- api.github.com は `/repos/<owner>/*` なら owner ごとに振り分けられる（path の literal prefix が長い service が勝つ）。
+  `/user`・`/graphql`（`gh pr create` / `gh pr view`）・`/search` は path に owner が出ないので、
+  path なしの `api.github.com`（it-all-playpark の PAT）に落ちる
+- 未登録 host は既定の passthrough のまま（`unmatched_host_policy=deny` にしない）。sandbox 内の通信先は
+  Claude Code の `allowedDomains`（`strictAllowlist`）が前段で絞っている。deny にすると、同じ proxy を通る
+  Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を agent-vault にも二重に登録することになる
+
+テスト: `bash claude-code/bin/claude.test.sh`（wrapper）、`bash tests/agent-vault.test.sh`
+（起動スクリプト・services・denyRead・固定版の binary）。
 
 ## hooks
 

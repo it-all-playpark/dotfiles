@@ -1,0 +1,66 @@
+# agent-vault の default vault に入れる services（GitHub の認証付与）。
+# 適用（vault の services を丸ごと置き換える。冪等）:
+#   agent-vault vault service set -f home-manager/home/file/agent-vault/services.yaml --vault default
+#
+# 参照する credential（値は vault にだけ置く。`agent-vault vault credential set KEY=...`）:
+#   GITHUB_GIT_USERNAME          x-access-token（git の Basic 認証の username）
+#   GITHUB_PAT_IT_ALL_PLAYPARK   owner ごとの fine-grained PAT。権限は Contents / Pull requests の write
+#   GITHUB_PAT_PLAYPARK_LLC
+#   GITHUB_PAT_CISTREE_DEV
+#
+# 一致規則（docs/learn/services.mdx "Matching priority"）: host の完全一致が wildcard に勝ち、
+# 同じ host では path の literal prefix（最初の * まで）が長い service が勝つ。
+# - git（github.com）は URL が /<owner>/<repo>.git/... なので owner ごとに振り分けられる
+# - REST（api.github.com）は /repos/<owner>/... なら owner ごとに振り分けられる。/user・/graphql
+#   （gh pr create / gh pr view が使う）・/search 等は path に owner が出ないので振り分けられず、
+#   末尾の api.github.com（path なし、prefix 長 0）に落ちて it-all-playpark の PAT が付く
+#
+# 未登録 host は既定の passthrough（認証を付けずに転送）のままにする。sandbox 内の通信先は
+# Claude Code の allowedDomains（strictAllowlist）が前段で絞っている。deny にすると、同じ proxy を通る
+# Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を全部ここにも passthrough で
+# 二重に登録することになる。
+services:
+  - name: github-git-it-all-playpark
+    host: github.com/it-all-playpark/*
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GITHUB_PAT_IT_ALL_PLAYPARK
+
+  - name: github-git-playpark-llc
+    host: github.com/playpark-llc/*
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GITHUB_PAT_PLAYPARK_LLC
+
+  - name: github-git-cistree-dev
+    host: github.com/Cistree-dev/*
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GITHUB_PAT_CISTREE_DEV
+
+  - name: github-api-it-all-playpark
+    host: api.github.com/repos/it-all-playpark/*
+    auth:
+      type: bearer
+      token: GITHUB_PAT_IT_ALL_PLAYPARK
+
+  - name: github-api-playpark-llc
+    host: api.github.com/repos/playpark-llc/*
+    auth:
+      type: bearer
+      token: GITHUB_PAT_PLAYPARK_LLC
+
+  - name: github-api-cistree-dev
+    host: api.github.com/repos/Cistree-dev/*
+    auth:
+      type: bearer
+      token: GITHUB_PAT_CISTREE_DEV
+
+  - name: github-api-default
+    host: api.github.com
+    auth:
+      type: bearer
+      token: GITHUB_PAT_IT_ALL_PLAYPARK
