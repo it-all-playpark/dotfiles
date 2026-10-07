@@ -9,6 +9,10 @@
 # 人間の端末で実行する（sandbox 内からは ~/.config/gh* も ~/.agent-vault も読めない）。
 # config dir が無いアカウント（そのマシンで使っていないアカウント）は飛ばす。
 #
+# token は `vault credential set` の argv で渡す（v0.40.0 の CLI は stdin やファイルから値を取れない）。
+# 実行中は同じユーザーのプロセスから ps で見えるが、同じユーザーなら `gh auth token` で直接読めるので
+# 新しく露出するものは無い。sandbox 内からは ps が使えない（Operation not permitted）。
+#
 # 環境変数（テスト用）:
 #   AGENT_VAULT_SYNC_GH_ACCOUNTS  "<credential key>=<gh config dir>" を空白区切り
 set -euo pipefail
