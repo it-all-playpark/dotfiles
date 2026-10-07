@@ -665,6 +665,8 @@
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
         "/Users/naramotoyuuji/.local/state/jev-broker/jev.sock",
+        "/Users/naramotoyuuji/.local/state/pg-broker/broker.sock",
+        "/Users/naramotoyuuji/.local/state/pg-broker/sock",
         "/private/tmp/claude/agent-browser",
         "/private/tmp/claude-502"
       ],

@@ -352,6 +352,8 @@
               pkgs.jq
               pkgs.python3
               pkgs.yq-go
+              # tests/pg-broker.test.sh の結合テストが実際に起動する（pg-broker.nix と同じ version）
+              pkgs.postgresql_17
             ];
             # hook の本体は追跡している .githooks/（pre-commit: 整形 + shellcheck、pre-push: CI と同じ検査）。
             # Claude の sandbox からは .git/hooks に書けないので、Claude のセッションでは設置しない

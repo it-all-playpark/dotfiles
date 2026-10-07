@@ -12,5 +12,6 @@
     ./cc-launch.nix
     ./uc-handoff.nix
     ./jev-broker.nix
+    ./pg-broker.nix
   ];
 }
