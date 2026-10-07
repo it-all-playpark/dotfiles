@@ -8,9 +8,17 @@
 -->
 
 ## Engineering
-- 失敗は根本原因を直す。テストや検証を skip / 無効化して通さない
+- 失敗は根本原因を直す。テストや検証を skip / 無効化 / 期待値の緩和で通さない
+- テストは実装を外せば落ちる形で書く。同じ事実を検証する既存テスト・helper があればそこに足し、重複させない。撤去したものが「無い」ことだけを確かめるテストは書かない
+- スコープは頼まれた範囲まで。隣接リファクタ・投機的な一般化・不要な抽象化 / fallback / validation を足さない
 - レポート・分析の成果物は `claudedocs/` に置く
 - 削除は `rip`（復元できる）
+
+<!--
+テスト・スコープの 2 行は dev-flow の dev-implementer（skills repo plugins/dev-flow/agents/dev-implementer.md）の
+「守ること」から汎用部分だけを写したもの。plugin は RULES.md 無しでも動く必要があるので、向こうからは消さない（重複は意図的）。
+「触ったテストだけ走らせる」「曖昧さは聞かずに codebase で決める」「削除は git rm」はパイプライン前提で対話作業と逆になるので写さない。
+-->
 
 ## Subagents / Workflow
 - 各ステージは作業の重さでモデルを選ぶ。検索・grep 集約・機械的編集は haiku、判断（verify / judge / synthesize）だけ opus
