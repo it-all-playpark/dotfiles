@@ -2,7 +2,8 @@
 # claude: Claude Code 本体の上流 proxy を agent-vault に向けてから実体を exec する wrapper
 #
 # sandbox 内の git / gh は Claude Code の proxy（allowedDomains で通信先を確認）→ HTTPS_PROXY の
-# agent-vault（owner ごとの PAT を付与）→ GitHub の順に流れ、sandbox 内には資格情報を持ち込まない。
+# agent-vault（gh の placeholder を token に置換、git は owner で Basic 認証を付与）→ GitHub の順に流れ、
+# sandbox 内には資格情報を持ち込まない。
 # HTTPS_PROXY は本体の env に要るが、そこに入る proxy token は git 管理の settings.json に置けないので、
 # 起動時にここで token ファイル（~/.agent-vault 配下。sandbox からは denyRead）を読んで組み立てる。
 # bg job を動かす daemon は on-demand で claude から起動されるので、この env を継承する。

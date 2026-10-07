@@ -282,6 +282,8 @@ Claude Code のセッション内（wrapper 経由で起動）で:
 ```bash
 ls ~/.agent-vault                 # Operation not permitted になる
 agent-vault vault credential list # 失敗する（管理 API に sandbox から認証できない）
+ps eww -p $PPID                   # 失敗するか、HTTPS_PROXY（proxy token 入り）が見えない
+                                  # （見えると 14322 経由で allowedDomains を迂回できる）
 echo "$CLAUDE_GH_VAULT"           # 1
 gh api user --jq .login           # cwd のアカウント（BusinessProcessDX の repo では th-it-dev）
 gh pr list --limit 1              # GraphQL が通る（playpark-llc・お客さんの repo でも）
