@@ -499,7 +499,14 @@ class PostgresIntegrationTest(unittest.TestCase):
 
     def psql(self, conninfo, sql):
         return subprocess.run(
-            [os.path.join(self.bin_dir, "psql"), "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"]
+            [
+                os.path.join(self.bin_dir, "psql"),
+                "-X",
+                "-q",
+                "-At",
+                "-v",
+                "ON_ERROR_STOP=1",
+            ]
             + ["-d", conninfo, "-c", sql],
             capture_output=True,
             text=True,
