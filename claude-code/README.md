@@ -201,9 +201,12 @@ agent-vault server stop
 # 1. マスターパスワードを login keychain に置く（既存の ~/.agent-vault を使うならその password）
 security add-generic-password -s agent-vault -a master-password -w
 launchctl kickstart -k gui/$(id -u)/com.playpark.agent-vault
-# 2. credential（PAT は owner ごとの fine-grained PAT。Contents / Pull requests の write）
+# 2. credential（PAT は owner ごとの fine-grained PAT。既存の gh 呼び出しもすべてこの PAT で認証されるので、
+#    Contents / Pull requests / Issues の read/write と Actions / Commit statuses の read を付ける
+#    （dev-flow の gh issue view/comment・gh pr checks・gh run が使う範囲）。BusinessProcessDX は th-it-dev で発行する
 agent-vault vault credential set GITHUB_GIT_USERNAME=x-access-token
-agent-vault vault credential set GITHUB_PAT_IT_ALL_PLAYPARK=… GITHUB_PAT_PLAYPARK_LLC=… GITHUB_PAT_CISTREE_DEV=…
+agent-vault vault credential set GITHUB_PAT_IT_ALL_PLAYPARK=… GITHUB_PAT_PLAYPARK_LLC=… GITHUB_PAT_CISTREE_DEV=… \
+  GITHUB_PAT_BUSINESSPROCESSDX=… GITHUB_PAT_YUJINARAMOTO=…
 # 3. services
 agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles/home-manager/home/file/agent-vault/services.yaml
 # 4. Claude Code 用の agent と proxy token
@@ -218,7 +221,13 @@ token を替えるときは `agent-vault agent rotate claude-code` の出力で 
 
 - api.github.com は `/repos/<owner>/*` なら owner ごとに振り分けられる（path の literal prefix が長い service が勝つ）。
   `/user`・`/graphql`（`gh pr create` / `gh pr view`）・`/search` は path に owner が出ないので、
-  path なしの `api.github.com`（it-all-playpark の PAT）に落ちる
+  path なしの `api.github.com`（it-all-playpark の PAT）に落ちる。そのため it-all-playpark 以外の owner
+  （playpark-llc / Cistree-dev / BusinessProcessDX / YujiNaramoto）では GraphQL を使う `gh pr create` /
+  `gh pr view` / `gh pr list` / `gh issue view` 等が権限不足で失敗する（git push と `/repos/<owner>/*` の REST は通る）。
+  fine-grained PAT は owner 単位で複数 owner にまたがらせられないので、これは受け入れる
+- `bin/claude` の env（`HTTPS_PROXY` とダミーの `GH_TOKEN`）は sandbox 外で動く gh / git（`excludedCommands`）にも
+  継承され、`GH_TOKEN` が account-exec の `GH_CONFIG_DIR` と `gh auth git-credential` に優先する。
+  このため `account-map.json` の全 owner を services.yaml に載せ、owner の振り分けを agent-vault 側で行う
 - 未登録 host は既定の passthrough のまま（`unmatched_host_policy=deny` にしない）。sandbox 内の通信先は
   Claude Code の `allowedDomains`（`strictAllowlist`）が前段で絞っている。deny にすると、同じ proxy を通る
   Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を agent-vault にも二重に登録することになる

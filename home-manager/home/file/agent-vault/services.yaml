@@ -4,16 +4,21 @@
 #
 # 参照する credential（値は vault にだけ置く。`agent-vault vault credential set KEY=...`）:
 #   GITHUB_GIT_USERNAME          x-access-token（git の Basic 認証の username）
-#   GITHUB_PAT_IT_ALL_PLAYPARK   owner ごとの fine-grained PAT。権限は Contents / Pull requests の write
-#   GITHUB_PAT_PLAYPARK_LLC
+#   GITHUB_PAT_IT_ALL_PLAYPARK   owner ごとの fine-grained PAT。権限は Contents / Pull requests / Issues の
+#   GITHUB_PAT_PLAYPARK_LLC      read/write と Actions / Commit statuses の read（dev-flow が使う範囲）
 #   GITHUB_PAT_CISTREE_DEV
+#   GITHUB_PAT_BUSINESSPROCESSDX （th-it-dev アカウントの PAT。account-map.json で gh を分けている owner）
+#   GITHUB_PAT_YUJINARAMOTO
 #
 # 一致規則（docs/learn/services.mdx "Matching priority"）: host の完全一致が wildcard に勝ち、
 # 同じ host では path の literal prefix（最初の * まで）が長い service が勝つ。
 # - git（github.com）は URL が /<owner>/<repo>.git/... なので owner ごとに振り分けられる
 # - REST（api.github.com）は /repos/<owner>/... なら owner ごとに振り分けられる。/user・/graphql
 #   （gh pr create / gh pr view が使う）・/search 等は path に owner が出ないので振り分けられず、
-#   末尾の api.github.com（path なし、prefix 長 0）に落ちて it-all-playpark の PAT が付く
+#   末尾の api.github.com（path なし、prefix 長 0）に落ちて it-all-playpark の PAT が付く。
+#   it-all-playpark 以外の owner の GraphQL 操作はこの PAT では権限が無く失敗する（README「決めたこと」）
+# - claude 本体の env は sandbox 外で動く gh / git（excludedCommands）にも継承されるので、
+#   account-map.json の全 owner をここに載せる（載せないと api.github.com の既定 service に落ちる）
 #
 # 未登録 host は既定の passthrough（認証を付けずに転送）のままにする。sandbox 内の通信先は
 # Claude Code の allowedDomains（strictAllowlist）が前段で絞っている。deny にすると、同じ proxy を通る
@@ -41,6 +46,20 @@ services:
       username: GITHUB_GIT_USERNAME
       password: GITHUB_PAT_CISTREE_DEV
 
+  - name: github-git-businessprocessdx
+    host: github.com/BusinessProcessDX/*
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GITHUB_PAT_BUSINESSPROCESSDX
+
+  - name: github-git-yujinaramoto
+    host: github.com/YujiNaramoto/*
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GITHUB_PAT_YUJINARAMOTO
+
   - name: github-api-it-all-playpark
     host: api.github.com/repos/it-all-playpark/*
     auth:
@@ -58,6 +77,18 @@ services:
     auth:
       type: bearer
       token: GITHUB_PAT_CISTREE_DEV
+
+  - name: github-api-businessprocessdx
+    host: api.github.com/repos/BusinessProcessDX/*
+    auth:
+      type: bearer
+      token: GITHUB_PAT_BUSINESSPROCESSDX
+
+  - name: github-api-yujinaramoto
+    host: api.github.com/repos/YujiNaramoto/*
+    auth:
+      type: bearer
+      token: GITHUB_PAT_YUJINARAMOTO
 
   - name: github-api-default
     host: api.github.com

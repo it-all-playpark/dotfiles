@@ -167,7 +167,8 @@ service_auth() {
 # services_route_git_and_rest_per_owner: owner ごとに git は basic（x-access-token + PAT）、
 # REST の /repos/<owner>/ は bearer（同じ PAT）
 # ---------------------------------------------------------------------------
-for pair in it-all-playpark:GITHUB_PAT_IT_ALL_PLAYPARK playpark-llc:GITHUB_PAT_PLAYPARK_LLC Cistree-dev:GITHUB_PAT_CISTREE_DEV; do
+for pair in it-all-playpark:GITHUB_PAT_IT_ALL_PLAYPARK playpark-llc:GITHUB_PAT_PLAYPARK_LLC Cistree-dev:GITHUB_PAT_CISTREE_DEV \
+  BusinessProcessDX:GITHUB_PAT_BUSINESSPROCESSDX YujiNaramoto:GITHUB_PAT_YUJINARAMOTO; do
   owner="${pair%%:*}"
   key="${pair#*:}"
   name="services_route_git_and_rest_per_owner[${owner}]"
