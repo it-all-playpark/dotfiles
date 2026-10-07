@@ -134,6 +134,7 @@ UNREGISTERED_BINS=(
   "ui-verify-stack|repo の dev コマンドを実行する。sandbox 外に出すと脱出口になる（skills #766）"
   "workspace-prebuild|repo の pnpm build を実行する。sandbox 外に出すと脱出口になる"
   "run-tests|repo の tests/run-*.sh や pnpm test を実行する。sandbox 外に出すと脱出口になる"
+  "local-verify|repo が宣言した検証コマンドを worktree で bash -c 実行する。sandbox 外に出すと脱出口になる（skills #863）"
   "ci-wait|gh も git 書き込みも呼ばない"
   "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "gmail-receipts|gws の資格情報（~/.config/gws）は sandbox 内で読める"
@@ -178,6 +179,20 @@ if [ -d "${SKILLS_PLUGINS_DIR}" ]; then
   fi
 else
   echo "  SKIP: skills_bins_registered (${SKILLS_PLUGINS_DIR} not found)"
+fi
+
+# UNREGISTERED_BINS に書いた bin は excludedCommands に入れない（両方にあると理由が嘘になる）
+echo "- unregistered_bins_not_excluded"
+excluded_unregistered=()
+for entry in "${UNREGISTERED_BINS[@]}"; do
+  name="${entry%%|*}"
+  if has_entry "${name}"; then excluded_unregistered+=("${name}"); fi
+  if has_entry "${name} *"; then excluded_unregistered+=("${name} *"); fi
+done
+if [ "${#excluded_unregistered[@]}" -eq 0 ]; then
+  pass "unregistered_bins_not_excluded"
+else
+  fail "unregistered_bins_not_excluded" "Listed in UNREGISTERED_BINS but present in excludedCommands: ${excluded_unregistered[*]}"
 fi
 
 # 突き合わせ自体が未登録の bin を検出できることを fixture で確かめる（checkout 無しでも走る）
