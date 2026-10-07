@@ -42,6 +42,10 @@ result-*
 # dev-flow / pr-iterate の isolation preflight probe 一時ファイル
 .devflow-tmp/
 
+# Python bytecode（テスト実行で生成され、worktree の絶対パスが埋め込まれる）
+__pycache__/
+*.pyc
+
 # macOS
 .DS_Store
 
