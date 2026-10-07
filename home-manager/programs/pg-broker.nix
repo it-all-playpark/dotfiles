@@ -8,6 +8,14 @@ let
   home = config.home.homeDirectory;
 in
 lib.mkIf pkgs.stdenv.isDarwin {
+  # sandbox 内からの依頼口。permissions.deny の `Bash(curl *)` で curl は使えないので、
+  # 宛先が broker.sock に固定されたこのコマンドで頼む（pg_broker_client.py 冒頭参照）
+  home.packages = [
+    (pkgs.writeShellScriptBin "pg-broker" ''
+      exec ${pkgs.python3}/bin/python3 -I -B ${../home/file/pg-broker/pg_broker_client.py} "$@"
+    '')
+  ];
+
   # sandbox 内の Bash では Postgres を起動できない（initdb の shmget が EPERM）ので、
   # 依頼を受けて sandbox の外で使い捨ての cluster を起動する（pg_broker.py 冒頭参照）。
   # 依頼口 broker.sock と各 instance のソケット sock/<id>/ は

@@ -53,7 +53,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 使えるもの:
 - nix（daemon socket 許可済み）: nix を書いたら apply 前に `nix build` / `nix flake check` で自分で確かめる。ただし daemon は sandbox 外なので、nix 経由の取得は `allowedDomains` の制限を受けない。未知の flake や URL は通常の外部アクセスと同じ慎重さで扱う
 - Jev: `~/.local/state/jev-broker/jev.sock` 経由。sandbox 内では Keychain が exit 36 で読めないのが正常なので、ロック解除を試さない
-- Postgres: sandbox 内で `initdb` / docker は使わず、pg-broker に頼む。`curl --unix-socket ~/.local/state/pg-broker/broker.sock -X POST http://pg-broker/instances` が返す `database_url`（非 superuser の `app`、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `-X DELETE http://pg-broker/instances/<id>`
+- Postgres: sandbox 内で `initdb` / docker は使わず、pg-broker に頼む。`pg-broker create` が返す `database_url`（非 superuser の `app`、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`。curl は deny なので使わない
 - pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
 
 sandbox に塞がれたら:
@@ -73,6 +73,8 @@ sandbox に塞がれたら:
   sandbox 外で cluster を起動し、非 superuser の app だけを pg_hba で通す（superuser は COPY TO PROGRAM で sandbox 外を実行できる）。
   allowUnixSockets のディレクトリ指定は配下（3 階層下まで確認）のソケットにも効く（実測。リストに無いパスは bind / connect とも EPERM）ので
   `~/.local/state/pg-broker/sock` を 1 行で足した。代償: ソケットに届くプロセスは使い捨て DB を 4 つまで作れる。
+  依頼口は専用コマンド `pg-broker`（pg_broker_client.py、nix store に置く）。permissions.deny の `Bash(curl *)` は allow より強く、
+  broker.sock 宛てだけを許す書き方が無いため。curl の deny は外さない。
 - pnpm: pnpm 12 は store の operation lock を TMPDIR を無視して /tmp/pnpm-store-operation-locks-<uid>/ に作る。
   allowWrite に `/private/tmp/pnpm-store-operation-locks-*` と `…-*/*` の両方が要る。glob を含むエントリはそのパス自体にしか
   一致せず、`-*` だけだと既存の all-stores.lock を開き直す 2 回目以降が落ちる。`-*/**` は末尾 `/**` が剥がされて `-*` と同じ。
