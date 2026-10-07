@@ -2,96 +2,52 @@
 # 適用（vault の services を丸ごと置き換える。冪等）:
 #   agent-vault vault service set -f home-manager/home/file/agent-vault/services.yaml --vault default
 #
-# 参照する credential（値は vault にだけ置く。`agent-vault vault credential set KEY=...`）:
-#   GITHUB_GIT_USERNAME          x-access-token（git の Basic 認証の username）
-#   GITHUB_PAT_IT_ALL_PLAYPARK   owner ごとの fine-grained PAT。権限は Contents / Pull requests / Issues の
-#   GITHUB_PAT_PLAYPARK_LLC      read/write と Actions / Commit statuses の read（dev-flow が使う範囲）
-#   GITHUB_PAT_CISTREE_DEV
-#   GITHUB_PAT_BUSINESSPROCESSDX （th-it-dev アカウントの PAT。account-map.json で gh を分けている owner）
-#   GITHUB_PAT_YUJINARAMOTO
+# 参照する credential（値は vault にだけ置く。claude-code/bin/agent-vault-sync-gh が gh の token を写す）:
+#   GITHUB_GIT_USERNAME   x-access-token（git の Basic 認証の username）
+#   GH_TOKEN_MAIN         main アカウント（it-all-playpark）の gh の OAuth token（`gh auth token`）
+#   GH_TOKEN_TH_IT_DEV    th-it-dev アカウントの gh の OAuth token（~/.config/gh-th-it-dev）
+#
+# アカウントの選び方:
+# - gh（api.github.com）: account-exec が cwd から選んだアカウントの config dir
+#   （~/.config/agent-vault-gh/<account>/hosts.yml）が placeholder の token を送る。ここでは
+#   Authorization ヘッダの placeholder を本物の token に置き換えるだけで、owner の振り分けはしない。
+#   GraphQL（/graphql。gh pr / gh issue の大半が使う）は path に owner が出ないので、
+#   path での振り分けではアカウントを選べない。placeholder なら送る側（cwd）で選べる
+# - placeholder を送らない client（curl・octokit 等）は passthrough で認証なしのまま
+# - git（github.com）: Basic 認証は base64 なので置換が届かない。path の owner で振り分ける。
+#   account-map.json で th-it-dev の config dir（gh_vault_config_dir）を指す org はここにも書く
+#   （tests/agent-vault.test.sh が両者の一致を確かめる）。それ以外（お客さんの repo を含む）は main
 #
 # 一致規則（docs/learn/services.mdx "Matching priority"）: host の完全一致が wildcard に勝ち、
 # 同じ host では path の literal prefix（最初の * まで）が長い service が勝つ。
-# - git（github.com）は URL が /<owner>/<repo>.git/... なので owner ごとに振り分けられる
-# - REST（api.github.com）は /repos/<owner>/... なら owner ごとに振り分けられる。/user・/graphql
-#   （gh pr create / gh pr view が使う）・/search 等は path に owner が出ないので振り分けられず、
-#   末尾の api.github.com（path なし、prefix 長 0）に落ちて it-all-playpark の PAT が付く。
-#   it-all-playpark 以外の owner の GraphQL 操作はこの PAT では権限が無く失敗する（README「決めたこと」）
-# - claude 本体の env は sandbox 外で動く gh / git（excludedCommands）にも継承されるので、
-#   account-map.json の全 owner をここに載せる（載せないと api.github.com の既定 service に落ちる）
 #
 # 未登録 host は既定の passthrough（認証を付けずに転送）のままにする。sandbox 内の通信先は
 # Claude Code の allowedDomains（strictAllowlist）が前段で絞っている。deny にすると、同じ proxy を通る
 # Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を全部ここにも passthrough で
 # 二重に登録することになる。
 services:
-  - name: github-git-it-all-playpark
-    host: github.com/it-all-playpark/*
-    auth:
-      type: basic
-      username: GITHUB_GIT_USERNAME
-      password: GITHUB_PAT_IT_ALL_PLAYPARK
-
-  - name: github-git-playpark-llc
-    host: github.com/playpark-llc/*
-    auth:
-      type: basic
-      username: GITHUB_GIT_USERNAME
-      password: GITHUB_PAT_PLAYPARK_LLC
-
-  - name: github-git-cistree-dev
-    host: github.com/Cistree-dev/*
-    auth:
-      type: basic
-      username: GITHUB_GIT_USERNAME
-      password: GITHUB_PAT_CISTREE_DEV
-
   - name: github-git-businessprocessdx
     host: github.com/BusinessProcessDX/*
     auth:
       type: basic
       username: GITHUB_GIT_USERNAME
-      password: GITHUB_PAT_BUSINESSPROCESSDX
+      password: GH_TOKEN_TH_IT_DEV
 
-  - name: github-git-yujinaramoto
-    host: github.com/YujiNaramoto/*
+  - name: github-git-default
+    host: github.com
     auth:
       type: basic
       username: GITHUB_GIT_USERNAME
-      password: GITHUB_PAT_YUJINARAMOTO
+      password: GH_TOKEN_MAIN
 
-  - name: github-api-it-all-playpark
-    host: api.github.com/repos/it-all-playpark/*
-    auth:
-      type: bearer
-      token: GITHUB_PAT_IT_ALL_PLAYPARK
-
-  - name: github-api-playpark-llc
-    host: api.github.com/repos/playpark-llc/*
-    auth:
-      type: bearer
-      token: GITHUB_PAT_PLAYPARK_LLC
-
-  - name: github-api-cistree-dev
-    host: api.github.com/repos/Cistree-dev/*
-    auth:
-      type: bearer
-      token: GITHUB_PAT_CISTREE_DEV
-
-  - name: github-api-businessprocessdx
-    host: api.github.com/repos/BusinessProcessDX/*
-    auth:
-      type: bearer
-      token: GITHUB_PAT_BUSINESSPROCESSDX
-
-  - name: github-api-yujinaramoto
-    host: api.github.com/repos/YujiNaramoto/*
-    auth:
-      type: bearer
-      token: GITHUB_PAT_YUJINARAMOTO
-
-  - name: github-api-default
+  - name: github-api
     host: api.github.com
     auth:
-      type: bearer
-      token: GITHUB_PAT_IT_ALL_PLAYPARK
+      type: passthrough
+    substitutions:
+      - key: GH_TOKEN_MAIN
+        placeholder: __gh_main__
+        in: [header]
+      - key: GH_TOKEN_TH_IT_DEV
+        placeholder: __gh_th_it_dev__
+        in: [header]

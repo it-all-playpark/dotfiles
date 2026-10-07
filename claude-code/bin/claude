@@ -7,13 +7,19 @@
 # 起動時にここで token ファイル（~/.agent-vault 配下。sandbox からは denyRead）を読んで組み立てる。
 # bg job を動かす daemon は on-demand で claude から起動されるので、この env を継承する。
 # sandbox 内のコマンドの HTTPS_PROXY は Claude Code 自身の proxy に置き換わり、token は見えない。
+# desktop app / IDE から起動した claude と、この wrapper を通らずに立った daemon には env が付かない。
 #
 # 付ける env（agent-vault が使えるときだけ）:
 #   HTTPS_PROXY / HTTP_PROXY   http://<proxy token>:<vault>@127.0.0.1:<port>
 #   NO_PROXY                   loopback（agent-vault は private range へ転送しない）
 #   NODE_EXTRA_CA_CERTS / SSL_CERT_FILE / GIT_SSL_CAINFO
 #                              agent-vault の CA を足した bundle（agent-vault-server.sh が書く）
-#   GH_TOKEN                   ダミー。gh は token が無いと通信しない。Authorization は agent-vault が上書きする
+#   CLAUDE_GH_VAULT=1          account-exec（gh の shim）への目印。gh は cwd のアカウントの placeholder 入り
+#                              config dir（~/.config/agent-vault-gh/<account>）を使い、agent-vault が
+#                              placeholder を本物の token に置き換える。bg job も daemon 経由でこの env を継承する
+#
+# 本体の env に AGENT_VAULT_TOKEN を出さない（agent-vault CLI がそれで管理 API に認証し、
+# sandbox 内から credential を読めてしまう）。
 #
 # 環境変数（テスト・一時上書き用）:
 #   AGENT_VAULT_PROXY_TOKEN_FILE  既定 $HOME/.agent-vault/proxy-token
@@ -48,7 +54,7 @@ if [ -z "${HTTPS_PROXY:-}" ] && [ -r "$token_file" ]; then
     export HTTPS_PROXY="$proxy" HTTP_PROXY="$proxy"
     export NO_PROXY="localhost,127.0.0.1,::1"
     export NODE_EXTRA_CA_CERTS="$ca_bundle" SSL_CERT_FILE="$ca_bundle" GIT_SSL_CAINFO="$ca_bundle"
-    export GH_TOKEN="agent-vault-injects-authorization"
+    export CLAUDE_GH_VAULT=1
   fi
   unset token proxy
 fi

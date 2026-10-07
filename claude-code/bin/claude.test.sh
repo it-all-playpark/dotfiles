@@ -69,7 +69,7 @@ done
 
 cat >"$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO GH_TOKEN; do
+for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO CLAUDE_GH_VAULT; do
   printf '%s=%s\n' "$v" "${!v-<unset>}"
 done
 printf 'argc=%s\n' "$#"
@@ -132,7 +132,7 @@ if [[ $RC -eq 0 ]] &&
   contains "$OUT" "NODE_EXTRA_CA_CERTS=$CA_BUNDLE" &&
   contains "$OUT" "SSL_CERT_FILE=$CA_BUNDLE" &&
   contains "$OUT" "GIT_SSL_CAINFO=$CA_BUNDLE" &&
-  contains "$OUT" "GH_TOKEN=agent-vault-injects-authorization" &&
+  contains "$OUT" "CLAUDE_GH_VAULT=1" &&
   contains "$OUT" $'argc=2\narg=[--bg]\narg=[do it]' && [[ -z $ERR ]]; then
   pass "01_active_vault_sets_proxy_and_ca_env"
 else
@@ -157,7 +157,7 @@ RUN_ENV=("HTTPS_PROXY=http://localhost:9999")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=http://localhost:9999" &&
   contains "$OUT" "HTTP_PROXY=<unset>" && contains "$OUT" "SSL_CERT_FILE=<unset>" &&
-  contains "$OUT" "GH_TOKEN=<unset>" && [[ -z $ERR ]]; then
+  contains "$OUT" "CLAUDE_GH_VAULT=<unset>" && [[ -z $ERR ]]; then
   pass "03_preset_https_proxy_is_kept"
 else
   fail "03_preset_https_proxy_is_kept" "rc=$RC out=$OUT err=$ERR"
@@ -180,7 +180,7 @@ fi
 # ---------------------------------------------------------------------------
 RUN_ENV=("AGENT_VAULT_PROXY_PORT=$CLOSED_PORT")
 run_wrapper
-if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "GH_TOKEN=<unset>" &&
+if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "CLAUDE_GH_VAULT=<unset>" &&
   contains "$ERR" "not listening on 127.0.0.1:$CLOSED_PORT"; then
   pass "05_closed_port_passthrough_with_warning"
 else

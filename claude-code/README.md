@@ -88,8 +88,10 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
   SessionStart hook `session-start-account-path.sh` が `$CLAUDE_ENV_FILE` に同じ export を書き、
   起動元の PATH に依存せず shim が効くようにする
 - 同じスクリプト内で `cd org1 && gh …; cd org2 && gh …` としても各呼び出しが独立に解決される。
-  `git push`（https）の credential helper `gh auth git-credential` も git が chdir 済みなので同じ dir で解決される。
   `pnpm tf:init:stg` のような `cd infrastructure/terraform && tofu init …` も repo 内に留まるので同じ org で解決される
+- `git push`（https）の credential helper は `~/.config/git/config.local` に `gh auth git-credential` を
+  **絶対パス**で書いている（`gh auth setup-git` の形）ので shim を通らず、常に `~/.config/gh` のアカウントになる。
+  agent-vault 経由のセッションでは agent-vault が owner ごとに Basic 認証を付けるので helper は呼ばれない（下記）
 - **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_CONFIG=… gcloud …` /
   `GOOGLE_APPLICATION_CREDENTIALS=… tofu …` のように対象 env が既に set なら判定しない
   （サービスアカウント鍵の明示指定もこれで通る）。実体を直接叩きたいときはこれか `~/.nix-profile/bin/gh`
@@ -117,6 +119,10 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
 - 値の先頭 `~` だけ `$HOME` に展開する。それ以外の展開はしない
 - `gcloud_config_dir` は gcloud の config dir（既定 `~/.config/gcloud` に相当）。tofu はこの dir 直下の
   `application_default_credentials.json` を使う
+- `gh_vault_config_dir` は agent-vault 経由のセッション（`CLAUDE_GH_VAULT=1`）で gh が使う config dir
+  （下記「agent-vault」）。org に無ければトップレベルの `default.gh_vault_config_dir` を使い、未登録 org・ghq 外
+  （お客さんの repo 等）も `default` になる。main 以外のアカウントを使う org だけ書き、同じ org を
+  `home-manager/home/file/agent-vault/services.yaml` の git の振り分けにも書く（`tests/agent-vault.test.sh` が一致を確かめる）
 - dir の存在や妥当性は shim では検証しない（gh / gcloud が「未ログイン」、tofu が「ファイルが無い」を正しく言う）
 - 編集後は `nix run .#update` 不要（`~/.claude/account-map.json` は symlink）。`nix fmt` がキーをソートする
 
@@ -170,70 +176,152 @@ gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud
 
 sandbox 内の git / gh に資格情報を持たせずに GitHub へ認証する。経路は
 sandbox 内の git / gh → Claude Code の proxy（`allowedDomains` で通信先を確認）→
-agent-vault（`127.0.0.1:14322`、owner ごとの PAT を付与）→ GitHub。検証の経緯は dotfiles#247。
+agent-vault（`127.0.0.1:14322`、認証を付与）→ GitHub。検証の経緯は dotfiles#247。
+vault に入れる token は、人間の端末で `gh auth login` 済みの gh の OAuth token そのもの
+（`repo` / `read:org` / `workflow` / `gist`）。新しい PAT は発行しない。届く範囲は今の gh と同じで、
+お客さんの repo（outside collaborator を含む）も GraphQL を含めて動く。
 
 | 部品 | 場所 |
 |------|------|
 | binary（v0.40.0 固定。更新手順は冒頭コメント） | `lib/agent-vault/default.nix` |
 | LaunchAgent `com.playpark.agent-vault` | `home-manager/programs/agent-vault.nix` |
 | 起動（Keychain のマスターパスワードを `--password-stdin` で渡し、CA bundle を書く） | `home-manager/home/file/agent-vault/agent-vault-server.sh` |
-| services（owner ごとの git / REST の振り分け） | `home-manager/home/file/agent-vault/services.yaml` |
+| services（api.github.com の placeholder 置換、git の owner 振り分け） | `home-manager/home/file/agent-vault/services.yaml` |
+| gh 用の config dir（アカウントごとの `hosts.yml`。token は placeholder） | `home-manager/home/file/agent-vault-gh/<account>/` → `~/.config/agent-vault-gh/<account>/` |
+| どの repo でどのアカウントか（`gh_vault_config_dir`、未登録は `default`） | `account-map.json` |
 | Claude Code 本体に `HTTPS_PROXY` と CA を付ける wrapper | `bin/claude` |
+| gh の token を vault に写す（人間の端末で実行） | `bin/agent-vault-sync-gh` |
 
 `bin/claude` は `~/.claude/bin`（PATH 先頭）から実体の claude を exec する前に、
 `~/.agent-vault/proxy-token` を読んで `HTTPS_PROXY` / `HTTP_PROXY` を
 `http://<proxy token>:default@127.0.0.1:14322` にし、`~/.local/state/agent-vault/ca-bundle.pem`
 （システムの CA + agent-vault の CA）を `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `GIT_SSL_CAINFO` に、
-ダミーの `GH_TOKEN` を付ける（gh は token が無いと通信しない。Authorization は agent-vault が上書きする）。
-bg job を動かす daemon は claude から on-demand で起動されるので、この env を継承する。
+目印の `CLAUDE_GH_VAULT=1` を付ける。bg job を動かす daemon は claude から on-demand で起動されるので、この env を継承する。
 sandbox 内のコマンドの `HTTPS_PROXY` は Claude Code 自身の proxy に置き換わるので token は見えない。
-`~/.agent-vault`（DB・CA 鍵・proxy token）は `settings.json` の `denyRead` で sandbox から読めない。
+`~/.agent-vault`（DB・CA 鍵・セッション・proxy token）は `settings.json` の `denyRead` で sandbox から読めない。
 token ファイルが無い・agent-vault が落ちているときは env を付けずに起動する（後者は 1 行警告）。
+
+アカウントの選び方:
+
+```
+gh pr create（cwd = ~/ghq/github.com/<org>/repo、sandbox 内でも bg job でも）
+ └─ ~/.claude/bin/gh → account-exec（CLAUDE_GH_VAULT=1）
+      ├─ account-map.json の orgs[<org>].gh_vault_config_dir、無ければ default.gh_vault_config_dir
+      └─ GH_CONFIG_DIR=~/.config/agent-vault-gh/<account> で gh を exec
+           └─ Authorization: token __gh_<account>__ → agent-vault が vault の GH_TOKEN_<ACCOUNT> に置き換え
+git push（https）
+ └─ agent-vault が URL の owner で Basic 認証を付ける（github.com/BusinessProcessDX/* は th-it-dev、
+    それ以外は main）。最初のリクエストから付くので credential helper は呼ばれない
+```
+
+- GraphQL（`gh pr` / `gh issue` の大半が最初に叩く `/graphql`）は URL に owner が出ないので、vault 側の
+  path では振り分けられない。アカウントは送る側（cwd を見る account-exec）が placeholder で選ぶ
+- `~/.config/gh*` は sandbox から読めず（denyRead）、gh は config dir を読めないと起動もしないので、
+  placeholder の dir は `gh-` で始めない名前にしている
+- placeholder を送らない client（curl・octokit 等）は api.github.com に認証なしで届く。
+  placeholder を GitHub 以外のホストに送っても、置換は api.github.com の service にしか無いので置き換わらない
 
 ### 初回セットアップ（人間の作業）
 
-`nix run .#update` の後、通常のターミナル（Aqua セッション）で行う。`bin/claude` は新規ファイルなので
-activation で `~/.claude/bin/claude` が張られる。
+`nix run .#update` の後、通常のターミナル（Aqua セッション）で行う。`bin/claude` と `bin/agent-vault-sync-gh` は
+新規ファイルなので activation で `~/.claude/bin/` に張られる。
 
 ```bash
-# 0. 手で起動した agent-vault（/usr/local/bin の install script 版）があれば止め、binary を消す
+# 0. 手で起動した agent-vault（/usr/local/bin の install script 版。#247 の PoC）があれば止め、binary を消す。
+#    PoC の CLI セッション（~/.agent-vault/session.json）は denyRead が入る前の sandbox から使えたので revoke する
+agent-vault auth sessions list    # → 該当セッションを revoke
 agent-vault server stop
 # 1. マスターパスワードを login keychain に置く（既存の ~/.agent-vault を使うならその password）
 security add-generic-password -s agent-vault -a master-password -w
 launchctl kickstart -k gui/$(id -u)/com.playpark.agent-vault
-# 2. credential（PAT は owner ごとの fine-grained PAT。既存の gh 呼び出しもすべてこの PAT で認証されるので、
-#    Contents / Pull requests / Issues の read/write と Actions / Commit statuses の read を付ける
-#    （dev-flow の gh issue view/comment・gh pr checks・gh run が使う範囲）。BusinessProcessDX は th-it-dev で発行する
-agent-vault vault credential set GITHUB_GIT_USERNAME=x-access-token
-agent-vault vault credential set GITHUB_PAT_IT_ALL_PLAYPARK=… GITHUB_PAT_PLAYPARK_LLC=… GITHUB_PAT_CISTREE_DEV=… \
-  GITHUB_PAT_BUSINESSPROCESSDX=… GITHUB_PAT_YUJINARAMOTO=…
+# 2. credential: gh にログイン済みの token（main と th-it-dev）を写す。PoC の credential は消す
+agent-vault-sync-gh
+agent-vault vault credential list                       # PoC の残り（GH_PAT 等）があれば次で消す
+agent-vault vault credential delete GH_PAT GH_BASIC_USER
 # 3. services
 agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles/home-manager/home/file/agent-vault/services.yaml
 # 4. Claude Code 用の agent と proxy token
 agent-vault agent create claude-code --vault default:proxy --token-only > ~/.agent-vault/proxy-token
 chmod 600 ~/.agent-vault/proxy-token
+# 5. 起動中の claude と daemon を止めて、wrapper（~/.claude/bin/claude）経由で起動し直す
 ```
 
 状態は `launchctl print gui/$(id -u)/com.playpark.agent-vault` と `~/.local/state/agent-vault.err.log` で見る。
-token を替えるときは `agent-vault agent rotate claude-code` の出力で `proxy-token` を書き換え、claude を起動し直す。
+
+- `gh auth login` / `gh auth refresh` / token の revoke の後は `agent-vault-sync-gh` をもう一度実行する
+  （vault の写しが古いと gh・git が 401 になる）
+- proxy token を替えるときは `agent-vault agent rotate claude-code` の出力で `proxy-token` を書き換え、
+  claude と daemon を起動し直す（bg job は daemon の env を使うので、daemon を止めないと古い token のまま 407 になる）
+
+### 実機での確認（初回セットアップ後）
+
+通常のターミナルで、wrapper を通さずに agent-vault の経路だけを確かめる:
+
+```bash
+tok=$(tr -d '[:space:]' < ~/.agent-vault/proxy-token)
+p="http://$tok:default@127.0.0.1:14322"
+# gh: placeholder が置き換わり main / th-it-dev が返る。x509 で落ちたら下の CA の信頼を足す
+HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/main gh api user --jq .login
+HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/th-it-dev gh api user --jq .login
+# git: owner ごとの Basic 認証（BusinessProcessDX の private repo で th-it-dev、それ以外で main）
+HTTPS_PROXY=$p GIT_SSL_CAINFO=~/.local/state/agent-vault/ca-bundle.pem git ls-remote https://github.com/BusinessProcessDX/<private-repo> HEAD
+unset tok p
+```
+
+gh（Go）は macOS では `SSL_CERT_FILE` を見ずに Keychain の root を使う可能性がある。`gh api user` が
+`x509: certificate signed by unknown authority` で落ちたら、agent-vault の CA を login keychain で信頼する
+（ユーザーのすべての TLS 通信でこの CA が信頼されるようになる。CA 鍵は `~/.agent-vault/ca/ca.key.enc` で
+マスターパスワードで暗号化されている）:
+
+```bash
+security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db ~/.agent-vault/ca/ca.crt.pem
+```
+
+Claude Code のセッション内（wrapper 経由で起動）で:
+
+```bash
+ls ~/.agent-vault                 # Operation not permitted になる
+agent-vault vault credential list # 失敗する（管理 API に sandbox から認証できない）
+echo "$CLAUDE_GH_VAULT"           # 1
+gh api user --jq .login           # cwd のアカウント（BusinessProcessDX の repo では th-it-dev）
+gh pr list --limit 1              # GraphQL が通る（playpark-llc・お客さんの repo でも）
+```
+
+bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login` を確かめる。
 
 ### 決めたこと
 
-- api.github.com は `/repos/<owner>/*` なら owner ごとに振り分けられる（path の literal prefix が長い service が勝つ）。
-  `/user`・`/graphql`（`gh pr create` / `gh pr view`）・`/search` は path に owner が出ないので、
-  path なしの `api.github.com`（it-all-playpark の PAT）に落ちる。そのため it-all-playpark 以外の owner
-  （playpark-llc / Cistree-dev / BusinessProcessDX / YujiNaramoto）では GraphQL を使う `gh pr create` /
-  `gh pr view` / `gh pr list` / `gh issue view` 等が権限不足で失敗する（git push と `/repos/<owner>/*` の REST は通る）。
-  fine-grained PAT は owner 単位で複数 owner にまたがらせられないので、これは受け入れる
-- `bin/claude` の env（`HTTPS_PROXY` とダミーの `GH_TOKEN`）は sandbox 外で動く gh / git（`excludedCommands`）にも
-  継承され、`GH_TOKEN` が account-exec の `GH_CONFIG_DIR` と `gh auth git-credential` に優先する。
-  このため `account-map.json` の全 owner を services.yaml に載せ、owner の振り分けを agent-vault 側で行う
+- **token は gh の OAuth token をそのまま使う（owner ごとの fine-grained PAT にしない）**。issue #248 は owner ごとの
+  fine-grained PAT（Contents / Pull requests の write）を想定していたが、fine-grained PAT は resource owner が
+  1 つに限られ、outside collaborator として入っているお客さんの repo には届かない。GitHub App もお客さんの org への
+  install が要る。作業する repo を選ばないことを優先し、今の gh と同じ範囲（`repo` scope）を受け入れる
+- **アカウントは送る側（account-exec）が選ぶ**。agent-vault の service は host と path でしか一致せず、
+  GraphQL は path に owner が出ない。session ごとに vault を分ける案は、bg job が daemon の予備プロセス
+  （cwd が決まる前に起動済み）で動くので効かない。account-exec は gh のたびに cwd を見るので bg job でも効く
+- **sandbox 内のプロセスは、本人の token の権限で GitHub を操作できる**。permissions.deny の gh / git のパターンは
+  コマンド文字列の一致なので、スクリプト経由の API 呼び出しは止められない。api.github.com は placeholder を
+  送ったリクエストにだけ token を付ける（passthrough + 置換）ので、placeholder を知らない client が偶然
+  認証付きで書き込むことはない。一方 placeholder は秘密ではない（このリポジトリにある）ので、意図して使う
+  コードは止められない。sandbox 内の任意のプロセスが別アカウントの placeholder を選べるのも同じで、
+  どちらも本人のアカウントなので受け入れる
+- **github.com の既定 service は、github.com へのすべてのリクエスト（public repo の clone を含む）に main の
+  Basic 認証を付ける**。remote は `https://github.com/<Owner>/…` の正規表記を前提にする（path の一致は大文字小文字を
+  区別する可能性がある）。ssh remote は sandbox から `~/.ssh` を読めないので使えない
+- **wrapper を通らない起動では vault が効かない**: desktop app / IDE から起動した claude と、wrapper を通らずに
+  立った daemon には `HTTPS_PROXY` も `CLAUDE_GH_VAULT` も付かない。account-exec は目印が無ければ従来の
+  `gh_config_dir` を使う（人間の端末と同じ）
+- **本体の env に `AGENT_VAULT_TOKEN` を出さない**。agent-vault の CLI はこれで管理 API（`127.0.0.1:14321`。
+  sandbox から到達できる）に認証するので、出すと sandbox 内から credential を読めてしまう。
+  sandbox からの防壁は `~/.agent-vault` の denyRead（CLI のセッション `session.json` を含む）だけ
 - 未登録 host は既定の passthrough のまま（`unmatched_host_policy=deny` にしない）。sandbox 内の通信先は
   Claude Code の `allowedDomains`（`strictAllowlist`）が前段で絞っている。deny にすると、同じ proxy を通る
   Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を agent-vault にも二重に登録することになる
+- excludedCommands から git / gh を外すとき（#249）は、`pretool-gh-compound-guard.py` も一緒に外す。
+  この hook は gh を含むコマンドが excludedCommands に一致しないと deny するので、残すとすべての gh が止まる
 
-テスト: `bash claude-code/bin/claude.test.sh`（wrapper）、`bash tests/agent-vault.test.sh`
-（起動スクリプト・services・denyRead・固定版の binary）。
+テスト: `bash claude-code/bin/claude.test.sh`（wrapper）、`bash claude-code/bin/account-exec.test.sh`（gh の
+config dir の選び方を含む）、`bash claude-code/bin/agent-vault-sync-gh.test.sh`、`bash tests/agent-vault.test.sh`
+（起動スクリプト・services と account-map と hosts.yml の一致・denyRead・固定版の binary）。
 
 ## hooks
 

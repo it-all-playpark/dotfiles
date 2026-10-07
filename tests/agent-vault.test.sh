@@ -6,8 +6,10 @@
 #
 # - agent-vault-server.sh: Keychain のマスターパスワードを stdin で server に渡し、CA bundle を書く
 #   （偽の security / agent-vault を使う。Keychain・ネットワークには触れない）
-# - services.yaml: owner ごとの git（basic）/ REST（bearer）の振り分け
-# - settings.json: sandbox から ~/.agent-vault（DB・CA 鍵・proxy token）を読めない
+# - services.yaml / account-map.json / agent-vault-gh/*/hosts.yml: gh のアカウント（placeholder）と
+#   git の振り分けが 3 か所で食い違わない
+# - settings.json: sandbox から ~/.agent-vault（DB・CA 鍵・セッション・proxy token）を読めず、
+#   gh の placeholder 入り config dir は読める
 # - lib/agent-vault: 固定した版の binary（tier-2 で実際に build して version を見る）
 
 set -euo pipefail
@@ -17,6 +19,8 @@ LAUNCHER="${REPO_ROOT}/home-manager/home/file/agent-vault/agent-vault-server.sh"
 SERVICES="${REPO_ROOT}/home-manager/home/file/agent-vault/services.yaml"
 SETTINGS="${REPO_ROOT}/claude-code/settings.json"
 WRAPPER="${REPO_ROOT}/claude-code/bin/claude"
+ACCOUNT_MAP="${REPO_ROOT}/claude-code/account-map.json"
+VAULT_GH_SRC="${REPO_ROOT}/home-manager/home/file/agent-vault-gh"
 
 PASS=0
 FAIL=0
@@ -164,34 +168,83 @@ service_auth() {
 }
 
 # ---------------------------------------------------------------------------
-# services_route_git_and_rest_per_owner: owner ごとに git は basic（x-access-token + PAT）、
-# REST の /repos/<owner>/ は bearer（同じ PAT）
+# services_api_is_passthrough_with_header_substitutions: api.github.com は認証を付けず
+# （placeholder を送らない client は認証なし）、ヘッダの placeholder だけを vault の token に置き換える。
+# REST の owner 別 service は持たない（GraphQL は path で振り分けられないので、アカウントは送る側が選ぶ）
 # ---------------------------------------------------------------------------
-for pair in it-all-playpark:GITHUB_PAT_IT_ALL_PLAYPARK playpark-llc:GITHUB_PAT_PLAYPARK_LLC Cistree-dev:GITHUB_PAT_CISTREE_DEV \
-  BusinessProcessDX:GITHUB_PAT_BUSINESSPROCESSDX YujiNaramoto:GITHUB_PAT_YUJINARAMOTO; do
-  owner="${pair%%:*}"
-  key="${pair#*:}"
-  name="services_route_git_and_rest_per_owner[${owner}]"
-  echo "- ${name}"
-  git_auth="$(service_auth "github.com/${owner}/*")"
-  api_auth="$(service_auth "api.github.com/repos/${owner}/*")"
-  if [ "${git_auth}" = "[{\"type\":\"basic\",\"username\":\"GITHUB_GIT_USERNAME\",\"password\":\"${key}\"}]" ] &&
-    [ "${api_auth}" = "[{\"type\":\"bearer\",\"token\":\"${key}\"}]" ]; then
-    pass "${name}"
-  else
-    fail "${name}" "git=${git_auth} api=${api_auth}"
-  fi
-done
+echo "- services_api_is_passthrough_with_header_substitutions"
+api_services="$(printf '%s' "${SERVICES_JSON}" | jq -c '[.services[] | select(.host | startswith("api.github.com"))]')"
+if printf '%s' "${api_services}" | jq -e '
+    length == 1 and .[0].host == "api.github.com" and .[0].auth == {"type": "passthrough"}
+    and (.[0].substitutions | length > 0)
+    and all(.[0].substitutions[]; .in == ["header"] and (.placeholder | test("^__gh_[a-z0-9_]+__$")))' >/dev/null; then
+  pass "services_api_is_passthrough_with_header_substitutions"
+else
+  fail "services_api_is_passthrough_with_header_substitutions" "api.github.com services=${api_services}"
+fi
+
+# vault_key_of_dir <~/.config/agent-vault-gh/<account>>: その dir の hosts.yml（repo の
+# home-manager/home/file/agent-vault-gh/<account>/hosts.yml）の placeholder を置き換える vault の key。
+# hosts.yml が無い・user の token と既定の token が食い違う・置換の定義が無いときは空
+vault_key_of_dir() {
+  local account hosts placeholder
+  # shellcheck disable=SC2088 # 意図的: account-map の値の "~/" を文字列として比べる（展開しない）
+  case "$1" in
+  "~/.config/agent-vault-gh/"*) account="${1#"~/.config/agent-vault-gh/"}" ;;
+  *) return 0 ;;
+  esac
+  hosts="${VAULT_GH_SRC}/${account}/hosts.yml"
+  [ -f "${hosts}" ] || return 0
+  placeholder="$(yq -o=json '.' "${hosts}" | jq -r '
+    .["github.com"] as $h
+    | if ($h.users[$h.user].oauth_token) == $h.oauth_token then $h.oauth_token else empty end')"
+  [ -n "${placeholder}" ] || return 0
+  printf '%s' "${SERVICES_JSON}" | jq -r --arg p "${placeholder}" '
+    [.services[] | select(.host == "api.github.com") | .substitutions[]? | select(.placeholder == $p) | .key] | first // empty'
+}
 
 # ---------------------------------------------------------------------------
-# services_default_api_bearer: owner が path に出ない REST / GraphQL は api.github.com（path なし）の bearer
+# accounts_resolve_to_substitutions: account-map の gh_vault_config_dir（default と各 org）が、
+# placeholder 入りの hosts.yml を経て api.github.com の置換の key に届く
 # ---------------------------------------------------------------------------
-echo "- services_default_api_bearer"
-default_auth="$(service_auth "api.github.com")"
-if [ "${default_auth}" = '[{"type":"bearer","token":"GITHUB_PAT_IT_ALL_PLAYPARK"}]' ]; then
-  pass "services_default_api_bearer"
+echo "- accounts_resolve_to_substitutions"
+unresolved=""
+while IFS= read -r dir; do
+  [ -n "${dir}" ] || continue
+  [ -n "$(vault_key_of_dir "${dir}")" ] || unresolved="${unresolved} ${dir}"
+done <<<"$(jq -r '[.default.gh_vault_config_dir] + [.orgs[].gh_vault_config_dir] | map(select(. != null)) | unique | .[]' "${ACCOUNT_MAP}")"
+if [ -n "$(jq -r '.default.gh_vault_config_dir // empty' "${ACCOUNT_MAP}")" ] && [ -z "${unresolved}" ]; then
+  pass "accounts_resolve_to_substitutions"
 else
-  fail "services_default_api_bearer" "api.github.com=${default_auth}"
+  fail "accounts_resolve_to_substitutions" "default missing or unresolved:${unresolved}"
+fi
+
+# ---------------------------------------------------------------------------
+# git_routes_match_account_map: git（Basic 認証は置換が届かない）は path の owner で振り分ける。
+# github.com（既定）は default のアカウント、default と違うアカウントを使う org は
+# github.com/<org>/* でそのアカウント。それ以外の owner 別 git service は持たない
+# ---------------------------------------------------------------------------
+echo "- git_routes_match_account_map"
+default_key="$(vault_key_of_dir "$(jq -r '.default.gh_vault_config_dir // empty' "${ACCOUNT_MAP}")")"
+other_orgs="$(jq -r '.default.gh_vault_config_dir as $d
+  | .orgs | to_entries[] | select(.value.gh_vault_config_dir != null and .value.gh_vault_config_dir != $d)
+  | [.key, .value.gh_vault_config_dir] | @tsv' "${ACCOUNT_MAP}")"
+expected_git="github.com=${default_key}"
+while IFS=$'\t' read -r org dir; do
+  [ -n "${org}" ] || continue
+  expected_git="${expected_git}"$'\n'"github.com/${org}/*=$(vault_key_of_dir "${dir}")"
+done <<<"${other_orgs}"
+actual_git="$(printf '%s' "${SERVICES_JSON}" | jq -r '
+  .services[] | select(.host == "github.com" or (.host | startswith("github.com/")))
+  | select(.auth.type == "basic" and .auth.username == "GITHUB_GIT_USERNAME") | "\(.host)=\(.auth.password)"' | sort)"
+expected_git="$(printf '%s\n' "${expected_git}" | sort)"
+other_git="$(printf '%s' "${SERVICES_JSON}" | jq -r '
+  .services[] | select(.host == "github.com" or (.host | startswith("github.com/")))
+  | select((.auth.type == "basic" and .auth.username == "GITHUB_GIT_USERNAME") | not) | .host')"
+if [ -n "${default_key}" ] && [ "${actual_git}" = "${expected_git}" ] && [ -z "${other_git}" ]; then
+  pass "git_routes_match_account_map"
+else
+  fail "git_routes_match_account_map" "expected=[${expected_git}] actual=[${actual_git}] other=[${other_git}]"
 fi
 
 # ---------------------------------------------------------------------------
@@ -238,6 +291,7 @@ echo "- settings_deny_read_agent_vault_dir"
 if [ -n "${token_default}" ] &&
   read_denied "${HOME}/.agent-vault/agent-vault.db" &&
   read_denied "${HOME}/.agent-vault/ca/ca.key" &&
+  read_denied "${HOME}/.agent-vault/session.json" &&
   read_denied "${token_path}"; then
   pass "settings_deny_read_agent_vault_dir"
 else
@@ -251,6 +305,20 @@ if [ -n "${ca_default}" ] && ! read_denied "${ca_path}"; then
   pass "settings_ca_bundle_readable"
 else
   fail "settings_ca_bundle_readable" "CA bundle (${ca_path:-<wrapper default not found>}) must stay readable from the sandbox"
+fi
+
+# gh の placeholder 入り config dir は sandbox 内の gh が読む（読めないと gh は起動もしない）ので塞がない
+echo "- settings_vault_gh_config_readable"
+blocked=""
+while IFS= read -r dir; do
+  [ -n "${dir}" ] || continue
+  path="${HOME}/${dir#"~/"}/hosts.yml"
+  if read_denied "${path}"; then blocked="${blocked} ${path}"; fi
+done <<<"$(jq -r '[.default.gh_vault_config_dir] + [.orgs[].gh_vault_config_dir] | map(select(. != null)) | unique | .[]' "${ACCOUNT_MAP}")"
+if [ -z "${blocked}" ]; then
+  pass "settings_vault_gh_config_readable"
+else
+  fail "settings_vault_gh_config_readable" "denyRead blocks:${blocked}"
 fi
 
 echo ""

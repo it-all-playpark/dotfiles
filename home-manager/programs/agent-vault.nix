@@ -12,6 +12,14 @@ lib.mkIf pkgs.stdenv.isDarwin {
   # vault の操作（credential・services・agent の登録）に使う CLI。server と同じ固定版
   home.packages = [ agentVault ];
 
+  # agent-vault 経由のセッションで gh が使う config dir（アカウントごとの hosts.yml。token は placeholder）。
+  # account-exec が account-map.json の gh_vault_config_dir で選ぶ。~/.config/gh* は sandbox から
+  # 読めない（denyRead）ので、名前を gh- で始めない
+  home.file.".config/agent-vault-gh" = {
+    source = ../home/file/agent-vault-gh;
+    recursive = true;
+  };
+
   # Claude Code 本体の上流 proxy。sandbox 内の git / gh → Claude Code の proxy（allowedDomains）→
   # agent-vault（127.0.0.1:14322 で GitHub の認証を付与）→ GitHub の順に流れる。
   # 起動は agent-vault-server.sh（マスターパスワードを Keychain から読み --password-stdin で渡す）。
