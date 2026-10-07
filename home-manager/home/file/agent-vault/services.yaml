@@ -1,0 +1,53 @@
+# agent-vault の default vault に入れる services（GitHub の認証付与）。
+# 適用（vault の services を丸ごと置き換える。冪等）:
+#   agent-vault vault service set -f home-manager/home/file/agent-vault/services.yaml --vault default
+#
+# 参照する credential（値は vault にだけ置く。claude-code/bin/agent-vault-sync-gh が gh の token を写す）:
+#   GITHUB_GIT_USERNAME   x-access-token（git の Basic 認証の username）
+#   GH_TOKEN_MAIN         main アカウント（it-all-playpark）の gh の OAuth token（`gh auth token`）
+#   GH_TOKEN_TH_IT_DEV    th-it-dev アカウントの gh の OAuth token（~/.config/gh-th-it-dev）
+#
+# アカウントの選び方:
+# - gh（api.github.com）: account-exec が cwd から選んだアカウントの config dir
+#   （~/.config/agent-vault-gh/<account>/hosts.yml）が placeholder の token を送る。ここでは
+#   Authorization ヘッダの placeholder を本物の token に置き換えるだけで、owner の振り分けはしない。
+#   GraphQL（/graphql。gh pr / gh issue の大半が使う）は path に owner が出ないので、
+#   path での振り分けではアカウントを選べない。placeholder なら送る側（cwd）で選べる
+# - placeholder を送らない client（curl・octokit 等）は passthrough で認証なしのまま
+# - git（github.com）: Basic 認証は base64 なので置換が届かない。path の owner で振り分ける。
+#   account-map.json で th-it-dev の config dir（gh_vault_config_dir）を指す org はここにも書く
+#   （tests/agent-vault.test.sh が両者の一致を確かめる）。それ以外（お客さんの repo を含む）は main
+#
+# 一致規則（docs/learn/services.mdx "Matching priority"）: host の完全一致が wildcard に勝ち、
+# 同じ host では path の literal prefix（最初の * まで）が長い service が勝つ。
+#
+# 未登録 host は既定の passthrough（認証を付けずに転送）のままにする。sandbox 内の通信先は
+# Claude Code の allowedDomains（strictAllowlist）が前段で絞っている。deny にすると、同じ proxy を通る
+# Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を全部ここにも passthrough で
+# 二重に登録することになる。
+services:
+  - name: github-git-businessprocessdx
+    host: github.com/BusinessProcessDX/*
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GH_TOKEN_TH_IT_DEV
+
+  - name: github-git-default
+    host: github.com
+    auth:
+      type: basic
+      username: GITHUB_GIT_USERNAME
+      password: GH_TOKEN_MAIN
+
+  - name: github-api
+    host: api.github.com
+    auth:
+      type: passthrough
+    substitutions:
+      - key: GH_TOKEN_MAIN
+        placeholder: __gh_main__
+        in: [header]
+      - key: GH_TOKEN_TH_IT_DEV
+        placeholder: __gh_th_it_dev__
+        in: [header]

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# agent-vault-sync-gh: gh にログイン済みの OAuth token を agent-vault の credential に写す
+#
+# agent-vault 経由のセッションでは、gh は placeholder の token を送り、agent-vault がそれを vault の
+# credential に置き換える（home-manager/home/file/agent-vault/services.yaml）。その credential には、
+# 人間の端末で `gh auth login` 済みの token をそのまま使う（新しい PAT は発行しない）。
+# `gh auth login` / `gh auth refresh` / token の revoke の後に実行し直す（古いままだと 401 になる）。
+#
+# 人間の端末で実行する（sandbox 内からは ~/.config/gh* も ~/.agent-vault も読めない）。
+# config dir が無いアカウント（そのマシンで使っていないアカウント）は飛ばす。
+#
+# token は `vault credential set` の argv で渡す（v0.40.0 の CLI は stdin やファイルから値を取れない）。
+# 実行中は同じユーザーのプロセスから ps で見えるが、同じユーザーなら `gh auth token` で直接読めるので
+# 新しく露出するものは無い。sandbox 内からは ps が使えない（Operation not permitted）。
+#
+# 環境変数（テスト用）:
+#   AGENT_VAULT_SYNC_GH_ACCOUNTS  "<credential key>=<gh config dir>" を空白区切り
+set -euo pipefail
+
+accounts="${AGENT_VAULT_SYNC_GH_ACCOUNTS:-GH_TOKEN_MAIN=$HOME/.config/gh GH_TOKEN_TH_IT_DEV=$HOME/.config/gh-th-it-dev}"
+
+args=(GITHUB_GIT_USERNAME=x-access-token)
+for pair in $accounts; do
+  key="${pair%%=*}"
+  dir="${pair#*=}"
+  if [ ! -d "$dir" ]; then
+    echo "agent-vault-sync-gh: $dir not found; skipping $key" >&2
+    continue
+  fi
+  # GH_CONFIG_DIR を明示するので account-exec（gh の shim）は素通しする
+  token="$(GH_CONFIG_DIR="$dir" gh auth token)"
+  args+=("$key=$token")
+done
+unset token
+
+agent-vault vault credential set --vault default "${args[@]}"
+echo "agent-vault-sync-gh: set ${#args[@]} credential(s) in vault 'default'" >&2

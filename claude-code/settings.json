@@ -650,7 +650,8 @@
         "~/.ssh/**",
         "~/.gnupg/**",
         "~/.config/gh/**",
-        "~/.config/gh-*/**"
+        "~/.config/gh-*/**",
+        "~/.agent-vault/**"
       ],
       "denyWrite": [
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/bin",

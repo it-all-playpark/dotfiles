@@ -1,8 +1,12 @@
 {
+  "default": {
+    "gh_vault_config_dir": "~/.config/agent-vault-gh/main"
+  },
   "orgs": {
     "BusinessProcessDX": {
       "gcloud_config_dir": "~/.config/gcloud-th-it-dev",
-      "gh_config_dir": "~/.config/gh-th-it-dev"
+      "gh_config_dir": "~/.config/gh-th-it-dev",
+      "gh_vault_config_dir": "~/.config/agent-vault-gh/th-it-dev"
     },
     "Cistree-dev": {
       "gcloud_config_dir": "~/.config/gcloud",

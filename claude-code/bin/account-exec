@@ -7,8 +7,16 @@
 #   gh              → GH_CONFIG_DIR=<gh_config_dir>
 #   gcloud          → CLOUDSDK_CONFIG=<gcloud_config_dir>
 #   tofu/terraform  → GOOGLE_APPLICATION_CREDENTIALS=<gcloud_config_dir>/application_default_credentials.json
-# を付け、PATH から shim dir を除いて解決した実体を exec する。exec 先の PATH は元のまま
-# （git → gh の credential helper 呼び出しも shim を通り続けるため）。
+# を付け、PATH から shim dir を除いて解決した実体を exec する。exec 先の PATH は元のまま。
+# git の credential helper（~/.config/git/config.local の `gh auth git-credential`）は gh を絶対パスで
+# 呼ぶので shim を通らない。
+#
+# agent-vault 経由の Claude Code セッション（bin/claude が CLAUDE_GH_VAULT=1 を付ける）では、gh は
+# gh_config_dir ではなく gh_vault_config_dir を使う。中身は本物の token の代わりに placeholder を
+# 書いた hosts.yml で（home-manager/programs/agent-vault.nix）、agent-vault が api.github.com への
+# リクエストの placeholder を本物の token に置き換える。sandbox 内からは ~/.config/gh* を読めず
+# （denyRead。読めないと gh は起動もしない）、placeholder の dir は読めるので、gh は sandbox 内でも動く。
+# org が未登録・ghq 外（お客さんの repo 等）のときはマップの default.gh_vault_config_dir を使う。
 #
 # gcloud は構成名（CLOUDSDK_ACTIVE_CONFIG_NAME）ではなく config dir ごと分離する。
 # ADC（application_default_credentials.json）は構成をまたいでグローバルなので、dir を
@@ -21,6 +29,7 @@
 # 環境変数:
 #   ACCOUNT_MAP         マップの場所（既定 $HOME/.claude/account-map.json）
 #   ACCOUNT_EXEC_DEBUG  =1 で判定結果を stderr に 1 行出す
+#   CLAUDE_GH_VAULT     =1 で gh に gh_vault_config_dir を使う（bin/claude が付ける）
 #
 # fail 方針は fail-open: マップ不在 / JSON 不正 / jq 不在 / 値が不正 のときは
 # env を付けずに実体へ passthrough し、stderr に 1 行だけ警告する。
@@ -29,10 +38,16 @@ set -euo pipefail
 tool="$(basename "$0")"
 # suffix: マップの値（dir）の後ろに付けてファイルパスにする（tofu の ADC 用）
 suffix=""
+# use_default: org が未登録・ghq 外でもマップの default を引く（agent-vault 経由の gh だけ）
+use_default=0
 case "$tool" in
 gh)
   var=GH_CONFIG_DIR
   key=gh_config_dir
+  if [ "${CLAUDE_GH_VAULT:-}" = 1 ]; then
+    key=gh_vault_config_dir
+    use_default=1
+  fi
   ;;
 gcloud)
   var=CLOUDSDK_CONFIG
@@ -79,20 +94,25 @@ if [ -z "${!var+x}" ]; then
   fi
 
   # 3. マップを引く
-  if [ -n "$org" ]; then
+  if [ -n "$org" ] || [ "$use_default" = 1 ]; then
     ACCOUNT_MAP="${ACCOUNT_MAP:-$HOME/.claude/account-map.json}"
     if ! command -v jq >/dev/null 2>&1; then
       warn "jq not found; passthrough without account mapping"
     elif [ ! -f "$ACCOUNT_MAP" ]; then
       warn "account map not found: $ACCOUNT_MAP; passthrough"
     else
-      # 1 回の jq で「JSON 不正 / 未登録 / 値がオブジェクトでない / 値」を判別する
-      result="$(jq -r --arg org "$org" --arg key "$key" '
+      # 1 回の jq で「JSON 不正 / 未登録 / 値がオブジェクトでない / 値」を判別する。
+      # use_default=1 なら、org が未登録・org の値に key が無いときに default[key] を使う
+      result="$(jq -r --arg org "$org" --arg key "$key" --arg use_default "$use_default" '
+        def dflt: if $use_default == "1" and (.default | type) == "object" then .default[$key] else null end;
+        def ok($v): "ok " + ($v | if type == "string" then . else "" end);
         if type != "object" then "invalid"
-        elif (.orgs | type) != "object" then "unmapped"
-        elif (.orgs[$org] | type) == "null" then "unmapped"
-        elif (.orgs[$org] | type) != "object" then "notobject"
-        else "ok " + ((.orgs[$org][$key] | if type == "string" then . else "" end))
+        elif $org != "" and (.orgs | type) == "object" and (.orgs[$org] | type) != "null"
+          and (.orgs[$org] | type) != "object" then "notobject"
+        elif $org != "" and (.orgs | type) == "object" and (.orgs[$org] | type) == "object" then
+          ok(.orgs[$org][$key] // dflt)
+        elif dflt != null then ok(dflt)
+        else "unmapped"
         end' "$ACCOUNT_MAP" 2>/dev/null)" || result="invalid"
       case "$result" in
       invalid) warn "account map is not valid JSON: $ACCOUNT_MAP; passthrough" ;;

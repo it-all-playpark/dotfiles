@@ -90,8 +90,10 @@ done
 
 cat >"$MAP" <<'EOF'
 {
+  "default": { "gh_vault_config_dir": "~/.config/agent-vault-gh/main" },
   "orgs": {
-    "acme": { "gh_config_dir": "~/.config/gh-acme", "gcloud_config_dir": "~/.config/gcloud-acme" },
+    "acme": { "gh_config_dir": "~/.config/gh-acme", "gcloud_config_dir": "~/.config/gcloud-acme",
+              "gh_vault_config_dir": "~/.config/agent-vault-gh/acme" },
     "ghonly": { "gh_config_dir": "~/.config/gh-ghonly" }
   }
 }
@@ -117,7 +119,7 @@ run_shim() {
   local dir="$1" tool="$2"
   shift 2
   set +e
-  OUT="$(cd "$dir" && env -u GH_CONFIG_DIR -u CLOUDSDK_CONFIG -u GOOGLE_APPLICATION_CREDENTIALS \
+  OUT="$(cd "$dir" && env -u GH_CONFIG_DIR -u CLOUDSDK_CONFIG -u GOOGLE_APPLICATION_CREDENTIALS -u CLAUDE_GH_VAULT \
     HOME="$HOME_T" PATH="$RUN_PATH" ACCOUNT_MAP="$RUN_MAP" \
     ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
     "$SHIM_BIN/$tool" "$@" 2>"$TMPROOT/err")"
@@ -383,6 +385,53 @@ if [[ $RC -eq 0 ]] && contains "$OUT" "GOOGLE_APPLICATION_CREDENTIALS=$TMPROOT/s
   pass "16_tofu_preset_env_is_not_overridden"
 else
   fail "16_tofu_preset_env_is_not_overridden" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 17. agent-vault 経由（CLAUDE_GH_VAULT=1）の gh は gh_vault_config_dir を使う。
+#     org が未登録・ghq 外・org に gh_vault_config_dir が無いときはマップの default
+# ---------------------------------------------------------------------------
+reset_run
+RUN_ENV=("CLAUDE_GH_VAULT=1")
+run_shim "$ORG_WT" gh pr view
+if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=$HOME_T/.config/agent-vault-gh/acme" && [[ -z $ERR ]]; then
+  pass "17a_vault_mapped_org_uses_vault_config_dir"
+else
+  fail "17a_vault_mapped_org_uses_vault_config_dir" "rc=$RC out=$OUT err=$ERR"
+fi
+
+for case_dir in "17b_vault_unmapped_org_uses_default:$UNMAPPED_REPO" \
+  "17c_vault_outside_ghq_uses_default:$OUTSIDE_DIR" \
+  "17d_vault_org_without_vault_key_uses_default:$GHONLY_REPO"; do
+  name="${case_dir%%:*}"
+  reset_run
+  RUN_ENV=("CLAUDE_GH_VAULT=1")
+  run_shim "${case_dir#*:}" gh pr view
+  if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=$HOME_T/.config/agent-vault-gh/main" && [[ -z $ERR ]]; then
+    pass "$name"
+  else
+    fail "$name" "rc=$RC out=$OUT err=$ERR"
+  fi
+done
+
+# 明示の GH_CONFIG_DIR は agent-vault 経由でも上書きしない
+reset_run
+RUN_ENV=("CLAUDE_GH_VAULT=1" "GH_CONFIG_DIR=$TMPROOT/preset-gh")
+run_shim "$ORG_REPO" gh auth status
+if [[ $RC -eq 0 ]] && contains "$OUT" "GH_CONFIG_DIR=$TMPROOT/preset-gh" && [[ -z $ERR ]]; then
+  pass "17e_vault_preset_env_is_not_overridden"
+else
+  fail "17e_vault_preset_env_is_not_overridden" "rc=$RC out=$OUT err=$ERR"
+fi
+
+# gcloud は agent-vault と関係なく gcloud_config_dir のまま
+reset_run
+RUN_ENV=("CLAUDE_GH_VAULT=1")
+run_shim "$ORG_REPO" gcloud config list
+if [[ $RC -eq 0 ]] && contains "$OUT" "CLOUDSDK_CONFIG=$HOME_T/.config/gcloud-acme" && [[ -z $ERR ]]; then
+  pass "17f_vault_does_not_change_gcloud"
+else
+  fail "17f_vault_does_not_change_gcloud" "rc=$RC out=$OUT err=$ERR"
 fi
 
 # --- Summary ---------------------------------------------------------------
