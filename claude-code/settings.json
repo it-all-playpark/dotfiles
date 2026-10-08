@@ -588,7 +588,8 @@
         "~/.gnupg/**",
         "~/.config/gh/**",
         "~/.config/gh-*/**",
-        "~/.agent-vault/**"
+        "~/.agent-vault/**",
+        "/Library/Application Support/ClaudeCode/managed-settings.d/**"
       ],
       "denyWrite": [
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/bin",

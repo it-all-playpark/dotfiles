@@ -199,6 +199,7 @@ vault に入れる token は、人間の端末で `gh auth login` 済みの gh �
 | gh 用の config dir（アカウントごとの `hosts.yml`。token は placeholder） | `home-manager/home/file/agent-vault-gh/<account>/` → `~/.config/agent-vault-gh/<account>/` |
 | どの repo でどのアカウントか（`gh_vault_config_dir`、未登録は `default`） | `account-map.json` |
 | Claude Code 本体に `HTTPS_PROXY` と CA を付ける wrapper | `bin/claude` |
+| wrapper を通らない起動に同じ env を渡す managed settings の drop-in を書く（LaunchDaemon `com.playpark.agent-vault-managed-env`） | `darwin/agent-vault.nix`、`home-manager/home/file/agent-vault/agent-vault-managed-env.sh` |
 | gh の token を vault に写す（人間の端末で実行） | `bin/agent-vault-sync-gh` |
 
 `bin/claude` は `~/.claude/bin`（PATH 先頭）から実体の claude を exec する前に、
@@ -298,7 +299,9 @@ ps eww -p "$(pgrep -f 'claude daemon run')" | tr ' ' '\n' | grep -E '^GIT_CONFIG
 - `gh auth login` / `gh auth refresh` / token の revoke の後は `agent-vault-sync-gh` をもう一度実行する
   （vault の写しが古いと gh・git が 401 になる）
 - proxy token を替えるときは `agent-vault agent rotate claude-code` の出力で `proxy-token` を書き換え、
-  上の「claude と daemon の起動し直し」をする（daemon と予備のプロセスを止めないと、bg job は古い token のまま 407 になる）
+  上の「claude と daemon の起動し直し」をする（daemon と予備のプロセスを止めないと、bg job は古い token のまま 407 になる）。
+  wrapper を通らない起動の分は、`proxy-token` を書き換えれば daemon（`com.playpark.agent-vault-managed-env`）が
+  `WatchPaths` で drop-in を書き直す。起動中のセッションにも反映される（managed settings はファイルの変更で読み直される）
 
 ### 実機での確認（初回セットアップ後）
 
@@ -386,9 +389,27 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の g
 - **github.com の既定 service は、github.com へのすべてのリクエスト（public repo の clone を含む）に main の
   Basic 認証を付ける**。remote は `https://github.com/<Owner>/…` の正規表記を前提にする（path の一致は大文字小文字を
   区別する可能性がある）。ssh remote は sandbox から `~/.ssh` を読めないので使えない
-- **wrapper を通らない起動では vault が効かない**: desktop app / IDE から起動した claude と、wrapper を通らずに
-  立った daemon には `HTTPS_PROXY` も `CLAUDE_GH_VAULT` も付かない。account-exec は目印が無ければ従来の
-  `gh_config_dir` を使う（人間の端末と同じ）
+- **wrapper を通らない起動には managed settings の drop-in で同じ env を渡す**（#270）: Desktop の Code タブ・
+  scheduled task・IDE から起動した claude と、wrapper を通らずに立った daemon は PATH の wrapper を通らない
+  （Desktop には起動バイナリを差し替える設定も無い）。ファイルの managed settings はどの起動でも読まれるので、
+  root の LaunchDaemon `com.playpark.agent-vault-managed-env`（`darwin/agent-vault.nix`、
+  `home-manager/home/file/agent-vault/agent-vault-managed-env.sh`）が wrapper と同じ判定で
+  `/Library/Application Support/ClaudeCode/managed-settings.d/50-agent-vault.json`（`root:wheel 0640` + 対象ユーザーだけの読み取り ACL）を書く。
+  - agent-vault が使えるとき: wrapper と同じ `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` / CA 3 つ / `CLAUDE_GH_VAULT=1` /
+    `GIT_CONFIG_*`（0: github.com の credential helper を空、1: `branch.autoSetupMerge`、2: `push.default`）。
+    使えないとき（token なし・CA なし・port が閉じている）は `GIT_CONFIG_*` の 2 つだけ。index は wrapper と同じなので、
+    wrapper 経由の CLI では managed の値が同じ値で上書きするだけになる
+  - 起動は `RunAtLoad`・`StartInterval`（30 秒）・`WatchPaths`（token ファイルと CA bundle）。内容が同じなら書き換えない。
+    書き出しは同じ dir の一時ファイル → `mv`（壊れた JSON の drop-in があると Claude Code は起動しない）。
+    ログは `/var/log/agent-vault-managed-env.log`
+  - drop-in は proxy token を含むので、`settings.json` の `denyRead` で sandbox から読めない（他のユーザーには group を `wheel`・ACL を対象ユーザーだけにして隠す。macOS の標準ユーザーは全員 primary group が `staff` なので、`staff` の 0640 では同じ Mac の他ユーザーが読める）
+  - 残る制約（実機で確かめる）: Desktop が launch environment で同じ変数（`HTTPS_PROXY` / CA 系 / `GIT_CONFIG_COUNT`）を
+    設定していると、Desktop のセッションでは settings の `env` が無視される（2026-10-09 の実測では設定していなかった。
+    debug log に無視した変数名が出る）。`GIT_CONFIG_*` が Claude Code が settings の `env` で無視する変数に入っていないかは
+    未確認。本体（API）の通信が agent-vault の CA を要るか・`NODE_EXTRA_CA_CERTS` を起動後に読み直すかも未確認。
+    agent-vault が落ちてから drop-in が戻るまで（最大 `StartInterval`）は、Claude が API に繋がらない
+    （wrapper 経由で起動中のセッションも、process の env に `HTTPS_PROXY` が残るので同じ）
+  - account-exec は目印（`CLAUDE_GH_VAULT`）が無ければ従来の `gh_config_dir` を使う（人間の端末と同じ）
 - **本体の env に `AGENT_VAULT_TOKEN` を出さない**。agent-vault の CLI はこれで管理 API（`127.0.0.1:14321`。
   sandbox から到達できる）に認証するので、出すと sandbox 内から credential を読めてしまう。
   sandbox からの防壁は `~/.agent-vault` の denyRead（CLI のセッション `session.json` を含む）だけ
@@ -402,7 +423,8 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の g
 
 テスト: `bash claude-code/bin/claude.test.sh`（wrapper）、`bash claude-code/bin/account-exec.test.sh`（gh の
 config dir の選び方を含む）、`bash claude-code/bin/agent-vault-sync-gh.test.sh`、`bash tests/agent-vault.test.sh`
-（起動スクリプト・services と account-map と hosts.yml の一致・denyRead・固定版の binary）。
+（起動スクリプト・services と account-map と hosts.yml の一致・denyRead・固定版の binary）、
+`bash tests/agent-vault-managed-env.test.sh`（drop-in の内容が wrapper の env と一致すること・書き出し）。
 
 ## hooks
 

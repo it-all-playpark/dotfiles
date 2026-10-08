@@ -9,7 +9,7 @@
 # - services.yaml / account-map.json / agent-vault-gh/*/hosts.yml: gh のアカウント（placeholder）と
 #   git の振り分けが 3 か所で食い違わない
 # - settings.json: sandbox から ~/.agent-vault（DB・CA 鍵・セッション・proxy token）を読めず、
-#   gh の placeholder 入り config dir は読める
+#   gh の placeholder 入り config dir は読める。managed settings の drop-in（proxy token 入り）も読めない
 # - lib/agent-vault: 固定した版の binary（tier-2 で実際に build して version を見る）
 
 set -euo pipefail
@@ -19,6 +19,7 @@ LAUNCHER="${REPO_ROOT}/home-manager/home/file/agent-vault/agent-vault-server.sh"
 SERVICES="${REPO_ROOT}/home-manager/home/file/agent-vault/services.yaml"
 SETTINGS="${REPO_ROOT}/claude-code/settings.json"
 WRAPPER="${REPO_ROOT}/claude-code/bin/claude"
+MANAGED_ENV="${REPO_ROOT}/home-manager/home/file/agent-vault/agent-vault-managed-env.sh"
 ACCOUNT_MAP="${REPO_ROOT}/claude-code/account-map.json"
 VAULT_GH_SRC="${REPO_ROOT}/home-manager/home/file/agent-vault-gh"
 
@@ -302,6 +303,20 @@ if [ -n "${token_default}" ] &&
 else
   fail "settings_deny_read_agent_vault_dir" \
     "denyRead must cover ~/.agent-vault and the proxy token (${token_path:-<wrapper default not found>})"
+fi
+
+# managed settings の drop-in（proxy token 入り。agent-vault-managed-env.sh の既定の出力先）と、
+# 同じ dir に作る一時ファイルも塞ぐ
+# shellcheck disable=SC2016 # 意図的: スクリプトのソース上の "${...:-...}" を文字列として拾う
+managed_out="$(sed -n 's/^out="\${AGENT_VAULT_MANAGED_SETTINGS:-\(.*\)}"$/\1/p' "${MANAGED_ENV}")"
+echo "- settings_deny_read_managed_settings_dropin"
+if [ -n "${managed_out}" ] &&
+  read_denied "${managed_out}" &&
+  read_denied "$(dirname "${managed_out}")/.$(basename "${managed_out}").XXXXXX"; then
+  pass "settings_deny_read_managed_settings_dropin"
+else
+  fail "settings_deny_read_managed_settings_dropin" \
+    "denyRead must cover the managed settings drop-in dir (${managed_out:-<script default not found>})"
 fi
 
 # CA bundle は sandbox 内のコマンドが読む（GIT_SSL_CAINFO 等）ので塞がない
