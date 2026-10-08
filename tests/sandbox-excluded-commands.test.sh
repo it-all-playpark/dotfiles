@@ -10,9 +10,10 @@
 # form (`<name>`) and argument-taking form (`<name> *`), that every bin in
 # the skills checkout's plugins/*/bin/ is registered or listed in
 # UNREGISTERED_BINS with a reason (issue #238), and that the
-# pre-existing entries (path globs, gh / git, etc.) are preserved
+# pre-existing entries (path globs, codex / zernio, etc.) are preserved
 # unchanged. The .claude/skills 系 9 件は issue #179 で削除済み
 # （skills#584 の 3 plugin 化に追従）。
+# gh / git は issue #249 で削除済み（sandbox 内で agent-vault 経由で認証する）。
 # skills-wt/* と bats 系ランナーは脱出口になるので 05fe69a で削除済み（無いことを確かめる）。
 
 set -euo pipefail
@@ -302,10 +303,6 @@ fi
 # ---------------------------------------------------------------------------
 echo "- other_existing_entries_preserved"
 OTHER_ENTRIES=(
-  "gh"
-  "gh *"
-  "git"
-  "git *"
   "codex:*"
   "zernio:*"
 )
@@ -335,10 +332,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 72 ]; then
+if [ "${total_len}" -eq 68 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 72 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 68 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------

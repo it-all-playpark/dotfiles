@@ -96,7 +96,7 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
   `pnpm tf:init:stg` のような `cd infrastructure/terraform && tofu init …` も repo 内に留まるので同じ org で解決される
 - `git push`（https）の credential helper は `~/.config/git/config.local` に `gh auth git-credential` を
   **絶対パス**で書いている（`gh auth setup-git` の形）ので shim を通らず、常に `~/.config/gh` のアカウントになる。
-  agent-vault 経由のセッションでは agent-vault が owner ごとに Basic 認証を付けるので helper は呼ばれない（下記）
+  agent-vault 経由のセッションでは `bin/claude` が helper を空にし、agent-vault が owner ごとに Basic 認証を付ける（下記）
 - **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_CONFIG=… gcloud …` /
   `GOOGLE_APPLICATION_CREDENTIALS=… tofu …` のように対象 env が既に set なら判定しない
   （サービスアカウント鍵の明示指定もこれで通る）。実体を直接叩きたいときはこれか `~/.nix-profile/bin/gh`
@@ -201,7 +201,10 @@ vault に入れる token は、人間の端末で `gh auth login` 済みの gh �
 `~/.agent-vault/proxy-token` を読んで `HTTPS_PROXY` / `HTTP_PROXY` を
 `http://<proxy token>:default@127.0.0.1:14322` にし、`~/.local/state/agent-vault/ca-bundle.pem`
 （システムの CA + agent-vault の CA）を `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `GIT_SSL_CAINFO` に、
-目印の `CLAUDE_GH_VAULT=1` を付ける。bg job を動かす daemon は claude から on-demand で起動されるので、この env を継承する。
+目印の `CLAUDE_GH_VAULT=1` を付ける。git の credential helper は `GIT_CONFIG_COUNT=1` /
+`GIT_CONFIG_KEY_0=credential.helper` / `GIT_CONFIG_VALUE_0=`（空）で外す（空の helper は、それより前に読んだ
+`config.local` の `gh auth git-credential` を一覧から消す。この helper は `~/.config/gh` を読むので sandbox 内では動かない）。
+bg job を動かす daemon は claude から on-demand で起動されるので、この env を継承する。
 sandbox 内のコマンドの `HTTPS_PROXY` は Claude Code 自身の proxy に置き換わるので token は見えない。
 `~/.agent-vault`（DB・CA 鍵・セッション・proxy token）は `settings.json` の `denyRead` で sandbox から読めない。
 token ファイルが無い・agent-vault が落ちているときは env を付けずに起動する（後者は 1 行警告）。
@@ -214,9 +217,9 @@ gh pr create（cwd = ~/ghq/github.com/<org>/repo、sandbox 内でも bg job で�
       ├─ account-map.json の orgs[<org>].gh_vault_config_dir、無ければ default.gh_vault_config_dir
       └─ GH_CONFIG_DIR=~/.config/agent-vault-gh/<account> で gh を exec
            └─ Authorization: token __gh_<account>__ → agent-vault が vault の GH_TOKEN_<ACCOUNT> に置き換え
-git push（https）
+git push / fetch（https。sandbox 内でも bg job でも）
  └─ agent-vault が URL の owner で Basic 認証を付ける（github.com/BusinessProcessDX/* は th-it-dev、
-    それ以外は main）。最初のリクエストから付くので credential helper は呼ばれない
+    それ以外は main）。credential helper は bin/claude が空にしているので呼ばれない
 ```
 
 - GraphQL（`gh pr` / `gh issue` の大半が最初に叩く `/graphql`）は URL に owner が出ないので、vault 側の
@@ -322,9 +325,13 @@ ps eww -p $PPID                   # 失敗するか、HTTPS_PROXY（proxy token 
 echo "$CLAUDE_GH_VAULT"           # 1
 gh api user --jq .login           # cwd のアカウント（BusinessProcessDX の repo では th-it-dev）
 gh pr list --limit 1              # GraphQL が通る（playpark-llc・お客さんの repo でも）
+git config --get-all credential.helper; echo "rc=$?"   # 何も出ず rc=1（helper が空）
+git fetch --dry-run               # sandbox 内で通る（git / gh は excludedCommands に無い）
+git -C . ls-remote origin HEAD > "$TMPDIR/ls"; cat "$TMPDIR/ls"   # 複文・-C・リダイレクトでも同じ
+GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login                  # VAR=x 前置・連結でも同じ
 ```
 
-bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login` を確かめる。
+bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の git の行を確かめる。
 
 ### 決めたこと
 
@@ -353,8 +360,10 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login` を確か�
 - 未登録 host は既定の passthrough のまま（`unmatched_host_policy=deny` にしない）。sandbox 内の通信先は
   Claude Code の `allowedDomains`（`strictAllowlist`）が前段で絞っている。deny にすると、同じ proxy を通る
   Claude Code 本体の通信（api.anthropic.com 等）と sandbox の許可先を agent-vault にも二重に登録することになる
-- excludedCommands から git / gh を外すとき（#249）は、`pretool-gh-compound-guard.py` も一緒に外す。
-  この hook は gh を含むコマンドが excludedCommands に一致しないと deny するので、残すとすべての gh が止まる
+- **git / gh は sandbox 内で動かす（excludedCommands に入れない。#249）**。文字列一致で sandbox の外に出す方式は、
+  起動形（複文・リダイレクト・`git -C`・`VAR=x` 前置）で一致が外れて EPERM になり、一致すれば sandbox の外で
+  git の hooks が走る。agent-vault で sandbox 内のまま認証できるので外した。起動形を検査していた
+  `pretool-gh-compound-guard.py` も一緒に撤去した（残すと、excludedCommands に一致しない gh をすべて deny する）
 
 テスト: `bash claude-code/bin/claude.test.sh`（wrapper）、`bash claude-code/bin/account-exec.test.sh`（gh の
 config dir の選び方を含む）、`bash claude-code/bin/agent-vault-sync-gh.test.sh`、`bash tests/agent-vault.test.sh`
@@ -378,7 +387,6 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `PreToolUse` Bash (`git push*`) | `allow-feature-push.sh` | protected branch への push を抑止 |
 | `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを `ask`。1 段目は正規表現（`$PROD_*` / `.env.prod*` / `aws --profile *prod*`）、2 段目は字面で候補（cloud CLI / DB クライアント / `--context` 等 / prod・live・deploy 語）に絞った上で Jev に「本番に触るか」を判定させ p ≥ 0.7 で `ask`。判定は `~/.claude/logs/credential-guard.jsonl` に記録 |
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
-| `PreToolUse` Bash | `pretool-gh-compound-guard.py` | gh / git の通信系（push・pull・fetch・clone・ls-remote）を含む複合コマンドのうち、harness が sandbox 内に戻す形（除外対象外のコマンドとの連結、`cd X &&`、`VAR=x` 前置、ファイルへのリダイレクト、`$(...)`、for ループ、heredoc、そして単独でも `git -C` / `-c` / `--work-tree` / `--git-dir` 付きの git）を実行前に deny し、`--jq` / `gh -R` / `--body-file` / 呼び出し分割（`cd X` を単独で実行してから素の `git push`）への書き換えを理由として返す。gh は sandbox 内では denyRead の `~/.config/gh` を読めず、GitHub の git 認証も gh 経由なので同じく落ちる。除外パターンは `~/.claude/settings.json` の `sandbox.excludedCommands` から読む |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
 | `PermissionRequest` | `permission-journal.sh` | permission 要求を `~/.claude/logs/permission-requests.jsonl` に記録。Bash には Jev で効果種別 `class`（read_only / mutating_local / git_mutation / network / destructive）を付与（下記「Jev 分類」） |
