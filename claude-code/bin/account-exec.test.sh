@@ -27,7 +27,10 @@ for t in gh gcloud tofu; do
   fi
 done
 
-TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/account-exec-test.XXXXXX")"
+# TMPDIR は末尾に / が付くことがある（macOS の /var/folders/…/T/）。// が残ると cd 後の $PWD と
+# 一時 HOME の前方一致が外れて org を判定できないので、末尾の / を落とす
+TMPDIR_BASE="${TMPDIR:-/tmp}"
+TMPROOT="$(mktemp -d "${TMPDIR_BASE%/}/account-exec-test.XXXXXX")"
 trap 'rm -rf "$TMPROOT"' EXIT
 
 PASS=0
