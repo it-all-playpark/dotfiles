@@ -53,7 +53,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - 起動元 repo の `.git/config`（worktree も共有）は Claude Code の組み込み保護で書けない（設定で外せない）。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
-- `&` で起動したプロセスは名前で止められない（`ps` / `pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。止められなかったら人間に止めてもらう（2026-10-08 に負荷用の `yes` 16 本が 8 時間残り、Mac が詰まった）
+- `&` で起動したプロセスは名前で止められない（`pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。取り残したら `/usr/bin/pgrep -l <名前>` で PID を確かめ、`! kill <PID>` を示して人間に止めてもらう（下の「プロセス調査」）（2026-10-08 に負荷用の `yes` 16 本が 8 時間残り、Mac が詰まった）
 
 worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガードが「git に届かないと証明できない」コマンドを拒否する（設定では外せない）。拒否されない形で書く:
 - cwd はもう自分の worktree。`cd <worktree> &&` や `git -C` を付けず相対パスで叩く。git は素の形で 1 呼び出し 1 コマンド（`&&` 連結・`$(git …)` も拒否）
@@ -64,6 +64,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 - nix（daemon socket 許可済み）: nix を書いたら apply 前に `nix build` / `nix flake check` で自分で確かめる。ただし daemon は sandbox 外なので、nix 経由の取得は `allowedDomains` の制限を受けない。未知の flake や URL は通常の外部アクセスと同じ慎重さで扱う
 - Jev: `~/.local/state/jev-broker/jev.sock` 経由。sandbox 内では Keychain が exit 36 で読めないのが正常なので、ロック解除を試さない
 - Postgres: sandbox 内で `initdb` / docker は使わず、pg-broker に頼む。`pg-broker create` が返す `database_url`（非 superuser の `app`、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`。curl は deny なので使わない
+- プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/bin/ps` `/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は `top -l 1 -o mem -n 15 -stats pid,command,mem` のように引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
 - pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
 
 sandbox に塞がれたら:
@@ -116,4 +117,9 @@ sandbox に塞がれたら:
   認証できるようになったため。起動形（cd X && / VAR=x 前置 / リダイレクト / git -C）で一致が外れて EPERM になる問題と、
   一致すると git の hooks が sandbox 外で走る問題が両方なくなった。「gh を呼ぶ skill スクリプトは bare 形で」のルールと
   pretool-gh-compound-guard.py を削除。worktree 隔離ガードの書き方（上の節）は Claude Code 組み込みの別物なので残す。
+- 2026-10-08 プロセス系を excludedCommands に追加: sandbox 内では ps / top が setuid の exec で EPERM、pgrep / pkill が
+  "sysmond service not found"、lsof は自プロセスのみ、kill は sandbox 外のプロセスに EPERM（実測）。メモリ逼迫時に原因プロセスを
+  特定・停止できなかった。どれも SIP 保護下で書き換え不可。PATH 解決で別物に化けないよう絶対パスだけで登録する。
+  見るだけに留め、kill / pkill は登録しない: sandbox 外の kill は持ち主の任意プロセスに signal を送れ（`kill -9 -1` で全プロセス、
+  `pkill -f node` で Claude 本体・他セッション）、歯止めが auto mode の判定だけになる。取り残し対策は寿命ルール（#268）で先回りする。
 -->
