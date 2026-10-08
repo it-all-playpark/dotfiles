@@ -67,10 +67,7 @@ count_entry() {
 
 BARE_NAMES=(
   "cross-repo-artifacts"
-  "detect-and-install"
   "diff-risk-classify"
-  "ensure-worktree-deps"
-  "redgreen-verify"
   "secfloor-classify"
   "structural-classify"
   "veridelta-archive"
@@ -135,6 +132,9 @@ UNREGISTERED_BINS=(
   "ui-verify-stack|repo の dev コマンドを実行する。sandbox 外に出すと脱出口になる（skills #766）"
   "workspace-prebuild|repo の pnpm build を実行する。sandbox 外に出すと脱出口になる"
   "run-tests|repo の tests/run-*.sh や pnpm test を実行する。sandbox 外に出すと脱出口になる"
+  "detect-and-install|repo の依存を install する（postinstall は repo の任意コード）。sandbox 外に出すと脱出口になる（skills #868）"
+  "ensure-worktree-deps|detect-and-install を呼ぶ。sandbox 外に出すと脱出口になる（skills #868）"
+  "redgreen-verify|repo のテストを実行する。sandbox 外に出すと脱出口になる（skills #868）"
   "local-verify|repo が宣言した検証コマンドを worktree で bash -c 実行する。sandbox 外に出すと脱出口になる（skills #863）"
   "ci-wait|gh も git 書き込みも呼ばない"
   "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
@@ -332,10 +332,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 68 ]; then
+if [ "${total_len}" -eq 62 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 68 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 62 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------

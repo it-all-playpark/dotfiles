@@ -127,6 +127,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# npm_cache_writable
+# dev-flow の deps install（npm ci）は sandbox 内で走る（skills #868）。
+# ~/.npm/_cacache に書けないと EPERM で落ちる。~/.npm の他（_npx 等）は開けない。
+# ---------------------------------------------------------------------------
+echo "- npm_cache_writable"
+cache_file="${HOME}/.npm/_cacache/content-v2/sha512/00/ab/abc"
+if write_allowed "${cache_file}" && ! write_allowed "${HOME}/.npm/_npx/abc/package.json"; then
+  pass "npm_cache_writable"
+else
+  fail "npm_cache_writable" "${cache_file} must be writable and ~/.npm/_npx must not be"
+fi
+
+# ---------------------------------------------------------------------------
 # tmp_root_not_writable
 # ---------------------------------------------------------------------------
 echo "- tmp_root_not_writable"
