@@ -210,17 +210,6 @@
       {
         "hooks": [
           {
-            "command": "f=\"$HOME/.claude/hooks/pretool-gh-compound-guard.py\"; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"",
-            "statusMessage": "gh sandbox 実行形チェック中...",
-            "timeout": 5,
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
             "command": "f=\"$HOME/.claude/hooks/pretool-live-skills-git-guard.py\"; [ -f \"$f\" ] || exit 0; exec python3 \"$f\"",
             "statusMessage": "live skills checkout の git チェック中...",
             "timeout": 5,
@@ -548,10 +537,6 @@
     "autoAllowBashIfSandboxed": true,
     "enabled": true,
     "excludedCommands": [
-      "gh",
-      "gh *",
-      "git",
-      "git *",
       "/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",
       "python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*",

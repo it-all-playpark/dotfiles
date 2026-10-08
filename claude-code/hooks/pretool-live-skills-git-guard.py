@@ -4,9 +4,11 @@
 背景:
   ~/.claude/skills は it-all-playpark/skills の checkout そのもので、Claude Code が
   毎セッション skill / agent / hook として読み込む。sandbox は repo 全体を書き込み
-  禁止にしているが、excludedCommands の素の git は sandbox 外で動くので、
-  `git checkout <branch>` / `git reset --hard` / `git pull` などで中身を差し替えられる。
-  差し替えた内容は次のセッションで sandbox 外の hook としても動き得る。
+  禁止にしている。この hook を足した当時は素の git が excludedCommands で sandbox 外で
+  動いたので、`git checkout <branch>` / `git reset --hard` / `git pull` などで中身を
+  差し替えられた（差し替えた内容は次のセッションで sandbox 外の hook としても動き得る）。
+  git / gh を excludedCommands から外した後（issue #249）は素の git も sandbox 内で走り、
+  書き換えは repo の保護で失敗する。この hook はその手前で、開発先（skills-dev）を示して止める。
 
   開発は通常の clone（~/ghq/github.com/it-all-playpark/skills-dev）で行い、PR を
   merge したあと live checkout を人間が pull する。live checkout でエージェントが
@@ -16,8 +18,8 @@
   - payload の cwd が live checkout（~/.claude/skills の実体）の中
     （.claude/worktrees/ 配下は別 worktree なので対象外）
   - コマンドに、書き換え系サブコマンドの素の git が含まれる
-  -C / -c / --git-dir / --work-tree 付きの git は sandbox 内で走り、repo の保護で
-  失敗するので対象外（ここでは止めない）。読むだけの git は素通し。
+  -C / -c / --git-dir / --work-tree 付きの git は対象外（ここでは止めない。当時から
+  sandbox 内で走り、repo の保護で失敗する）。読むだけの git は素通し。
 
 出力:
   deny 時: {"hookSpecificOutput":{"hookEventName":"PreToolUse",
@@ -68,7 +70,7 @@ def inside_live(cwd, root):
 
 
 def git_subcommand(words):
-    """素の git のサブコマンドを返す。-C 等で sandbox 行きになる git と git 以外は None。"""
+    """素の git のサブコマンドを返す。-C 等の付いた git と git 以外は None。"""
     i = 0
     while i < len(words) and ASSIGNMENT.match(words[i]):
         i += 1

@@ -9,7 +9,7 @@
 #   tofu/terraform  → GOOGLE_APPLICATION_CREDENTIALS=<gcloud_config_dir>/application_default_credentials.json
 # を付け、PATH から shim dir を除いて解決した実体を exec する。exec 先の PATH は元のまま。
 # git の credential helper（~/.config/git/config.local の `gh auth git-credential`）は gh を絶対パスで
-# 呼ぶので shim を通らない。
+# 呼ぶので shim を通らない。agent-vault 経由のセッションでは bin/claude がこの helper を外す。
 #
 # agent-vault 経由の Claude Code セッション（bin/claude が CLAUDE_GH_VAULT=1 を付ける）では、gh は
 # gh_config_dir ではなく gh_vault_config_dir を使う。中身は本物の token の代わりに placeholder を
