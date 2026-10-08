@@ -116,11 +116,13 @@ run_launcher() {
 echo "- launcher_passes_password_via_stdin"
 run_launcher master-password
 argv="$(cat "${STUB_OUT}/server.argv" 2>/dev/null || true)"
+# argv はファイルから直接 grep する。`printf | grep -q` は grep が先に一致して抜けると
+# printf（bash の builtin は 1 行ずつ write する）が SIGPIPE で落ち、pipefail で偽になる
 if [ "${RC}" -eq 0 ] &&
   [ "$(cat "${STUB_OUT}/server.stdin" 2>/dev/null)" = "pw-s3cret" ] &&
-  printf '%s\n' "${argv}" | grep -qx -- '--password-stdin' &&
-  printf '%s\n' "${argv}" | grep -qx -- '--mitm-port' &&
-  printf '%s\n' "${argv}" | grep -qx -- '14322' &&
+  grep -qx -- '--password-stdin' "${STUB_OUT}/server.argv" &&
+  grep -qx -- '--mitm-port' "${STUB_OUT}/server.argv" &&
+  grep -qx -- '14322' "${STUB_OUT}/server.argv" &&
   ! grep -q 'pw-s3cret' "${STUB_OUT}/server.argv" "${STUB_OUT}/server.env"; then
   pass "launcher_passes_password_via_stdin"
 else
@@ -129,14 +131,17 @@ fi
 
 # ---------------------------------------------------------------------------
 # launcher_writes_ca_bundle: システムの CA bundle + agent-vault の CA を連結して書く
-# （書くのは server と並行して動く background job なので、出来上がるまで待つ）
+# （書くのは server と並行して動く background job なので、期待する内容になり、job が最後に
+# 書くログが出るまで待つ。ログ前に抜けると、次のケースが launcher.err を作り直した後に
+# この job のログが先頭へ上書きされる）
 # ---------------------------------------------------------------------------
 echo "- launcher_writes_ca_bundle"
+expected="$(cat "${TMPROOT}/system-ca.pem")"$'\n'"-----BEGIN CERTIFICATE-----"$'\n'"VAULT-CA"$'\n'"-----END CERTIFICATE-----"
 for _ in $(seq 1 50); do
-  [ -s "${CA_BUNDLE}" ] && break
+  [ "$(cat "${CA_BUNDLE}" 2>/dev/null)" = "${expected}" ] &&
+    grep -q 'wrote CA bundle' "${TMPROOT}/launcher.err" && break
   sleep 0.1
 done
-expected="$(cat "${TMPROOT}/system-ca.pem")"$'\n'"-----BEGIN CERTIFICATE-----"$'\n'"VAULT-CA"$'\n'"-----END CERTIFICATE-----"
 if [ -f "${CA_BUNDLE}" ] && [ "$(cat "${CA_BUNDLE}")" = "${expected}" ]; then
   pass "launcher_writes_ca_bundle"
 else
