@@ -42,12 +42,16 @@ log() {
 }
 
 token=""
-# root で動くので、token ファイルはリンクを辿らず、対象ユーザーが所有する通常ファイルのときだけ読む。
+# root で動くので、token ファイルは対象ユーザーが所有する通常ファイルのときだけ読む。
 # ユーザーが書ける場所にあるので、root 専用ファイルへの symlink にされると中身が drop-in（ユーザーが読める）に漏れる。
+# パスで検査してから読むと間に差し替えられる（TOCTOU）ので、先に fd を開き、その fd の種別・所有者を確かめて
+# 同じ fd から読む（/dev/fd/N の stat は開いた先のファイルを返す）。開く前の -f は FIFO で open が止まるのを避けるため。
 owner_uid="$(id -u "$token_owner")"
-if [ ! -L "$token_file" ] && [ -f "$token_file" ] &&
-  [ "$(/usr/bin/stat -f %u "$token_file")" = "$owner_uid" ]; then
-  token="$(tr -d '[:space:]' <"$token_file")"
+if [ ! -L "$token_file" ] && [ -f "$token_file" ] && exec 3<"$token_file"; then
+  if [ "$(/usr/bin/stat -f '%u %HT' /dev/fd/3)" = "$owner_uid Regular File" ]; then
+    token="$(tr -d '[:space:]' <&3)"
+  fi
+  exec 3<&-
 fi
 
 if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
