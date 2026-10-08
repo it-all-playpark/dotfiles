@@ -551,7 +551,12 @@
       "zenn-publish",
       "zenn-publish *",
       "codex:*",
-      "zernio:*"
+      "zernio:*",
+      "/bin/ps *",
+      "/usr/bin/top *",
+      "/usr/bin/pgrep *",
+      "/usr/sbin/lsof *",
+      "/bin/kill *"
     ],
     "failIfUnavailable": true,
     "filesystem": {
