@@ -5,7 +5,7 @@
 # Requires: jq, python3
 #
 # 偽の token / CA bundle と、python3 で 127.0.0.1 の空き port を listen して agent-vault の代わりにする。
-# 出力先は $TMPDIR 配下（実際の /Library には触れない）。chown は偽物（root:staff を記録するだけ）、
+# 出力先は $TMPDIR 配下（実際の /Library には触れない）。chown は偽物（root:wheel を記録するだけ）、
 # mv は引数を記録してから本物を呼ぶ。wrapper（claude-code/bin/claude）は claude.test.sh と同じく
 # 偽の実体を exec させ、付いた env を drop-in の env と突き合わせる。
 
@@ -237,7 +237,8 @@ mode_of() {
 }
 
 # ---------------------------------------------------------------------------
-# write_via_temp_file_with_mode_0640: 同じ dir の一時ファイルを root:staff 0640 にしてから mv で置き換え、
+# write_via_temp_file_with_mode_0640: 同じ dir の一時ファイルを root:wheel 0640 + 実行ユーザーだけの読み取り ACL
+# にしてから mv で置き換え（staff は macOS の標準ユーザー全員の primary group なので使わない）、
 # dir には drop-in だけが残る（managed-settings.json 本体は作らない）
 # ---------------------------------------------------------------------------
 echo "- write_via_temp_file_with_mode_0640"
@@ -248,16 +249,18 @@ chown_args="$(cat "${STUB_OUT}/chown" 2>/dev/null || true)"
 tmp_src="${mv_args#-f }"
 tmp_src="${tmp_src% "${OUT}"}"
 perm="$(mode_of "${OUT}" 2>/dev/null || true)"
+acl="$(/bin/ls -le "${OUT}" 2>/dev/null | sed -n '2,$p' || true)"
 if [ "${RC}" -eq 0 ] && [ "${mv_args}" = "-f ${tmp_src} ${OUT}" ] &&
   [ "$(dirname "${tmp_src}")" = "${DIR}" ] &&
   case "${tmp_src}" in *.json) false ;; *) true ;; esac &&
-  [ "${chown_args}" = "root:staff ${tmp_src}" ] &&
+  [ "${chown_args}" = "root:wheel ${tmp_src}" ] &&
   [ "${perm}" = 0o640 ] &&
+  [ "$(printf '%s\n' "${acl}" | sed 's/^ *//')" = "0: user:$(id -un) allow read" ] &&
   [ "$(ls -A "${DIR}")" = "50-agent-vault.json" ]; then
   pass "write_via_temp_file_with_mode_0640"
 else
   fail "write_via_temp_file_with_mode_0640" \
-    "rc=${RC} mv=[${mv_args}] chown=[${chown_args}] perm=${perm} dir=[$(ls -A "${DIR}" 2>/dev/null)] err=${ERR}"
+    "rc=${RC} mv=[${mv_args}] chown=[${chown_args}] perm=${perm} acl=[${acl}] dir=[$(ls -A "${DIR}" 2>/dev/null)] err=${ERR}"
 fi
 
 # ---------------------------------------------------------------------------

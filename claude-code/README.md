@@ -394,7 +394,7 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の g
   （Desktop には起動バイナリを差し替える設定も無い）。ファイルの managed settings はどの起動でも読まれるので、
   root の LaunchDaemon `com.playpark.agent-vault-managed-env`（`darwin/agent-vault.nix`、
   `home-manager/home/file/agent-vault/agent-vault-managed-env.sh`）が wrapper と同じ判定で
-  `/Library/Application Support/ClaudeCode/managed-settings.d/50-agent-vault.json`（`root:staff 0640`）を書く。
+  `/Library/Application Support/ClaudeCode/managed-settings.d/50-agent-vault.json`（`root:wheel 0640` + 対象ユーザーだけの読み取り ACL）を書く。
   - agent-vault が使えるとき: wrapper と同じ `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` / CA 3 つ / `CLAUDE_GH_VAULT=1` /
     `GIT_CONFIG_*`（0: github.com の credential helper を空、1: `branch.autoSetupMerge`、2: `push.default`）。
     使えないとき（token なし・CA なし・port が閉じている）は `GIT_CONFIG_*` の 2 つだけ。index は wrapper と同じなので、
@@ -402,7 +402,7 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の g
   - 起動は `RunAtLoad`・`StartInterval`（30 秒）・`WatchPaths`（token ファイルと CA bundle）。内容が同じなら書き換えない。
     書き出しは同じ dir の一時ファイル → `mv`（壊れた JSON の drop-in があると Claude Code は起動しない）。
     ログは `/var/log/agent-vault-managed-env.log`
-  - drop-in は proxy token を含むので、`settings.json` の `denyRead` で sandbox から読めない（他のユーザーには 0640 で隠す）
+  - drop-in は proxy token を含むので、`settings.json` の `denyRead` で sandbox から読めない（他のユーザーには group を `wheel`・ACL を対象ユーザーだけにして隠す。macOS の標準ユーザーは全員 primary group が `staff` なので、`staff` の 0640 では同じ Mac の他ユーザーが読める）
   - 残る制約（実機で確かめる）: Desktop が launch environment で同じ変数（`HTTPS_PROXY` / CA 系 / `GIT_CONFIG_COUNT`）を
     設定していると、Desktop のセッションでは settings の `env` が無視される（2026-10-09 の実測では設定していなかった。
     debug log に無視した変数名が出る）。`GIT_CONFIG_*` が Claude Code が settings の `env` で無視する変数に入っていないかは

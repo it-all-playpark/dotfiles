@@ -17,8 +17,8 @@
 #   HTTPS_PROXY を固定で書くと、agent-vault が落ちている間は本体の通信（api.anthropic.com 等）も止まるので、
 #   毎回 port を確かめて書き換える（fail-open）。
 #
-# 書き出し: 同じ dir の一時ファイル（名前が .json で終わらないので読まれない）に書き、root:staff 0640 にしてから
-# mv で置き換える（壊れた JSON の drop-in があると Claude Code は起動しない）。内容が同じなら書き換えない。
+# 書き出し: 同じ dir の一時ファイル（名前が .json で終わらないので読まれない）に書き、root:wheel 0640 + 対象ユーザーだけの
+# 読み取り ACL にしてから mv で置き換える（壊れた JSON の drop-in があると Claude Code は起動しない）。内容が同じなら書き換えない。
 # proxy token は argv に出さない（root のプロセスの argv は他のユーザーからも見える）。jq には env で渡す。
 #
 # 環境変数（darwin/agent-vault.nix の launchd 定義が渡す。テスト・一時上書き用。名前と既定値は wrapper と同じ）:
@@ -97,7 +97,10 @@ if [ -f "$out" ] && cmp -s "$tmp" "$out"; then
   exit 0
 fi
 
+# macOS の標準ユーザーは全員 primary group が staff なので、group は wheel にして対象ユーザーだけに ACL で読ませる。
+# ACL は BSD の chmod でしか付けられない（nix の coreutils の chmod は +a を知らない）ので絶対パスで呼ぶ。
 chmod 0640 "$tmp"
-chown root:staff "$tmp"
+chown root:wheel "$tmp"
+/bin/chmod +a "user:$token_owner allow read" "$tmp"
 mv -f "$tmp" "$out"
 log "wrote $out ($state)"
