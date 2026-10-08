@@ -6,9 +6,10 @@
 # hooksPath 自体は触らず、git が見る場所に .githooks/<name> へ委譲する shim を置く。
 # shim は実行時の作業ツリー（worktree を含む）の .githooks を呼ぶので、ブランチごとの hook が効く。
 #
-# Claude Code の git は sandbox 外で動く。作業ツリーの .githooks / tests / flake.nix は sandbox から
-# 書けるので、Claude のセッション（CLAUDECODE=1）では shim が何も呼ばずに抜ける。shim の置き場
-# （.git/hooks）は sandbox から書けないので、この判定は Claude から外せない。
+# Claude のセッション（CLAUDECODE=1）では shim が何も呼ばずに抜ける（Claude の push は CI が検査する）。
+# 入れた当時は Claude Code の git が sandbox 外で動き、sandbox から書ける作業ツリーの .githooks / tests /
+# flake.nix を hook から実行すると脱出口になったため（issue #249 で git は sandbox 内で動くようになった）。
+# shim の置き場（.git/hooks）は sandbox から書けないので、この判定は Claude から外せない。
 set -euo pipefail
 
 MARKER="# dotfiles: .githooks dispatcher"

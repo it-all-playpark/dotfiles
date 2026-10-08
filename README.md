@@ -211,8 +211,9 @@ PR と main への push で GitHub Actions（`.github/workflows/ci.yml`、macOS�
 git の hooks ディレクトリに `.githooks/` を呼ぶ shim を置きます（worktree でも各ブランチの `.githooks` が効く）。
 devShell の外で commit しても、hook が devShell に入り直して treefmt を実行します。
 
-Claude Code のセッション（`CLAUDECODE=1`）では hook は何もしません。Claude の git は sandbox 外で動くため、
-作業ツリーのスクリプトを hook から実行すると sandbox の脱出口になるからです。Claude の push は CI が検査します。
+Claude Code のセッション（`CLAUDECODE=1`）では hook は何もしません。Claude の push は CI が検査します。
+（git を sandbox 外で動かしていた頃は、作業ツリーのスクリプトを hook から実行すると sandbox の脱出口になるのが
+理由だった。issue #249 で git は sandbox 内で動くようになった）
 
 テストは `*.test.sh` / `*_test.sh` / `test-*.sh` / `*.bats`（`tests/`・`claude-code/`・`scripts/` 配下）の命名にすれば自動で拾われます。
 
