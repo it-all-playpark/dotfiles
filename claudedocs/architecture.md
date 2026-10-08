@@ -71,7 +71,6 @@ Skills are in a separate repository: [it-all-playpark/skills](https://github.com
 
 `scripts/setup-skills.sh` creates symlinks for:
 
-- Claude Code (`~/.claude/skills`)
 - Codex (`~/.codex/skills`)
 - Antigravity (`~/.gemini/antigravity/skills`)
 

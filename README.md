@@ -141,9 +141,10 @@ sudo が必要な `.pkg` 系 cask は無人では更新できずログに `FAILE
 
 | ツール | Symlink パス |
 |--------|-------------|
-| Claude Code | `~/.claude/skills` |
 | Codex | `~/.codex/skills` |
 | Antigravity | `~/.gemini/antigravity/skills` |
+
+Claude Code は playpark marketplace の plugin で読み込むので `~/.claude/skills` は貼らない（[claude-code/README.md](claude-code/README.md) の導入手順）。
 
 ### セットアップ
 

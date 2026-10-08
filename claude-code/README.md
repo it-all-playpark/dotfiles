@@ -40,8 +40,8 @@ hook が強制していることは書かない。強調（IMPORTANT / 絵文字
    `account-exec` への symlink なので `~/.claude/bin/gh` → `bin/gh` → `account-exec` の 2 段になる）
 7. `account-map.json` を `~/.claude/account-map.json` に symlink
 
-`skills/` は `scripts/setup-skills.sh` で別管理（`setup.sh` から呼び出される）。
-activation 側では触らないので、既存の symlink を壊さない。
+`skills/` は貼らない。skill は playpark marketplace の plugin で読み込む（`~/.claude/skills` が repo を指すと
+組み込み保護が repo の `.git` まで及び、sandbox 内で commit できなくなる）。
 
 ```bash
 nix run .#update
@@ -521,8 +521,8 @@ main に追随できるよう、旧 link mode の inline marketplace `playpark-l
 `bin/` の bare 名（`journal` / `secfloor-classify` 等）は Claude Code が plugin の `bin/` を
 PATH に載せることで解決する。`sandbox.excludedCommands` には bare 名を登録し、
 `~/.claude/skills/*` 系 glob は撤去済み（issue #179）。gh を内部で呼ぶ skill スクリプトを
-パス指定で起動する形は、plugin cache（`~/.claude/plugins/cache/playpark/*`）と skills の
-checkout / `skills-wt/` の両方を bare / `bash` / `python3` の 3 形で登録している。
+パス指定で起動する形は、plugin cache（`~/.claude/plugins/cache/playpark/*`）だけを bare / `bash` / `python3`
+の 3 形で登録している。skills の checkout は sandbox から書けるので登録しない（書き換えて sandbox 外で実行できる脱出口になる）。
 
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
 移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。

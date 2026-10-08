@@ -10,11 +10,11 @@
 # form (`<name>`) and argument-taking form (`<name> *`), that every bin in
 # the skills checkout's plugins/*/bin/ is registered or listed in
 # UNREGISTERED_BINS with a reason (issue #238), and that the
-# pre-existing entries (path globs, codex / zernio, etc.) are preserved
+# pre-existing entries (codex / zernio, etc.) are preserved
 # unchanged. The .claude/skills 系 9 件は issue #179 で削除済み
 # （skills#584 の 3 plugin 化に追従）。
 # gh / git は issue #249 で削除済み（sandbox 内で agent-vault 経由で認証する）。
-# skills-wt/* と bats 系ランナーは脱出口になるので 05fe69a で削除済み（無いことを確かめる）。
+# skills の checkout 配下の glob と bats 系ランナーは脱出口になるので登録しない（無いことを確かめる）。
 
 set -euo pipefail
 
@@ -212,38 +212,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# legacy_path_globs_preserved
+# skills_checkout_globs_not_excluded
+# skills の checkout（skills / skills-dev / skills-wt）は sandbox から書ける場所なので、
+# そこのスクリプトを sandbox 外で実行させると脱出口になる。skills の実行物は
+# plugin cache（sandbox から書けない）のパスか bin/ の bare 名で登録する。
 # ---------------------------------------------------------------------------
-echo "- legacy_path_globs_preserved"
-# shellcheck disable=SC2016 # 意図的に非展開: settings.json に格納された literal string と照合する
-LEGACY_GLOBS=(
-  '/Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*'
-  'bash /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*'
-  'python3 /Users/naramotoyuuji/ghq/github.com/it-all-playpark/skills/*'
-  'bash $HOME/ghq/github.com/it-all-playpark/skills/*'
-  'python3 $HOME/ghq/github.com/it-all-playpark/skills/*'
-)
-missing_legacy=()
-for g in "${LEGACY_GLOBS[@]}"; do
-  has_entry "${g}" || missing_legacy+=("${g}")
-done
-if [ "${#missing_legacy[@]}" -eq 0 ]; then
-  pass "legacy_path_globs_preserved"
+echo "- skills_checkout_globs_not_excluded"
+skills_checkout_left="$(jq -r '[.[] | select(test("it-all-playpark/skills(-dev|-wt)?/"))] | join(", ")' <<<"${EXCLUDED_JSON}")"
+if [ -z "${skills_checkout_left}" ]; then
+  pass "skills_checkout_globs_not_excluded"
 else
-  fail "legacy_path_globs_preserved" "Missing legacy globs: ${missing_legacy[*]}"
-fi
-
-# ---------------------------------------------------------------------------
-# skills_wt_globs_removed
-# skills-wt は sandbox から書ける場所なので、そこのスクリプトを sandbox 外で
-# 実行させると脱出口になる。skills の開発は通常 clone（skills-dev）に移した（05fe69a）。
-# ---------------------------------------------------------------------------
-echo "- skills_wt_globs_removed"
-skills_wt_left="$(jq -r '[.[] | select(contains("skills-wt"))] | join(", ")' <<<"${EXCLUDED_JSON}")"
-if [ -z "${skills_wt_left}" ]; then
-  pass "skills_wt_globs_removed"
-else
-  fail "skills_wt_globs_removed" "Should be removed but present: ${skills_wt_left}"
+  fail "skills_checkout_globs_not_excluded" "Writable from sandbox but excluded: ${skills_checkout_left}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -331,10 +310,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 30 ]; then
+if [ "${total_len}" -eq 25 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 30 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 25 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
