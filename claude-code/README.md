@@ -252,7 +252,28 @@ agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles/home-
 # 4. Claude Code 用の agent と proxy token
 agent-vault agent create claude-code --vault default:proxy --token-only > ~/.agent-vault/proxy-token
 chmod 600 ~/.agent-vault/proxy-token
-# 5. 起動中の claude と daemon を止めて、wrapper（~/.claude/bin/claude）経由で起動し直す
+# 5. 起動中の claude と daemon を止めて、wrapper（~/.claude/bin/claude）経由で起動し直す（下記）
+```
+
+#### claude と daemon の起動し直し
+
+bg job は daemon の env を受け継ぎ、daemon は最初に `claude agents` / `claude --bg` を実行した claude の env で
+立ち上がる。`claude agents` は動いている daemon があればそれに接続するだけなので、claude を抜けて入り直しても
+daemon は古い env（`HTTPS_PROXY` も `CLAUDE_GH_VAULT` も無い）のまま残る。daemon が事前に起動しておく
+予備のプロセス（`claude bg-pty-host` / `claude bg-spare`）も同じ env で、親の daemon が終わっても PID 1 の下に残る。
+これらを止めてから起動し直す。daemon を止めるコマンドは `claude` に無いので、プロセスを止める
+（動いている bg job はすべて終了する）:
+
+```bash
+pkill -f 'claude daemon run'
+pkill -f 'claude bg-pty-host'
+pkill -f 'claude bg-spare'
+ps -axo pid,command | grep -E '[c]laude (daemon|bg-)'   # 何も出なければ止まっている
+
+# 新しいタブで（既存の zsh は claude の場所を覚えていることがあるので、使うなら rehash してから）
+which claude                      # ~/.claude/bin/claude（~/.zshenv / fish の設定が PATH の先頭に置く）
+claude agents --cwd "$(pwd)"      # wrapper の env を持った daemon が新しく起動する
+ps eww -p "$(pgrep -f 'claude daemon run')" | tr ' ' '\n' | grep -cE '^(CLAUDE_GH_VAULT|HTTPS_PROXY)='   # 2
 ```
 
 状態は `launchctl print gui/$(id -u)/com.playpark.agent-vault` と `~/.local/state/agent-vault.err.log` で見る。
@@ -260,7 +281,7 @@ chmod 600 ~/.agent-vault/proxy-token
 - `gh auth login` / `gh auth refresh` / token の revoke の後は `agent-vault-sync-gh` をもう一度実行する
   （vault の写しが古いと gh・git が 401 になる）
 - proxy token を替えるときは `agent-vault agent rotate claude-code` の出力で `proxy-token` を書き換え、
-  claude と daemon を起動し直す（bg job は daemon の env を使うので、daemon を止めないと古い token のまま 407 になる）
+  上の「claude と daemon の起動し直し」をする（daemon と予備のプロセスを止めないと、bg job は古い token のまま 407 になる）
 
 ### 実機での確認（初回セットアップ後）
 
