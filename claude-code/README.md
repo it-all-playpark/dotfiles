@@ -329,9 +329,17 @@ git config --get-all credential.helper; echo "rc=$?"   # 何も出ず rc=1（hel
 git fetch --dry-run               # sandbox 内で通る（git / gh は excludedCommands に無い）
 git -C . ls-remote origin HEAD > "$TMPDIR/ls"; cat "$TMPDIR/ls"   # 複文・-C・リダイレクトでも同じ
 GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login                  # VAR=x 前置・連結でも同じ
+# 書き込みを伴う git（feature branch で確かめる。.git・~/ghq への書き込みが sandbox の allowWrite で通ること）
+git push -u origin HEAD           # vault の Basic 認証で通る（保護ブランチは allow-feature-push.sh が止める）
+git worktree add "$TMPDIR/wt-check" HEAD && git worktree remove "$TMPDIR/wt-check"   # .git への書き込みが通る
+git clone https://github.com/it-all-playpark/dotfiles.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
 ```
 
-bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の git の行を確かめる。
+上の push / worktree / clone のどれかが sandbox に塞がれたら、RULES.md の Sandbox 節に代わりの手順を書くか、
+その操作だけ扱いを分ける（excludedCommands に戻さない。git を sandbox 外に出すと hook・設定経由の脱出口になる）。
+
+bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の git の行（push・worktree・clone を含む）を確かめる。
+あわせて git / gh を使う skill（dep-guardian・zenn-publish・qiita-publish）を 1 回ずつ流し、結果を PR に記録してからマージする。
 
 ### 決めたこと
 
