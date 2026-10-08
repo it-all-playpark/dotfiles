@@ -555,8 +555,7 @@
       "/bin/ps *",
       "/usr/bin/top *",
       "/usr/bin/pgrep *",
-      "/usr/sbin/lsof *",
-      "/bin/kill *"
+      "/usr/sbin/lsof *"
     ],
     "failIfUnavailable": true,
     "filesystem": {

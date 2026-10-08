@@ -296,10 +296,9 @@ fi
 
 # ---------------------------------------------------------------------------
 # process_tools_by_sip_path
-# ps / top は setuid、pgrep は sysmond、lsof / kill は他プロセスに届かず
-# sandbox 内では動かない。SIP 保護下の絶対パスで登録し、PATH で別物に解決され
-# うる bare 名では登録しない。pkill はパターン一致で巻き込みやすいので登録しない
-# （止めるのは PID を確かめてから kill）。
+# ps / top は setuid、pgrep は sysmond、lsof は他プロセスに届かず sandbox 内では
+# 動かない。SIP 保護下の絶対パスで登録し、PATH で別物に解決されうる bare 名では
+# 登録しない。見るだけに留め、kill / pkill は登録しない（止めるのは人間）。
 # ---------------------------------------------------------------------------
 echo "- process_tools_by_sip_path"
 PROCESS_TOOLS=(
@@ -307,7 +306,6 @@ PROCESS_TOOLS=(
   "/usr/bin/top"
   "/usr/bin/pgrep"
   "/usr/sbin/lsof"
-  "/bin/kill"
 )
 bad_process=()
 for p in "${PROCESS_TOOLS[@]}"; do
@@ -337,10 +335,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 30 ]; then
+if [ "${total_len}" -eq 29 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 30 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 29 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
