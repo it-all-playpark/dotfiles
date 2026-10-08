@@ -18,11 +18,23 @@
 #   CLAUDE_GH_VAULT=1          account-exec（gh の shim）への目印。gh は cwd のアカウントの placeholder 入り
 #                              config dir（~/.config/agent-vault-gh/<account>）を使い、agent-vault が
 #                              placeholder を本物の token に置き換える。bg job も daemon 経由でこの env を継承する
-#   GIT_CONFIG_COUNT=1 / GIT_CONFIG_KEY_0=credential.helper / GIT_CONFIG_VALUE_0=（空）
+#   GIT_CONFIG_KEY_n=credential.helper / GIT_CONFIG_VALUE_n=（空）
 #                              git の credential helper を空にする（空の helper は一覧を消す。env の設定は
 #                              ~/.config/git/config.local の `gh auth git-credential` より後に読まれる）。
 #                              helper は gh を絶対パスで呼んで ~/.config/gh を読むので sandbox 内では動かない。
 #                              github.com の認証は agent-vault が owner ごとの Basic 認証で付ける
+#
+# 付ける env（常に）:
+#   GIT_CONFIG_KEY_n=branch.autoSetupMerge / GIT_CONFIG_VALUE_n=false
+#   GIT_CONFIG_KEY_n=push.default / GIT_CONFIG_VALUE_n=current
+#                              Claude Code の sandbox は起動元 repo の .git/config と .git/hooks を常に
+#                              write deny にする（sandbox-runtime の mandatory deny。settings.json では外せない）。
+#                              worktree もこの config を共有するので、upstream を書く操作（origin/<x> からの
+#                              branch / worktree add -b、push -u）が EPERM で失敗するか中断する。upstream を
+#                              自動で書かせず、upstream が無くても素の `git push` が同名 branch に push する
+#
+# GIT_CONFIG_* は既にある GIT_CONFIG_COUNT の後ろに積む。Claude Code も sandbox 内のコマンドに
+# safe.directory を同じ形で積み足すので、ここで入れた設定は sandbox 内の git にも届く。
 #
 # 本体の env に AGENT_VAULT_TOKEN を出さない（agent-vault CLI がそれで管理 API に認証し、
 # sandbox 内から credential を読めてしまう）。
@@ -47,6 +59,13 @@ ca_bundle="${AGENT_VAULT_CA_BUNDLE:-$HOME/.local/state/agent-vault/ca-bundle.pem
 port="${AGENT_VAULT_PROXY_PORT:-14322}"
 vault="${AGENT_VAULT_VAULT:-default}"
 
+# git -c 相当の設定を env で足す（既にある GIT_CONFIG_COUNT の後ろに積む）
+git_config_add() {
+  local n="${GIT_CONFIG_COUNT:-0}"
+  export "GIT_CONFIG_KEY_$n=$1" "GIT_CONFIG_VALUE_$n=$2"
+  export GIT_CONFIG_COUNT=$((n + 1))
+}
+
 if [ -z "${HTTPS_PROXY:-}" ] && [ -r "$token_file" ]; then
   token="$(tr -d '[:space:]' <"$token_file")"
   if [ -z "$token" ]; then
@@ -61,10 +80,14 @@ if [ -z "${HTTPS_PROXY:-}" ] && [ -r "$token_file" ]; then
     export NO_PROXY="localhost,127.0.0.1,::1"
     export NODE_EXTRA_CA_CERTS="$ca_bundle" SSL_CERT_FILE="$ca_bundle" GIT_SSL_CAINFO="$ca_bundle"
     export CLAUDE_GH_VAULT=1
-    export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
+    git_config_add credential.helper ""
   fi
   unset token proxy
 fi
+
+# 起動元 repo の .git/config は sandbox が書かせない（下の header 参照）ので、upstream を書きに行かせない
+git_config_add branch.autoSetupMerge false
+git_config_add push.default current
 
 # PATH から shim dir（$HOME/.claude/bin と自身の物理 dir）を除いて実体を解決する
 self="$0"

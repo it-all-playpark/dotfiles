@@ -330,13 +330,27 @@ git fetch --dry-run               # sandbox 内で通る（git / gh は excluded
 git -C . ls-remote origin HEAD > "$TMPDIR/ls"; cat "$TMPDIR/ls"   # 複文・-C・リダイレクトでも同じ
 GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login                  # VAR=x 前置・連結でも同じ
 # 書き込みを伴う git（feature branch で確かめる。.git・~/ghq への書き込みが sandbox の allowWrite で通ること）
-git push -u origin HEAD           # vault の Basic 認証で通る（保護ブランチは allow-feature-push.sh が止める）
-git worktree add "$TMPDIR/wt-check" HEAD && git worktree remove "$TMPDIR/wt-check"   # .git への書き込みが通る
+git config --get-all branch.autoSetupMerge; git config --get push.default   # false / current（wrapper の env）
+git push origin                   # vault の Basic 認証で通る。upstream が無くても同名 branch へ（-u は付けない）
+git worktree add -b wt-check "$TMPDIR/wt-check" origin/main && git worktree remove "$TMPDIR/wt-check" && git branch -D wt-check   # upstream を書かずに通る
 git clone https://github.com/it-all-playpark/dotfiles.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
 ```
 
 上の push / worktree / clone のどれかが sandbox に塞がれたら、RULES.md の Sandbox 節に代わりの手順を書くか、
 その操作だけ扱いを分ける（excludedCommands に戻さない。git を sandbox 外に出すと hook・設定経由の脱出口になる）。
+
+**起動元 repo の `.git/config` は sandbox 内から書けない**（2026-10-08、Claude Code 2.1.293 で実測）。Claude Code に
+組み込まれた sandbox-runtime が、起動ディレクトリの `.git` が実ディレクトリなら `<cwd>/.git/config` と
+`<cwd>/.git/hooks` を mandatory deny にする（sandbox 外で走る git に `core.fsmonitor` 等を仕込ませないため）。
+runtime には `allowGitConfig` があるが settings.json のスキーマに無く、外せない。worktree は起動元の
+`.git/config` を共有するので同じく書けない。別 repo（clone 先・skills-dev 等）の `.git/config` は書ける。
+
+| 操作 | sandbox 内の結果（対処前） | 対処 |
+|------|------|------|
+| `git worktree add -b X <path> origin/main`・`git switch -c X origin/main`・`git switch X`（origin/X から自動作成） | upstream を書けず中断（rc 255）/ branch だけ残って rc 1 | wrapper が `branch.autoSetupMerge=false` を入れる |
+| `git push -u` | push は通るが upstream を書けずにエラー表示 | `-u` を付けない。wrapper の `push.default=current` で素の `git push` が同名 branch へ |
+| `gh pr checkout`（未実測。branch の upstream を `git config` で書く） | 失敗する見込み | `git fetch origin <branch>` → `git switch <branch>` |
+| `git config --local` / `git remote add/set-url` | 書けない（rc 255） | 人間が通常ターミナルで行う |
 
 bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の git の行（push・worktree・clone を含む）を確かめる。
 あわせて git / gh を使う skill（dep-guardian・zenn-publish・qiita-publish）を 1 回ずつ流し、結果を PR に記録してからマージする。

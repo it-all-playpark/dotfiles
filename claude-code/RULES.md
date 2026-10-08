@@ -49,6 +49,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - process substitution `<(…)` は使わない（`/dev/fd/*` が塞がれる）。tempfile に落としてから渡す
 - `~/ghq/github.com/it-all-playpark/skills` は `~/.claude/skills` として読み込まれている live checkout。sandbox から書けず、作業ツリーを書き換える git も hook が止める。skills の開発は通常の clone `~/ghq/github.com/it-all-playpark/skills-dev`（無ければ `git clone https://github.com/it-all-playpark/skills.git` で作る）で行う。そこでは git・`npm ci`・テスト・worktree が sandbox 内で普通に動く。live checkout の更新は merge 後に人間が pull する
 - Bash から書けない場所（sandbox 外で実行されるので書き換えが脱出口になる）: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.claude/skills`・`.husky`・`.githooks`。編集は Edit / Write ツールで行う（dotfiles の 2 つは worktree 側なら Bash でも書ける）
+- 起動元 repo の `.git/config`（worktree も共有）は Claude Code の組み込み保護で書けない（設定で外せない）。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
 
