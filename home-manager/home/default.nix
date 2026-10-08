@@ -163,21 +163,6 @@ in
 
       # ~/.claude/skills は貼らない（skill は plugin で読み込む。claude-code/README.md 参照）
 
-      # ~/.claude/agents → skills repo の .claude/agents
-      # dev-kickoff-worker 等の subagent 定義。任意 repo で dev-flow を実行するには
-      # user-global (~/.claude/agents) で解決させる必要があるため home-manager で symlink。
-      SKILLS_AGENTS="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/skills/.claude/agents"
-      CLAUDE_AGENTS="$CLAUDE_DIR/agents"
-      if [ -d "$SKILLS_AGENTS" ]; then
-        if [ -L "$CLAUDE_AGENTS" ] || [ ! -e "$CLAUDE_AGENTS" ]; then
-          ln -sfn "$SKILLS_AGENTS" "$CLAUDE_AGENTS"
-        else
-          echo "Warning: $CLAUDE_AGENTS exists and is not a symlink. Skipping (manual review needed)."
-        fi
-      else
-        echo "Warning: $SKILLS_AGENTS does not exist. Skipping agents symlink."
-      fi
-
       # settings.json へのシンボリックリンク
       # 既存ファイルがシンボリックリンクでない場合は削除
       if [ -f "$CLAUDE_DIR/settings.json" ] && [ ! -L "$CLAUDE_DIR/settings.json" ]; then
