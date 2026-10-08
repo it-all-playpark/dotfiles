@@ -3,8 +3,11 @@
 # setup-skills.sh - Setup Agent Skills symlinks for multiple AI tools
 #
 # This script creates symlinks from various AI agent tools to a shared
-# skills repository, enabling skill sharing across Claude Code,
-# Codex, and Antigravity.
+# skills repository, enabling skill sharing across Codex and Antigravity.
+#
+# Claude Code は playpark marketplace の plugin で skill を読み込むので ~/.claude/skills は貼らない。
+# ~/.claude/skills は Claude Code の組み込み保護で sandbox から書けず、repo ルートを指すと
+# .git ごと書けなくなり、skills repo で commit / worktree が動かなくなる。
 #
 # Usage:
 #   ./setup-skills.sh [--skills-repo PATH]
@@ -29,7 +32,6 @@ SKILLS_REPO="${DEFAULT_SKILLS_REPO}"
 # config_dir: The agent's config directory (e.g., ~/.claude)
 # skills_subpath: Subdirectory for skills within the config (e.g., "skills" or "antigravity/skills")
 AGENT_CONFIGS=(
-  "${HOME}/.claude:skills"
   "${HOME}/.codex:skills"
   "${HOME}/.gemini:antigravity/skills"
 )
@@ -58,7 +60,6 @@ print_usage() {
   echo "                      Default: ${DEFAULT_SKILLS_REPO}"
   echo ""
   echo "Supported AI Agents:"
-  echo "  - Claude Code  (~/.claude/skills)"
   echo "  - Codex        (~/.codex/skills)"
   echo "  - Antigravity  (~/.gemini/antigravity/skills)"
 }

@@ -161,13 +161,11 @@ in
       # ~/.claude ディレクトリ作成
       mkdir -p "$CLAUDE_DIR"
 
-      # skills ディレクトリは setup-skills.sh で管理（setup.sh から呼び出される）
-      # ここでは触れない - 既存の symlink を保持するため
+      # ~/.claude/skills は貼らない（skill は plugin で読み込む。claude-code/README.md 参照）
 
       # ~/.claude/agents → skills repo の .claude/agents
       # dev-kickoff-worker 等の subagent 定義。任意 repo で dev-flow を実行するには
       # user-global (~/.claude/agents) で解決させる必要があるため home-manager で symlink。
-      # skills 本体は setup-skills.sh 管理だが、agents は cwd 非依存解決が必須なのでここで貼る。
       SKILLS_AGENTS="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/skills/.claude/agents"
       CLAUDE_AGENTS="$CLAUDE_DIR/agents"
       if [ -d "$SKILLS_AGENTS" ]; then
