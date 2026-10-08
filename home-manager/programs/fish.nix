@@ -14,12 +14,15 @@ in
 
       starship init fish | source
       zoxide init fish | source
-      mise activate fish | source
+      # zsh と同じ shims 方式。PATH には mise の shims を 1 つ置くだけで、プロンプトごとの hook-env は走らない。
+      # 非 shims の activate は、プロンプトや cd のたびに hook-env が mise のツール（installs）を
+      # ~/.claude/bin より前に戻し、claude が wrapper を通らなくなる（activate_aggressive=false でも、
+      # activate の前に PATH から外しても同じ。2026-10-08 実測）。shims 方式ではシェルに JAVA_HOME / GOROOT /
+      # CARGO_HOME 等が入らない（shims 経由で起動したツールには付く）。mise 外で足したコマンドは mise reshim が要る
+      mise activate fish --shims | source
 
       # gh / gcloud / tofu の cwd 連動アカウント shim と claude の wrapper (~/.claude/bin)。
-      # mise は activate の後に PATH へ足したものを自分のツールより前に保つ（activate_aggressive=false、既定）ので、
-      # activate の後に先頭へ置く。前に置くと mise の claude-code が wrapper より先に見つかる。
-      # --path で PATH を直接書き換える（既定の fish_user_paths 経由だと mise の hook-env がツールを前に戻す）。
+      # mise の shims より前に置く（後ろだと mise の claude-code が wrapper より先に見つかる）。
       # 設計: docs/specs/2026-09-19-claude-account-env-design.md
       fish_add_path --path --move $HOME/.claude/bin
 

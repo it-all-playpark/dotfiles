@@ -83,12 +83,16 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
 別アカウントで GCS 等を叩いて 403 になる。tofu（Go の `x/oauth2`）は `CLOUDSDK_CONFIG` を見ず
 `~/.config/gcloud/` 固定で ADC を探すため、`GOOGLE_APPLICATION_CREDENTIALS` でファイルを明示する。
 
-- `~/.claude/bin` は home-manager が zsh / fish の PATH 先頭に載せる。mise より後に足すことが要る:
-  fish は `mise activate` の後に `fish_add_path --path --move`（mise は activate の後に PATH へ足したものを
-  自分のツールより前に保つ。`activate_aggressive` が既定の `false` のとき。`--path` が無いと `fish_user_paths`
-  経由になり、mise の hook-env がツールを前に戻す）、zsh は `initContent` で mise の shims を入れた後に
-  先頭へ移し直す（`.zshenv` の `envExtra` でも入れるが、非対話の zsh 向け）。mise より前に足すと、mise で入れた
-  `claude` が `bin/claude`（agent-vault の wrapper）より先に見つかる。
+- `~/.claude/bin` は home-manager が zsh / fish の PATH 先頭に載せる。mise は zsh / fish とも shims 方式
+  （fish は `mise activate fish --shims`、zsh は `~/.local/share/mise/shims` を `path` に直接入れる）で、
+  shims を入れた後に `~/.claude/bin` を先頭へ移す: fish は `fish_add_path --path --move`、zsh は `initContent`
+  （`.zshenv` の `envExtra` でも入れるが、非対話の zsh 向け）。
+  mise より前に足すと、mise で入れた `claude` が `bin/claude`（agent-vault の wrapper）より先に見つかる。
+  fish を非 shims の `mise activate` にすると、プロンプトや `cd` のたびに走る hook-env が mise のツールを
+  `~/.claude/bin` より前に戻す（`activate_aggressive=false` でも同じ。2026-10-08 実測）。素の `claude agents` が
+  wrapper を通らずに daemon を立て、bg job に agent-vault の env と `GIT_CONFIG_*` が届かなくなっていた。
+  shims 方式ではシェルに `JAVA_HOME` / `GOROOT` / `CARGO_HOME` 等が入らない（shims 経由で起動したツールには付く）。
+  mise の外で足したコマンド（`npm i -g` / `cargo install` 等）は `mise reshim` するまで見えない。
   `which claude` / `which gh` / `which gcloud` / `which tofu` は `~/.claude/bin/…` を指すようになる。Claude Code セッション内では加えて
   SessionStart hook `session-start-account-path.sh` が `$CLAUDE_ENV_FILE` に同じ export を書き、
   起動元の PATH に依存せず shim が効くようにする
@@ -281,8 +285,12 @@ ps -axo pid,command | grep -E '[c]laude (daemon|bg-)'   # 何も出なければ�
 
 # 新しいタブで（既存の zsh は claude の場所を覚えていることがあるので、使うなら rehash してから）
 which claude                      # ~/.claude/bin/claude（~/.zshenv / fish の設定が PATH の先頭に置く）
+                                  # mise の installs/claude-code を指すなら fish が非 shims の activate のまま（上記）
 claude agents --cwd "$(pwd)"      # wrapper の env を持った daemon が新しく起動する
 ps eww -p "$(pgrep -f 'claude daemon run')" | tr ' ' '\n' | grep -cE '^(CLAUDE_GH_VAULT|HTTPS_PROXY)='   # 2
+ps eww -p "$(pgrep -f 'claude daemon run')" | tr ' ' '\n' | grep -E '^GIT_CONFIG_KEY_[0-9]+='
+# credential.https://github.com.helper / branch.autoSetupMerge / push.default の 3 つが出る。
+# CLAUDE_GH_VAULT はあるのにこの 3 つが無ければ、#256 より前の wrapper で起動した daemon が残っている
 ```
 
 状態は `launchctl print gui/$(id -u)/com.playpark.agent-vault` と `~/.local/state/agent-vault.err.log` で見る。
@@ -334,7 +342,9 @@ GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login            
 git config --get-all branch.autoSetupMerge; git config --get push.default   # false / current（wrapper の env）
 git push origin                   # vault の Basic 認証で通る。upstream が無くても同名 branch へ（-u は付けない）
 git worktree add -b wt-check "$TMPDIR/wt-check" origin/main && git worktree remove "$TMPDIR/wt-check" && git branch -D wt-check   # upstream を書かずに通る
-git clone https://github.com/it-all-playpark/dotfiles.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
+git clone https://github.com/it-all-playpark/skills.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
+# .githooks / .husky を持つ repo（dotfiles 自身など）は、settings.json の denyWrite（~/ghq/**/.githooks 等）で
+# checkout が落ちる（Clone succeeded, but checkout failed）。hook を書き換えて sandbox 外で走らせないための意図した挙動
 ```
 
 上の push / worktree / clone のどれかが sandbox に塞がれたら、RULES.md の Sandbox 節に代わりの手順を書くか、
@@ -352,6 +362,8 @@ runtime には `allowGitConfig` があるが settings.json のスキーマに無
 | `git push -u` | push は通るが upstream を書けずにエラー表示 | `-u` を付けない。wrapper の `push.default=current` で素の `git push` が同名 branch へ |
 | `gh pr checkout`（未実測。branch の upstream を `git config` で書く） | 失敗する見込み | `git fetch origin <branch>` → `git switch <branch>` |
 | `git config --local` / `git remote add/set-url` | 書けない（rc 255） | 人間が通常ターミナルで行う |
+| `git branch -D X` | rc 0 で branch は消えるが、`branch.X` 節を消せずに config lock の警告が出る | upstream 無しで作った branch なら実害なし。人間が upstream 付きで作った branch の節は通常ターミナルで `git config --remove-section` |
+| worktree の中での `gh pr close <N> --delete-branch` | close は通るが、gh がローカルで main に switch しようとして「別の worktree で使用中」で止まり、branch も消えない（sandbox とは無関係） | `gh pr close <N>` → `git push origin --delete <branch>` に分ける |
 
 bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の git の行（push・worktree・clone を含む）を確かめる。
 あわせて git / gh を使う skill（dep-guardian・zenn-publish・qiita-publish）を 1 回ずつ流し、結果を PR に記録してからマージする。
