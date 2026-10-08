@@ -201,6 +201,29 @@ else
 fi
 
 echo ""
+echo "--- token ファイルの検査（root で読むので、リンクと他人のファイルは読まない） ---"
+
+# check_token_rejected <name> [VAR=value...]: token を読まず、proxy 抜きの内容を書く
+check_token_rejected() {
+  local name="$1" out
+  shift
+  out="${TMPROOT}/${name}/50-agent-vault.json"
+  echo "- ${name}"
+  run_script "${out}" "$@"
+  if [ "${RC}" -eq 0 ] && jq -e --argjson want "${INACTIVE_ENV}" '. == {env: $want}' "${out}" >/dev/null 2>&1; then
+    pass "${name}"
+  else
+    fail "${name}" "rc=${RC} out=$(cat "${out}" 2>/dev/null || echo '<missing>') err=${ERR}"
+  fi
+}
+
+# root 専用ファイルの代わり: 中身が token として通る別ファイルへの symlink
+printf 'secret_from_target\n' >"${TMPROOT}/link-target"
+ln -s "${TMPROOT}/link-target" "${TMPROOT}/proxy-token-link"
+check_token_rejected token_symlink_is_not_followed AGENT_VAULT_PROXY_TOKEN_FILE=[REDACTED:ENV_SECRET]
+check_token_rejected token_owned_by_other_user_is_not_read AGENT_VAULT_TOKEN_OWNER=root
+
+echo ""
 echo "--- 書き出し ---"
 
 DIR="${TMPROOT}/write/managed-settings.d"

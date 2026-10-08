@@ -26,6 +26,7 @@
 #   AGENT_VAULT_CA_BUNDLE         既定 $HOME/.local/state/agent-vault/ca-bundle.pem
 #   AGENT_VAULT_PROXY_PORT        既定 14322
 #   AGENT_VAULT_VAULT             既定 default
+#   AGENT_VAULT_TOKEN_OWNER       token ファイルの所有者でなければならないユーザー（既定 実行ユーザー）
 #   AGENT_VAULT_MANAGED_SETTINGS  書き出す drop-in（既定 /Library/Application Support/ClaudeCode/managed-settings.d/50-agent-vault.json）
 set -euo pipefail
 
@@ -33,6 +34,7 @@ token_file="${AGENT_VAULT_PROXY_TOKEN_FILE:-$HOME/.agent-vault/proxy-token}"
 ca_bundle="${AGENT_VAULT_CA_BUNDLE:-$HOME/.local/state/agent-vault/ca-bundle.pem}"
 port="${AGENT_VAULT_PROXY_PORT:-14322}"
 vault="${AGENT_VAULT_VAULT:-default}"
+token_owner="${AGENT_VAULT_TOKEN_OWNER:-$(id -un)}"
 out="${AGENT_VAULT_MANAGED_SETTINGS:-/Library/Application Support/ClaudeCode/managed-settings.d/50-agent-vault.json}"
 
 log() {
@@ -40,7 +42,11 @@ log() {
 }
 
 token=""
-if [ -r "$token_file" ]; then
+# root で動くので、token ファイルはリンクを辿らず、対象ユーザーが所有する通常ファイルのときだけ読む。
+# ユーザーが書ける場所にあるので、root 専用ファイルへの symlink にされると中身が drop-in（ユーザーが読める）に漏れる。
+owner_uid="$(id -u "$token_owner")"
+if [ ! -L "$token_file" ] && [ -f "$token_file" ] &&
+  [ "$(/usr/bin/stat -f %u "$token_file")" = "$owner_uid" ]; then
   token="$(tr -d '[:space:]' <"$token_file")"
 fi
 

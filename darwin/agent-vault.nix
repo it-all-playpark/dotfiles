@@ -22,6 +22,7 @@ in
         PATH = "${pkgs.jq}/bin:/usr/bin:/bin:/usr/sbin:/sbin";
         AGENT_VAULT_PROXY_TOKEN_FILE = tokenFile;
         AGENT_VAULT_CA_BUNDLE = caBundle;
+        AGENT_VAULT_TOKEN_OWNER = username;
       };
       RunAtLoad = true;
       StartInterval = 30;
