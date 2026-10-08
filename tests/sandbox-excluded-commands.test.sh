@@ -4,9 +4,9 @@
 # Run from the repo root: bash tests/sandbox-excluded-commands.test.sh
 # Requires: jq
 #
-# Verifies that the bin/ bare command names (30 names, resolved via PATH
-# once skills#582 (dev-flow/playpark-core) and skills#585 (playpark-skills)'s
-# bin/ wrappers are installed) are registered in both their argument-less
+# Verifies that the bin/ bare command names that must run outside the sandbox
+# (resolved via PATH once skills#582 (dev-flow/playpark-core) and skills#585
+# (playpark-skills)'s bin/ wrappers are installed) are registered in both their argument-less
 # form (`<name>`) and argument-taking form (`<name> *`), that every bin in
 # the skills checkout's plugins/*/bin/ is registered or listed in
 # UNREGISTERED_BINS with a reason (issue #238), and that the
@@ -66,22 +66,7 @@ count_entry() {
 }
 
 BARE_NAMES=(
-  "cross-repo-artifacts"
-  "diff-risk-classify"
-  "secfloor-classify"
-  "structural-classify"
-  "veridelta-archive"
-  "worktree-diff-hash"
-  "worktree-teardown"
-  "merge-tier-facts"
-  "dev-flow-ready-set"
-  "pr-push"
-  "pr-iterate-prerun"
   "journal"
-  "check-ci"
-  "analyze-issue"
-  "detect-stack"
-  "ac-lint"
   "dep-guardian-discover-prs"
   "dep-guardian-test-pr"
   "dep-guardian-merge-prs"
@@ -123,10 +108,9 @@ fi
 
 # ---------------------------------------------------------------------------
 # skills_bins_registered / skills_bins_check_detects_unregistered
-# skills の plugins/*/bin/ にある bare 名は、sandbox 外で動かす必要がある
-# （gh を呼ぶ・git object を書く）ので excludedCommands に登録する。
-# 登録し忘れると sandbox 内で落ちる（merge-tier-facts / dev-flow-ready-set, issue #238）。
-# 意図的に登録しない bin は理由つきでここに書く（"<name>|<reason>"）。
+# skills の plugins/*/bin/ にある bare 名は、sandbox 外で動かす必要があるものだけ
+# excludedCommands に登録する。登録しない bin は理由つきでここに書く（"<name>|<reason>"）。
+# どちらにも無い bin は分類漏れとして落とす（issue #238）。
 # ---------------------------------------------------------------------------
 UNREGISTERED_BINS=(
   "ui-verify-stack|repo の dev コマンドを実行する。sandbox 外に出すと脱出口になる（skills #766）"
@@ -137,6 +121,22 @@ UNREGISTERED_BINS=(
   "redgreen-verify|repo のテストを実行する。sandbox 外に出すと脱出口になる（skills #868）"
   "local-verify|repo が宣言した検証コマンドを worktree で bash -c 実行する。sandbox 外に出すと脱出口になる（skills #863）"
   "ci-wait|gh も git 書き込みも呼ばない"
+  "ac-lint|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "analyze-issue|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "check-ci|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "cross-repo-artifacts|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "detect-stack|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "dev-flow-prerun|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "dev-flow-ready-set|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "diff-risk-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "merge-tier-facts|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "pr-iterate-prerun|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "pr-push|push と pre-push hook（repo の任意コード）を sandbox 内で走らせる（skills #871）"
+  "secfloor-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "structural-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "veridelta-archive|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "worktree-diff-hash|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "worktree-teardown|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "gmail-receipts|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "blog-cross-post-resolve-source|gh も git 書き込みも呼ばない"
@@ -201,8 +201,7 @@ echo "- skills_bins_check_detects_unregistered"
 FIXTURE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sandbox-excluded-fixture.XXXXXX")"
 trap 'rm -rf "${FIXTURE_DIR}"' EXIT
 mkdir -p "${FIXTURE_DIR}/dev-flow/bin" "${FIXTURE_DIR}/playpark-core/bin"
-touch "${FIXTURE_DIR}/dev-flow/bin/merge-tier-facts" \
-  "${FIXTURE_DIR}/dev-flow/bin/ci-wait" \
+touch "${FIXTURE_DIR}/dev-flow/bin/ci-wait" \
   "${FIXTURE_DIR}/dev-flow/bin/unregistered-fixture-bin" \
   "${FIXTURE_DIR}/playpark-core/bin/journal"
 detected="$(unregistered_skills_bins "${FIXTURE_DIR}")"
@@ -332,10 +331,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 62 ]; then
+if [ "${total_len}" -eq 30 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 62 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 30 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
