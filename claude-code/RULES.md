@@ -53,6 +53,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - 起動元 repo の `.git/config`（worktree も共有）は Claude Code の組み込み保護で書けない（設定で外せない）。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
+- `&` で起動したプロセスは名前で止められない（`ps` / `pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。止められなかったら人間に止めてもらう（2026-10-08 に負荷用の `yes` 16 本が 8 時間残り、Mac が詰まった）
 
 worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガードが「git に届かないと証明できない」コマンドを拒否する（設定では外せない）。拒否されない形で書く:
 - cwd はもう自分の worktree。`cd <worktree> &&` や `git -C` を付けず相対パスで叩く。git は素の形で 1 呼び出し 1 コマンド（`&&` 連結・`$(git …)` も拒否）
