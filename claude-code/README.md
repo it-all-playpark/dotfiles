@@ -227,23 +227,53 @@ git push（https）
 新規ファイルなので activation で `~/.claude/bin/` に張られる。
 
 ```bash
-# 0. 手で起動した agent-vault（/usr/local/bin の install script 版。#247 の PoC）があれば止め、binary を消す。
-#    PoC の CLI セッション（~/.agent-vault/session.json）は denyRead が入る前の sandbox から使えたので revoke する
-agent-vault auth sessions list    # → 該当セッションを revoke
-agent-vault server stop
-# 1. マスターパスワードを login keychain に置く（既存の ~/.agent-vault を使うならその password）
+# 0. 手で起動した agent-vault（/usr/local/bin の install script 版。#247 の PoC）があれば、
+#    CLI セッションを revoke し（denyRead が入る前の sandbox から使えた）、server を止めて binary と DB を捨てる。
+#    PoC の DB はパスワードなしモードで作られていることがあり、そのままでは launchd 版（--password-stdin）で開けない
+agent-vault auth sessions list                 # → 該当セッションを revoke
+/usr/local/bin/agent-vault server stop
+lsof -nP -iTCP:14321 -iTCP:14322 -sTCP:LISTEN  # 何も出なければ止まっている
+sudo rip /usr/local/bin/agent-vault            # /usr/local/bin は root 所有なので sudo
+rip ~/.agent-vault                             # PoC の DB・CA（新しく作り直す）
+# 1. マスターパスワード（DB の暗号鍵を守る。launchd の起動スクリプトが使う）を 1Password で生成・保存し、
+#    同じ値を login keychain に置く。launchd が起動すると、このパスワードで新しい DB が作られる
 security add-generic-password -s agent-vault -a master-password -w
 launchctl kickstart -k gui/$(id -u)/com.playpark.agent-vault
-# 2. credential: gh にログイン済みの token（main と th-it-dev）を写す。PoC の credential は消す
+tail -n 2 ~/.local/state/agent-vault.err.log   # "wrote CA bundle: …" が出れば起動している
+#    owner アカウント（CLI・Web UI のログイン用。マスターパスワードとは別の値にして 1Password に保存）を作り、
+#    以後の自己登録を閉じる（管理 API の 127.0.0.1:14321 は sandbox からも届くので、開けたままにしない）
+agent-vault auth register
+agent-vault owner config set --invite-only
+agent-vault owner config get                   # invite_only: enabled
+# 2. credential: gh にログイン済みの token（main と th-it-dev）を写す
 agent-vault-sync-gh
-agent-vault vault credential list                       # PoC の残り（GH_PAT 等）があれば次で消す
-agent-vault vault credential delete GH_PAT GH_BASIC_USER
 # 3. services
 agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles/home-manager/home/file/agent-vault/services.yaml
 # 4. Claude Code 用の agent と proxy token
 agent-vault agent create claude-code --vault default:proxy --token-only > ~/.agent-vault/proxy-token
 chmod 600 ~/.agent-vault/proxy-token
-# 5. 起動中の claude と daemon を止めて、wrapper（~/.claude/bin/claude）経由で起動し直す
+# 5. 起動中の claude と daemon を止めて、wrapper（~/.claude/bin/claude）経由で起動し直す（下記）
+```
+
+#### claude と daemon の起動し直し
+
+bg job は daemon の env を受け継ぎ、daemon は最初に `claude agents` / `claude --bg` を実行した claude の env で
+立ち上がる。`claude agents` は動いている daemon があればそれに接続するだけなので、claude を抜けて入り直しても
+daemon は古い env（`HTTPS_PROXY` も `CLAUDE_GH_VAULT` も無い）のまま残る。daemon が事前に起動しておく
+予備のプロセス（`claude bg-pty-host` / `claude bg-spare`）も同じ env で、親の daemon が終わっても PID 1 の下に残る。
+これらを止めてから起動し直す。daemon を止めるコマンドは `claude` に無いので、プロセスを止める
+（動いている bg job はすべて終了する）:
+
+```bash
+pkill -f 'claude daemon run'
+pkill -f 'claude bg-pty-host'
+pkill -f 'claude bg-spare'
+ps -axo pid,command | grep -E '[c]laude (daemon|bg-)'   # 何も出なければ止まっている
+
+# 新しいタブで（既存の zsh は claude の場所を覚えていることがあるので、使うなら rehash してから）
+which claude                      # ~/.claude/bin/claude（~/.zshenv / fish の設定が PATH の先頭に置く）
+claude agents --cwd "$(pwd)"      # wrapper の env を持った daemon が新しく起動する
+ps eww -p "$(pgrep -f 'claude daemon run')" | tr ' ' '\n' | grep -cE '^(CLAUDE_GH_VAULT|HTTPS_PROXY)='   # 2
 ```
 
 状態は `launchctl print gui/$(id -u)/com.playpark.agent-vault` と `~/.local/state/agent-vault.err.log` で見る。
@@ -251,7 +281,7 @@ chmod 600 ~/.agent-vault/proxy-token
 - `gh auth login` / `gh auth refresh` / token の revoke の後は `agent-vault-sync-gh` をもう一度実行する
   （vault の写しが古いと gh・git が 401 になる）
 - proxy token を替えるときは `agent-vault agent rotate claude-code` の出力で `proxy-token` を書き換え、
-  claude と daemon を起動し直す（bg job は daemon の env を使うので、daemon を止めないと古い token のまま 407 になる）
+  上の「claude と daemon の起動し直し」をする（daemon と予備のプロセスを止めないと、bg job は古い token のまま 407 になる）
 
 ### 実機での確認（初回セットアップ後）
 
@@ -260,22 +290,22 @@ chmod 600 ~/.agent-vault/proxy-token
 ```bash
 tok=$(tr -d '[:space:]' < ~/.agent-vault/proxy-token)
 p="http://$tok:default@127.0.0.1:14322"
-# gh: placeholder が置き換わり main / th-it-dev が返る。x509 で落ちたら下の CA の信頼を足す
+# gh: placeholder が置き換わり main / th-it-dev が返る
 HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/main gh api user --jq .login
 HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/th-it-dev gh api user --jq .login
-# git: owner ごとの Basic 認証（BusinessProcessDX の private repo で th-it-dev、それ以外で main）
-HTTPS_PROXY=$p GIT_SSL_CAINFO=~/.local/state/agent-vault/ca-bundle.pem git ls-remote https://github.com/BusinessProcessDX/<private-repo> HEAD
+# git: owner ごとの Basic 認証（BusinessProcessDX の private repo で th-it-dev、それ以外で main）。
+# credential helper を外して、vault の認証だけで通ることを見る
+HTTPS_PROXY=$p GIT_SSL_CAINFO=~/.local/state/agent-vault/ca-bundle.pem GIT_TERMINAL_PROMPT=0 \
+  git -c credential.helper= ls-remote https://github.com/BusinessProcessDX/<private-repo> HEAD
+HTTPS_PROXY=$p GIT_SSL_CAINFO=~/.local/state/agent-vault/ca-bundle.pem GIT_TERMINAL_PROMPT=0 \
+  git -c credential.helper= ls-remote https://github.com/playpark-llc/<private-repo> HEAD
 unset tok p
 ```
 
-gh（Go）は macOS では `SSL_CERT_FILE` を見ずに Keychain の root を使う可能性がある。`gh api user` が
-`x509: certificate signed by unknown authority` で落ちたら、agent-vault の CA を login keychain で信頼する
-（ユーザーのすべての TLS 通信でこの CA が信頼されるようになる。CA 鍵は `~/.agent-vault/ca/ca.key.enc` で
-マスターパスワードで暗号化されている）:
-
-```bash
-security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db ~/.agent-vault/ca/ca.crt.pem
-```
+gh 2.102（Go）は macOS でも `SSL_CERT_FILE` の bundle で agent-vault の CA を信頼した（2026-10-08 に確認。
+login keychain に CA を信頼させる必要は無かった）。将来 `x509: certificate signed by unknown authority` で
+落ちるようになったら、`security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db
+~/.agent-vault/ca/ca.crt.pem` で信頼させる（ユーザーのすべての TLS 通信でこの CA が信頼されるようになる）。
 
 Claude Code のセッション内（wrapper 経由で起動）で:
 
