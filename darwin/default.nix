@@ -11,6 +11,7 @@ let
 in
 {
   imports = [
+    ./agent-vault.nix
     ./homebrew.nix
     ./nix.nix
     ./remote-access.nix
