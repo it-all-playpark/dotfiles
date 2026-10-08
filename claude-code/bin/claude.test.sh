@@ -82,10 +82,12 @@ while [ "$i" -lt "${GIT_CONFIG_COUNT:-0}" ]; do
 done
 printf 'argc=%s\n' "$#"
 for a in "$@"; do printf 'arg=[%s]\n' "$a"; done
-# FAKE_GIT があれば、子プロセス（sandbox 内の git に相当）として github.com の資格情報を引く
+# FAKE_GIT があれば、子プロセス（sandbox 内の git に相当）として github.com と他ホストの資格情報を引く
 if [ -n "${FAKE_GIT:-}" ]; then
-  printf 'protocol=https\nhost=github.com\npath=octo/repo.git\n\n' |
-    "$FAKE_GIT" credential fill >/dev/null 2>&1 || true
+  for host in github.com example.com; do
+    printf 'protocol=https\nhost=%s\npath=octo/repo.git\n\n' "$host" |
+      "$FAKE_GIT" credential fill >/dev/null 2>&1 || true
+  done
 fi
 # FAKE_GIT_SCRIPT があれば、子プロセス（sandbox 内のコマンドに相当）として実行する
 if [ -n "${FAKE_GIT_SCRIPT:-}" ]; then
@@ -103,8 +105,17 @@ printf called >"$HELPER_MARK"
 printf 'username=x\npassword=y\n'
 EOF
 chmod +x "$FAKE_BIN/gh-credential"
+# github.com 以外のホストの helper（osxkeychain 等に相当）。呼ばれたら印を残す
+OTHER_HELPER_MARK="$TMPROOT/other-helper-called"
+cat >"$FAKE_BIN/other-credential" <<EOF
+#!/bin/sh
+printf called >"$OTHER_HELPER_MARK"
+printf 'username=x\npassword=y\n'
+EOF
+chmod +x "$FAKE_BIN/other-credential"
 mkdir -p "$HOME_T/.config/git"
-printf '[include]\n\tpath = config.local\n' >"$HOME_T/.config/git/config"
+printf '[include]\n\tpath = config.local\n[credential "https://example.com"]\n\thelper = !%s\n' \
+  "$FAKE_BIN/other-credential" >"$HOME_T/.config/git/config"
 printf '[credential "https://github.com"]\n\thelper =\n\thelper = !%s auth git-credential\n' \
   "$FAKE_BIN/gh-credential" >"$HOME_T/.config/git/config.local"
 
@@ -163,7 +174,7 @@ if [[ $RC -eq 0 ]] &&
   contains "$OUT" "SSL_CERT_FILE=$CA_BUNDLE" &&
   contains "$OUT" "GIT_SSL_CAINFO=$CA_BUNDLE" &&
   contains "$OUT" "CLAUDE_GH_VAULT=1" &&
-  contains "$OUT" $'GIT_CONFIG_COUNT=3\ngit_config=credential.helper=\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n' &&
+  contains "$OUT" $'GIT_CONFIG_COUNT=3\ngit_config=credential.https://github.com.helper=\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n' &&
   contains "$OUT" $'argc=2\narg=[--bg]\narg=[do it]' && [[ -z $ERR ]]; then
   pass "01_active_vault_sets_proxy_and_ca_env"
 else
@@ -213,7 +224,8 @@ RUN_ENV=("AGENT_VAULT_PROXY_PORT=$CLOSED_PORT")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "CLAUDE_GH_VAULT=<unset>" &&
   contains "$OUT" $'GIT_CONFIG_COUNT=2\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n' &&
-  contains "$ERR" "not listening on 127.0.0.1:$CLOSED_PORT"; then
+  contains "$ERR" "not listening on 127.0.0.1:$CLOSED_PORT" &&
+  contains "$ERR" "cannot authenticate to GitHub"; then
   pass "05_closed_port_passthrough_with_warning"
 else
   fail "05_closed_port_passthrough_with_warning" "rc=$RC out=$OUT err=$ERR"
@@ -225,7 +237,8 @@ fi
 RUN_ENV=("AGENT_VAULT_CA_BUNDLE=$TMPROOT/missing-ca.pem")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" &&
-  contains "$ERR" "CA bundle not found: $TMPROOT/missing-ca.pem"; then
+  contains "$ERR" "CA bundle not found: $TMPROOT/missing-ca.pem" &&
+  contains "$ERR" "cannot authenticate to GitHub"; then
   pass "06_missing_ca_bundle_passthrough_with_warning"
 else
   fail "06_missing_ca_bundle_passthrough_with_warning" "rc=$RC out=$OUT err=$ERR"
@@ -246,26 +259,27 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 8. agent-vault 経由のセッションの git は config.local の credential helper（gh auth git-credential）を
-#    呼ばない。agent-vault が使えないときは従来どおり helper を呼ぶ
+# 8. agent-vault 経由のセッションの git は github.com の credential helper（config.local の
+#    gh auth git-credential）を呼ばず、他ホストの helper は呼ぶ。agent-vault が使えないときは従来どおり
 # ---------------------------------------------------------------------------
 REAL_GIT="$(command -v git)"
 GIT_ENV=("FAKE_GIT=$REAL_GIT" "GIT_CONFIG_NOSYSTEM=1" "GIT_TERMINAL_PROMPT=0")
-rm -f "$HELPER_MARK"
+rm -f "$HELPER_MARK" "$OTHER_HELPER_MARK"
 RUN_ENV=("${GIT_ENV[@]}")
 run_wrapper
-vault_called="no"
+vault_called="no" vault_other="no"
 [[ -e $HELPER_MARK ]] && vault_called="yes"
-rm -f "$HELPER_MARK"
+[[ -e $OTHER_HELPER_MARK ]] && vault_other="yes"
+rm -f "$HELPER_MARK" "$OTHER_HELPER_MARK"
 RUN_ENV=("${GIT_ENV[@]}" "AGENT_VAULT_PROXY_PORT=$CLOSED_PORT")
 run_wrapper
 plain_called="no"
 [[ -e $HELPER_MARK ]] && plain_called="yes"
-if [[ $vault_called == "no" && $plain_called == "yes" ]]; then
-  pass "08_vault_session_git_skips_credential_helper"
+if [[ $vault_called == "no" && $vault_other == "yes" && $plain_called == "yes" ]]; then
+  pass "08_vault_session_git_skips_only_github_credential_helper"
 else
-  fail "08_vault_session_git_skips_credential_helper" \
-    "helper called: vault=$vault_called (want no) no-vault=$plain_called (want yes)"
+  fail "08_vault_session_git_skips_only_github_credential_helper" \
+    "helper called: vault github=$vault_called (want no) vault other=$vault_other (want yes) no-vault github=$plain_called (want yes)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -274,7 +288,7 @@ fi
 RUN_ENV=("GIT_CONFIG_COUNT=1" "GIT_CONFIG_KEY_0=safe.directory" "GIT_CONFIG_VALUE_0=/x")
 run_wrapper
 if [[ $RC -eq 0 ]] &&
-  contains "$OUT" $'GIT_CONFIG_COUNT=4\ngit_config=safe.directory=/x\ngit_config=credential.helper=\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n'; then
+  contains "$OUT" $'GIT_CONFIG_COUNT=4\ngit_config=safe.directory=/x\ngit_config=credential.https://github.com.helper=\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n'; then
   pass "09_appends_to_existing_git_config_env"
 else
   fail "09_appends_to_existing_git_config_env" "rc=$RC out=$OUT err=$ERR"

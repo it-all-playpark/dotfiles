@@ -201,13 +201,14 @@ vault に入れる token は、人間の端末で `gh auth login` 済みの gh �
 `~/.agent-vault/proxy-token` を読んで `HTTPS_PROXY` / `HTTP_PROXY` を
 `http://<proxy token>:default@127.0.0.1:14322` にし、`~/.local/state/agent-vault/ca-bundle.pem`
 （システムの CA + agent-vault の CA）を `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `GIT_SSL_CAINFO` に、
-目印の `CLAUDE_GH_VAULT=1` を付ける。git の credential helper は `GIT_CONFIG_COUNT=1` /
-`GIT_CONFIG_KEY_0=credential.helper` / `GIT_CONFIG_VALUE_0=`（空）で外す（空の helper は、それより前に読んだ
-`config.local` の `gh auth git-credential` を一覧から消す。この helper は `~/.config/gh` を読むので sandbox 内では動かない）。
+目印の `CLAUDE_GH_VAULT=1` を付ける。github.com 向けの git credential helper は `GIT_CONFIG_KEY_n=credential.https://github.com.helper` /
+`GIT_CONFIG_VALUE_n=`（空）で外す（空の helper は、それより前に読んだ `config.local` の `gh auth git-credential` を
+一覧から消す。この helper は `~/.config/gh` を読むので sandbox 内では動かない）。他ホストの helper は残す。
 bg job を動かす daemon は claude から on-demand で起動されるので、この env を継承する。
 sandbox 内のコマンドの `HTTPS_PROXY` は Claude Code 自身の proxy に置き換わるので token は見えない。
 `~/.agent-vault`（DB・CA 鍵・セッション・proxy token）は `settings.json` の `denyRead` で sandbox から読めない。
-token ファイルが無い・agent-vault が落ちているときは env を付けずに起動する（後者は 1 行警告）。
+token ファイルが無い・agent-vault が落ちているときは env を付けずに起動する（後者は 1 行警告）。このとき
+sandbox 内の gh と git push / fetch は GitHub に認証できない（警告文にもそう出す）。
 
 アカウントの選び方:
 
@@ -325,7 +326,7 @@ ps eww -p $PPID                   # 失敗するか、HTTPS_PROXY（proxy token 
 echo "$CLAUDE_GH_VAULT"           # 1
 gh api user --jq .login           # cwd のアカウント（BusinessProcessDX の repo では th-it-dev）
 gh pr list --limit 1              # GraphQL が通る（playpark-llc・お客さんの repo でも）
-git config --get-all credential.helper; echo "rc=$?"   # 何も出ず rc=1（helper が空）
+git config --get-urlmatch credential.helper https://github.com; echo "rc=$?"   # 空行 1 行・rc=0（github.com の helper が空）
 git fetch --dry-run               # sandbox 内で通る（git / gh は excludedCommands に無い）
 git -C . ls-remote origin HEAD > "$TMPDIR/ls"; cat "$TMPDIR/ls"   # 複文・-C・リダイレクトでも同じ
 GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login                  # VAR=x 前置・連結でも同じ
