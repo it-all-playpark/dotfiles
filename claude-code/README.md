@@ -83,8 +83,13 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
 別アカウントで GCS 等を叩いて 403 になる。tofu（Go の `x/oauth2`）は `CLOUDSDK_CONFIG` を見ず
 `~/.config/gcloud/` 固定で ADC を探すため、`GOOGLE_APPLICATION_CREDENTIALS` でファイルを明示する。
 
-- `~/.claude/bin` は home-manager が zsh（`envExtra`）/ fish（`shellInit`）の PATH 先頭に載せる。
-  `which gh` / `which gcloud` / `which tofu` は `~/.claude/bin/…` を指すようになる。Claude Code セッション内では加えて
+- `~/.claude/bin` は home-manager が zsh / fish の PATH 先頭に載せる。mise より後に足すことが要る:
+  fish は `mise activate` の後に `fish_add_path --path --move`（mise は activate の後に PATH へ足したものを
+  自分のツールより前に保つ。`activate_aggressive` が既定の `false` のとき。`--path` が無いと `fish_user_paths`
+  経由になり、mise の hook-env がツールを前に戻す）、zsh は `initContent` で mise の shims を入れた後に
+  先頭へ移し直す（`.zshenv` の `envExtra` でも入れるが、非対話の zsh 向け）。mise より前に足すと、mise で入れた
+  `claude` が `bin/claude`（agent-vault の wrapper）より先に見つかる。
+  `which claude` / `which gh` / `which gcloud` / `which tofu` は `~/.claude/bin/…` を指すようになる。Claude Code セッション内では加えて
   SessionStart hook `session-start-account-path.sh` が `$CLAUDE_ENV_FILE` に同じ export を書き、
   起動元の PATH に依存せず shim が効くようにする
 - 同じスクリプト内で `cd org1 && gh …; cd org2 && gh …` としても各呼び出しが独立に解決される。
