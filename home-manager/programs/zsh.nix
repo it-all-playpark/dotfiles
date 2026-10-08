@@ -45,6 +45,9 @@ in
       chpwd_functions=("''${(@)chpwd_functions:#__zoxide_hook}" __zoxide_hook)
 
       path=("$HOME/.local/share/mise/shims" $path)
+      # ~/.claude/bin（gh / gcloud / tofu の shim と claude の wrapper）は mise の shims より前に置く。
+      # .zshenv でも先頭に入れているが、上の行が shims をその前に入れるので、ここで先頭へ移し直す
+      path=("$HOME/.claude/bin" ''${path:#$HOME/.claude/bin})
     '';
     shellAliases = common.shellSortcuts;
   };
