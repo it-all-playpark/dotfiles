@@ -29,7 +29,6 @@
     "vercel@claude-plugins-official": true
   },
   "env": {
-    "AGENT_BROWSER_EXECUTABLE_PATH": "/Users/naramotoyuuji/.nix-profile/bin/agent-browser-chrome",
     "AGENT_BROWSER_PROXY": "direct://",
     "AGENT_BROWSER_SOCKET_DIR": "/private/tmp/claude/agent-browser",
     "API_TIMEOUT_MS": "900000",
@@ -393,7 +392,6 @@
       "Skill",
       "WebSearch",
       "Bash(zernio post *)",
-      "Bash(/Users/naramotoyuuji/ghq/github.com/playpark-llc/zernio-cli/target/release/zernio *)",
       "Bash(gh api repos/playpark-llc/corporate-site/git/refs *)"
     ],
     "defaultMode": "auto",
@@ -622,9 +620,9 @@
       "allowLocalBinding": true,
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
-        "/Users/naramotoyuuji/.local/state/jev-broker/jev.sock",
-        "/Users/naramotoyuuji/.local/state/pg-broker/broker.sock",
-        "/Users/naramotoyuuji/.local/state/pg-broker/sock",
+        "~/.local/state/jev-broker/jev.sock",
+        "~/.local/state/pg-broker/broker.sock",
+        "~/.local/state/pg-broker/sock",
         "/private/tmp/claude/agent-browser",
         "/private/tmp/claude-502"
       ],

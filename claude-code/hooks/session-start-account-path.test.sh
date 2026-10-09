@@ -7,6 +7,7 @@
 # テスト。$CLAUDE_ENV_FILE への export 追記が、PATH の状態に応じて正しく
 # 起きる/起きないこと、CLAUDE_ENV_FILE 未設定時に何もしないこと、複数回呼ばれても
 # 重複追加しないこと（resume / compact での再実行）を確認する。
+# AGENT_BROWSER_EXECUTABLE_PATH を $HOME から組み立てて export することも確認する。
 #
 # Exit 0 on all pass, non-zero otherwise.
 
@@ -30,6 +31,10 @@ mkdir -p "$HOME_T"
 # 使われてしまう。事前に絶対パスへ解決しておき、探索対象から外す。
 BASH_BIN="$(command -v bash)"
 
+BROWSER_T="$HOME_T/.nix-profile/bin/agent-browser-chrome"
+EXPECTED_PATH_LINE="export PATH=\"$HOME_T/.claude/bin:\$PATH\""
+EXPECTED_BROWSER_LINE="export AGENT_BROWSER_EXECUTABLE_PATH=\"$BROWSER_T\""
+
 PASS=0
 FAIL=0
 FAILURES=()
@@ -49,7 +54,8 @@ fail() {
 echo "=== session-start-account-path tests ==="
 
 # ---------------------------------------------------------------------------
-# 1. PATH に ~/.claude/bin が無い → env file に export 行が 1 行追記される
+# 1. PATH に ~/.claude/bin が無く、AGENT_BROWSER_EXECUTABLE_PATH も未設定
+#    → env file に PATH と AGENT_BROWSER_EXECUTABLE_PATH の export 行が 1 行ずつ追記される
 # ---------------------------------------------------------------------------
 ENV_FILE1="$TMPROOT/env1"
 : >"$ENV_FILE1"
@@ -57,7 +63,7 @@ set +e
 OUT="$(env -i PATH="/usr/bin:/bin" HOME="$HOME_T" CLAUDE_ENV_FILE="$ENV_FILE1" "$BASH_BIN" "$HOOK" 2>&1)"
 RC=$?
 set -e
-EXPECTED="export PATH=\"$HOME_T/.claude/bin:\$PATH\""
+EXPECTED="$EXPECTED_PATH_LINE"$'\n'"$EXPECTED_BROWSER_LINE"
 ACTUAL="$(cat "$ENV_FILE1")"
 if [[ $RC -eq 0 && $ACTUAL == "$EXPECTED" ]]; then
   pass "01_path_without_shim_dir_appends_export_line"
@@ -66,12 +72,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 2. PATH が既に ~/.claude/bin で始まる → env file は変更されない
+# 2. PATH が既に ~/.claude/bin で始まり、AGENT_BROWSER_EXECUTABLE_PATH も同じ値
+#    → env file は変更されない
 # ---------------------------------------------------------------------------
 ENV_FILE2="$TMPROOT/env2"
 : >"$ENV_FILE2"
 set +e
-OUT="$(env -i PATH="$HOME_T/.claude/bin:/usr/bin" HOME="$HOME_T" CLAUDE_ENV_FILE="$ENV_FILE2" "$BASH_BIN" "$HOOK" 2>&1)"
+OUT="$(env -i PATH="$HOME_T/.claude/bin:/usr/bin" HOME="$HOME_T" AGENT_BROWSER_EXECUTABLE_PATH="$BROWSER_T" CLAUDE_ENV_FILE="$ENV_FILE2" "$BASH_BIN" "$HOOK" 2>&1)"
 RC=$?
 set -e
 ACTUAL="$(cat "$ENV_FILE2")"
@@ -97,22 +104,39 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. 2 回呼ばれても（2 回目は PATH に shim dir が既にある）1 行のまま
-#    （resume / compact での再実行を想定。hook 自体の冪等性は PATH の状態次第）
+# 4. 2 回呼ばれても（2 回目は 1 回目の export が env に入っている）2 行のまま
+#    （resume / compact での再実行を想定。hook 自体の冪等性は env の状態次第）
 # ---------------------------------------------------------------------------
 ENV_FILE4="$TMPROOT/env4"
 : >"$ENV_FILE4"
 set +e
 env -i PATH="/usr/bin:/bin" HOME="$HOME_T" CLAUDE_ENV_FILE="$ENV_FILE4" "$BASH_BIN" "$HOOK" >/dev/null 2>&1
 RC1=$?
-env -i PATH="$HOME_T/.claude/bin:/usr/bin:/bin" HOME="$HOME_T" CLAUDE_ENV_FILE="$ENV_FILE4" "$BASH_BIN" "$HOOK" >/dev/null 2>&1
+env -i PATH="$HOME_T/.claude/bin:/usr/bin:/bin" HOME="$HOME_T" AGENT_BROWSER_EXECUTABLE_PATH="$BROWSER_T" CLAUDE_ENV_FILE="$ENV_FILE4" "$BASH_BIN" "$HOOK" >/dev/null 2>&1
 RC2=$?
 set -e
 LINE_COUNT="$(wc -l <"$ENV_FILE4" | tr -d ' ')"
-if [[ $RC1 -eq 0 && $RC2 -eq 0 && $LINE_COUNT -eq 1 ]]; then
-  pass "04_second_call_with_shim_dir_in_path_does_not_duplicate"
+if [[ $RC1 -eq 0 && $RC2 -eq 0 && $LINE_COUNT -eq 2 ]]; then
+  pass "04_second_call_with_exports_in_env_does_not_duplicate"
 else
-  fail "04_second_call_with_shim_dir_in_path_does_not_duplicate" "rc1=$RC1 rc2=$RC2 lines=$LINE_COUNT content=$(cat "$ENV_FILE4")"
+  fail "04_second_call_with_exports_in_env_does_not_duplicate" "rc1=$RC1 rc2=$RC2 lines=$LINE_COUNT content=$(cat "$ENV_FILE4")"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. PATH には shim dir があるが AGENT_BROWSER_EXECUTABLE_PATH が別ユーザーのパス
+#    → AGENT_BROWSER_EXECUTABLE_PATH だけが $HOME 基点で書き直される
+# ---------------------------------------------------------------------------
+ENV_FILE5="$TMPROOT/env5"
+: >"$ENV_FILE5"
+set +e
+OUT="$(env -i PATH="$HOME_T/.claude/bin:/usr/bin" HOME="$HOME_T" AGENT_BROWSER_EXECUTABLE_PATH="/Users/someone-else/.nix-profile/bin/agent-browser-chrome" CLAUDE_ENV_FILE="$ENV_FILE5" "$BASH_BIN" "$HOOK" 2>&1)"
+RC=$?
+set -e
+ACTUAL="$(cat "$ENV_FILE5")"
+if [[ $RC -eq 0 && $ACTUAL == "$EXPECTED_BROWSER_LINE" ]]; then
+  pass "05_browser_path_is_built_from_home"
+else
+  fail "05_browser_path_is_built_from_home" "rc=$RC actual=[$ACTUAL] expected=[$EXPECTED_BROWSER_LINE] out=$OUT"
 fi
 
 echo ""
