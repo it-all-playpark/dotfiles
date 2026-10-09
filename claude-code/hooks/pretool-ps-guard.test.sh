@@ -22,17 +22,37 @@ PASS=0
 FAIL=0
 FAILURES=()
 
+run_hook() {
+  jq -n --arg cmd "$1" '{tool_name:"Bash", tool_input:{command:$cmd}}' | bash "$HOOK" 2>&1 || true
+}
+
+# run_reason_case <name> <command> <substring expected in permissionDecisionReason>
+run_reason_case() {
+  local name="$1"
+  local cmd="$2"
+  local want="$3"
+
+  local reason
+  reason=$(run_hook "$cmd" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null || true)
+
+  if [[ $reason == *"$want"* ]]; then
+    PASS=$((PASS + 1))
+    printf "  \033[32mPASS\033[0m %s\n" "$name"
+  else
+    FAIL=$((FAIL + 1))
+    FAILURES+=("$name: reason does not contain '$want' (got: $reason) cmd=$cmd")
+    printf "  \033[31mFAIL\033[0m %s (reason missing: %s)\n" "$name" "$want"
+  fi
+}
+
 # run_case <name> <command> <expected: deny|pass>
 run_case() {
   local name="$1"
   local cmd="$2"
   local expected="$3"
 
-  local input
-  input=$(jq -n --arg cmd "$cmd" '{tool_name:"Bash", tool_input:{command:$cmd}}')
-
   local output
-  output=$(echo "$input" | bash "$HOOK" 2>&1 || true)
+  output=$(run_hook "$cmd")
 
   local decision="pass"
   if [[ -n $output ]]; then
@@ -72,13 +92,19 @@ run_case "ps on second line" $'echo start\n/bin/ps aux' "deny"
 run_case "non-allowed absolute path" '/usr/bin/ps aux' "deny"
 run_case "ps inside double quotes is expanded" 'echo "$(ps aux)"' "deny"
 
+# --- ps は環境変数（e / -E）を出せるので excludedCommands に無い。単独・絶対パス形でも deny ---
+echo "[ps in any form — should deny]"
+run_case "absolute ps" '/bin/ps aux' "deny"
+run_case 'absolute ps with $VAR' '/bin/ps eww -p $PPID' "deny"
+run_case "absolute ps with -E" '/bin/ps -E -ww -o command -p 1' "deny"
+run_reason_case "ps reason suggests top" '/bin/ps aux' '/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time'
+run_reason_case "ps reason suggests pgrep -lf" 'ps aux' '/usr/bin/pgrep -lf <pattern>'
+
 # --- 単独・絶対パス形（excludedCommands に一致して sandbox 外で動く）→ 素通し ---
 echo "[Single absolute form — should pass through]"
-run_case "absolute ps" '/bin/ps aux' "pass"
 run_case "absolute pgrep" '/usr/bin/pgrep -l claude' "pass"
-run_case "absolute top narrowed by args" '/usr/bin/top -l 1 -o mem -n 15 -stats pid,command,mem' "pass"
+run_case "absolute top narrowed by args" '/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time' "pass"
 run_case "absolute lsof" '/usr/sbin/lsof -nP -iTCP:3000 -sTCP:LISTEN' "pass"
-run_case 'absolute ps with $VAR' '/bin/ps eww -p $PPID' "pass"
 run_case "absolute pgrep with quoted pattern" "/usr/bin/pgrep -lf 'node|vite'" "pass"
 
 # --- ps 系を含まないコマンド（引数・語の一部・別ツールのサブコマンド）→ 素通し ---

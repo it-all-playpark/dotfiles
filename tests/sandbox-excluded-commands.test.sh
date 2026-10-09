@@ -296,13 +296,12 @@ fi
 
 # ---------------------------------------------------------------------------
 # process_tools_by_sip_path
-# ps / top は setuid、pgrep は sysmond、lsof は他プロセスに届かず sandbox 内では
+# top は setuid、pgrep は sysmond、lsof は他プロセスに届かず sandbox 内では
 # 動かない。SIP 保護下の絶対パスで登録し、PATH で別物に解決されうる bare 名では
 # 登録しない。見るだけに留め、kill / pkill は登録しない（止めるのは人間）。
 # ---------------------------------------------------------------------------
 echo "- process_tools_by_sip_path"
 PROCESS_TOOLS=(
-  "/bin/ps"
   "/usr/bin/top"
   "/usr/bin/pgrep"
   "/usr/sbin/lsof"
@@ -317,6 +316,20 @@ if [ "${#bad_process[@]}" -eq 0 ]; then
   pass "process_tools_by_sip_path"
 else
   fail "process_tools_by_sip_path" "${bad_process[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# ps_not_excluded
+# ps は `e` / `-E` で他プロセスの環境変数（wrapper が渡す agent-vault の
+# HTTPS_PROXY）を出す。excludedCommands は前方一致なので option を絞っても
+# 後ろに -E を足せる。bare 名・絶対パス・`ps:*` のどの形でも登録しない（issue #274）。
+# ---------------------------------------------------------------------------
+echo "- ps_not_excluded"
+ps_left="$(jq -r '[.[] | select(test("^([^[:space:]]*/)?ps([[:space:]:*]|$)"))] | join(", ")' <<<"${EXCLUDED_JSON}")"
+if [ -z "${ps_left}" ]; then
+  pass "ps_not_excluded"
+else
+  fail "ps_not_excluded" "ps must not run outside the sandbox: ${ps_left}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -335,10 +348,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 29 ]; then
+if [ "${total_len}" -eq 28 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 29 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 28 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
