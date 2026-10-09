@@ -220,6 +220,17 @@
       {
         "hooks": [
           {
+            "command": "[ -f \"$HOME/.claude/hooks/pretool-public-repo-guard.sh\" ] && bash \"$HOME/.claude/hooks/pretool-public-repo-guard.sh\" || true",
+            "statusMessage": "public repo に出す内容をチェック中...",
+            "timeout": 15,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
             "command": "bash \"$HOME/.claude/hooks/generate-worktreeinclude.sh\"",
             "if": "Bash(git worktree add*)",
             "statusMessage": ".worktreeinclude 自動生成チェック中...",

@@ -8,6 +8,8 @@ Configuration lives in a single Nix flake that coordinates both nix-darwin and h
 - `common/packages.nix`: curated package sets imported by both platforms.
 Template files under `home-manager/home/file/*` should be copied to `.local` counterparts for secrets or machine overrides.
 
+This repository is **public**. Pushed branches, commit messages, and PR / issue text are published immediately. Do not add personal information (phone numbers, addresses, other people's names), client org or account names, or secrets. Put them in the private repo `it-all-playpark/dotfiles-private` and keep only generic `*.example` files here.
+
 ## Build, Test, and Development Commands
 - `./setup.sh <username>` installs Nix if missing, enables flakes, then runs the update app for the chosen username.
 - `nix run .#update <username>` refreshes flake inputs and switches both home-manager and nix-darwin for the active platform.

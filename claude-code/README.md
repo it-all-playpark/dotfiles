@@ -466,6 +466,7 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `PreCompact` | `pre-compact-dump.sh` | compact 前に session 状態を `claudedocs/session-*.md` へ退避 |
 | `PreToolUse` Bash (`git *`) | `allow-feature-push.sh` | protected branch への push を抑止（push かどうかは script 内で判定） |
 | `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを `ask`。1 段目は正規表現（`$PROD_*` / `.env.prod*` / `aws --profile *prod*`）、2 段目は字面で候補（cloud CLI / DB クライアント / `--context` 等 / prod・live・deploy 語）に絞った上で Jev に「本番に触るか」を判定させ p ≥ 0.7 で `ask`。判定は `~/.claude/logs/credential-guard.jsonl` に記録 |
+| `PreToolUse` Bash | `pretool-public-repo-guard.sh` | root に `.public-repo` がある repo で、`git push`（まだどの remote にも無い commit の追加行と message）と `gh pr\|issue create\|comment\|edit`（title / body / body-file）に携帯番号・token・秘密鍵の形、または dotfiles-private の `public-guard/denylist`（取引先名など。public に書くとそれ自体が漏洩になるので private に置く）の語があれば `ask`。値そのものは理由に出さない。意図して残す行は `public-guard: allow` で除外 |
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
 | `PreToolUse` Bash (`gh pr merge*`) | `allow-pr-merge.sh` | merge 先 branch チェック |
