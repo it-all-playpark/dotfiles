@@ -1,0 +1,16 @@
+{
+  "default": {
+    "gh_vault_config_dir": "~/.config/agent-vault-gh/main"
+  },
+  "orgs": {
+    "acme-corp": {
+      "gcloud_config_dir": "~/.config/gcloud-client-account",
+      "gh_config_dir": "~/.config/gh-client-account",
+      "gh_vault_config_dir": "~/.config/agent-vault-gh/client-account"
+    },
+    "it-all-playpark": {
+      "gcloud_config_dir": "~/.config/gcloud",
+      "gh_config_dir": "~/.config/gh"
+    }
+  }
+}

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # tests/claude-bin-symlink.test.sh
 # home-manager/home/default.nix の activation.setupClaudeCode 内、
-# `# bin-symlink: begin` / `: end` と `# account-map-symlink: begin` / `: end` で
-# 囲まれたブロックを抽出し、~/.claude/bin と ~/.claude/account-map.json の
-# symlink 管理ロジックを単体で検証する。
+# `# bin-symlink: begin` / `: end` と `# private-config-symlink: begin` / `: end` で
+# 囲まれたブロックを抽出し、~/.claude/bin と、private repo（dotfiles-private）から張る
+# ~/.claude/account-map.json・~/.config/agent-vault-gh/<account>/ の symlink 管理ロジックを単体で検証する。
 #
 # 検証項目:
 #   1. marker_blocks_found               - 両マーカーブロックが見つかる
@@ -15,8 +15,9 @@
 #                                           symlink は削除される
 #   5. keeps_dangling_foreign_symlink     - dotfiles 以外を指す dangling symlink は残る
 #   6. keeps_real_file                    - dotfiles に無い名前の実ファイルは残る
-#   7. links_account_map                  - account-map.json が symlink される
-#   8. skips_account_map_when_absent      - dotfiles 側に無ければ何もしない（エラーなし）
+#   7. links_private_config               - private repo の account-map.json と
+#                                           agent-vault-gh/<account>/hosts.yml が symlink される
+#   8. skips_private_config_when_absent   - private repo が無ければ何も張らない（エラーなし）
 
 set -euo pipefail
 
@@ -45,10 +46,10 @@ fail() {
 # ---------------------------------------------------------------------------
 DEFAULT_NIX="$REPO_ROOT/home-manager/home/default.nix"
 BIN_BLOCK="$(sed -n '/# bin-symlink: begin/,/# bin-symlink: end/p' "$DEFAULT_NIX")"
-MAP_BLOCK="$(sed -n '/# account-map-symlink: begin/,/# account-map-symlink: end/p' "$DEFAULT_NIX")"
+MAP_BLOCK="$(sed -n '/# private-config-symlink: begin/,/# private-config-symlink: end/p' "$DEFAULT_NIX")"
 
 if [ -z "$BIN_BLOCK" ] || [ -z "$MAP_BLOCK" ]; then
-  fail "marker_blocks_found" "$DEFAULT_NIX にマーカー # bin-symlink / # account-map-symlink の begin/end が揃っていない"
+  fail "marker_blocks_found" "$DEFAULT_NIX にマーカー # bin-symlink / # private-config-symlink の begin/end が揃っていない"
   echo ""
   echo "Results: ${PASS} passed, ${FAIL} failed"
   echo "Failed tests:"
@@ -68,21 +69,28 @@ fi
 run_block() {
   local dotfiles_claude="$1"
   local claude_dir="$2"
-  DOTFILES_CLAUDE="$dotfiles_claude" CLAUDE_DIR="$claude_dir" bash -c 'set -eu; source "$1"' _ "$TMPROOT/block.sh"
+  local root
+  root="$(dirname "$(dirname "$dotfiles_claude")")"
+  DOTFILES_CLAUDE="$dotfiles_claude" CLAUDE_DIR="$claude_dir" \
+    DOTFILES_PRIVATE="$root/dotfiles-private" VAULT_GH_DIR="$root/home/.config/agent-vault-gh" \
+    bash -c 'set -eu; source "$1"' _ "$TMPROOT/block.sh"
 }
 
 # ---------------------------------------------------------------------------
-# シナリオ 2 & 3 & 7: links_account_exec_and_tool_links / skips_test_sh / links_account_map
+# シナリオ 2 & 3 & 7: links_account_exec_and_tool_links / skips_test_sh / links_private_config
 # ---------------------------------------------------------------------------
 DOTFILES_CLAUDE="$TMPROOT/s1/dotfiles/claude-code"
+DOTFILES_PRIVATE="$TMPROOT/s1/dotfiles-private"
 CLAUDE_DIR="$TMPROOT/s1/home/.claude"
-mkdir -p "$DOTFILES_CLAUDE/bin" "$CLAUDE_DIR"
+VAULT_GH_DIR="$TMPROOT/s1/home/.config/agent-vault-gh"
+mkdir -p "$DOTFILES_CLAUDE/bin" "$CLAUDE_DIR" "$DOTFILES_PRIVATE/agent-vault-gh/client"
 printf '#!/bin/sh\necho account-exec\n' >"$DOTFILES_CLAUDE/bin/account-exec"
 chmod +x "$DOTFILES_CLAUDE/bin/account-exec"
 ln -s account-exec "$DOTFILES_CLAUDE/bin/gh"
 ln -s account-exec "$DOTFILES_CLAUDE/bin/gcloud"
 echo "# test" >"$DOTFILES_CLAUDE/bin/account-exec.test.sh"
-echo '{"orgs":{}}' >"$DOTFILES_CLAUDE/account-map.json"
+echo '{"orgs":{}}' >"$DOTFILES_PRIVATE/account-map.json"
+echo 'github.com: {}' >"$DOTFILES_PRIVATE/agent-vault-gh/client/hosts.yml"
 run_block "$DOTFILES_CLAUDE" "$CLAUDE_DIR" >"$TMPROOT/s1.out" 2>&1 || true
 
 if [ -L "$CLAUDE_DIR/bin/account-exec" ] && [ "$(readlink "$CLAUDE_DIR/bin/account-exec")" = "$DOTFILES_CLAUDE/bin/account-exec" ] &&
@@ -100,10 +108,12 @@ else
   fail "skips_test_sh" "account-exec.test.sh が symlink されてしまっている"
 fi
 
-if [ -L "$CLAUDE_DIR/account-map.json" ] && [ "$(readlink "$CLAUDE_DIR/account-map.json")" = "$DOTFILES_CLAUDE/account-map.json" ]; then
-  pass "links_account_map"
+if [ -L "$CLAUDE_DIR/account-map.json" ] && [ "$(readlink "$CLAUDE_DIR/account-map.json")" = "$DOTFILES_PRIVATE/account-map.json" ] &&
+  [ -L "$VAULT_GH_DIR/client/hosts.yml" ] &&
+  [ "$(readlink "$VAULT_GH_DIR/client/hosts.yml")" = "$DOTFILES_PRIVATE/agent-vault-gh/client/hosts.yml" ]; then
+  pass "links_private_config"
 else
-  fail "links_account_map" "account-map.json の symlink が期待通りでない (out=$(cat "$TMPROOT/s1.out"))"
+  fail "links_private_config" "private repo からの symlink が期待通りでない (out=$(cat "$TMPROOT/s1.out"); ls=$(ls -lR "$TMPROOT/s1/home" 2>&1))"
 fi
 
 # ---------------------------------------------------------------------------
@@ -138,7 +148,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# シナリオ 6 & 8: keeps_real_file / skips_account_map_when_absent
+# シナリオ 6 & 8: keeps_real_file / skips_private_config_when_absent
 # ---------------------------------------------------------------------------
 DOTFILES_CLAUDE="$TMPROOT/s4/dotfiles/claude-code"
 CLAUDE_DIR="$TMPROOT/s4/home/.claude"
@@ -156,10 +166,11 @@ else
   fail "keeps_real_file" "実ファイル local-tool が変更・削除されてしまった"
 fi
 
-if [ "$s4_rc" -eq 0 ] && [ ! -e "$CLAUDE_DIR/account-map.json" ] && [ ! -L "$CLAUDE_DIR/account-map.json" ]; then
-  pass "skips_account_map_when_absent"
+if [ "$s4_rc" -eq 0 ] && [ ! -e "$CLAUDE_DIR/account-map.json" ] && [ ! -L "$CLAUDE_DIR/account-map.json" ] &&
+  [ ! -e "$TMPROOT/s4/home/.config/agent-vault-gh" ]; then
+  pass "skips_private_config_when_absent"
 else
-  fail "skips_account_map_when_absent" "account-map.json 不在時にエラー終了 (rc=$s4_rc) または symlink が作られた (out=$(cat "$TMPROOT/s4.out"))"
+  fail "skips_private_config_when_absent" "private repo 不在時にエラー終了 (rc=$s4_rc) または symlink が作られた (out=$(cat "$TMPROOT/s4.out"))"
 fi
 
 # ---------------------------------------------------------------------------

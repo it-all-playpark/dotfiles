@@ -32,8 +32,9 @@ fail() {
 }
 
 FAKE_BIN="$TMPROOT/fake-bin"
-MAIN_DIR="$TMPROOT/config/gh"
-SUB_DIR="$TMPROOT/config/gh-sub"
+FAKE_HOME="$TMPROOT/home"
+MAIN_DIR="$FAKE_HOME/.config/gh"
+SUB_DIR="$FAKE_HOME/.config/gh-sub"
 mkdir -p "$FAKE_BIN" "$MAIN_DIR" "$SUB_DIR"
 
 cat >"$FAKE_BIN/gh" <<EOF
@@ -101,6 +102,47 @@ if [[ $RC -ne 0 && $ARGV == "<not called>" ]]; then
   pass "03_logged_out_account_aborts_without_writing"
 else
   fail "03_logged_out_account_aborts_without_writing" "rc=$RC argv=$ARGV err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. AGENT_VAULT_SYNC_GH_ACCOUNTS 未指定 → main（$HOME/.config/gh）に、accounts file の行
+#    （コメント・空行は飛ばし、~/ は $HOME に展開）を足す
+# ---------------------------------------------------------------------------
+run_sync_home() {
+  rm -f "$TMPROOT/vault.argv"
+  set +e
+  env -u AGENT_VAULT_SYNC_GH_ACCOUNTS PATH="$FAKE_BIN:$PATH" HOME="$FAKE_HOME" \
+    AGENT_VAULT_SYNC_GH_ACCOUNTS_FILE="$1" bash "$SYNC" 2>"$TMPROOT/err"
+  RC=$?
+  set -e
+  ERR="$(cat "$TMPROOT/err")"
+  ARGV="$(cat "$TMPROOT/vault.argv" 2>/dev/null || echo '<not called>')"
+}
+
+printf '# private accounts\n\nGH_TOKEN_SUB=~/.config/gh-sub\n' >"$TMPROOT/accounts"
+run_sync_home "$TMPROOT/accounts"
+expected='vault
+credential
+set
+--vault
+default
+GITHUB_GIT_USERNAME=x-access-token
+GH_TOKEN_MAIN=gho_main
+GH_TOKEN_SUB=gho_sub'
+if [[ $RC -eq 0 && $ARGV == "$expected" ]]; then
+  pass "04_accounts_file_adds_to_main"
+else
+  fail "04_accounts_file_adds_to_main" "rc=$RC argv=$ARGV err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. accounts file が無い（private repo を clone していないマシン）→ main だけ
+# ---------------------------------------------------------------------------
+run_sync_home "$TMPROOT/missing-accounts"
+if [[ $RC -eq 0 ]] && [[ $ARGV == *"GH_TOKEN_MAIN=gho_main"* ]] && [[ $ARGV != *GH_TOKEN_SUB* ]]; then
+  pass "05_without_accounts_file_syncs_main_only"
+else
+  fail "05_without_accounts_file_syncs_main_only" "rc=$RC argv=$ARGV err=$ERR"
 fi
 
 # --- Summary ---------------------------------------------------------------

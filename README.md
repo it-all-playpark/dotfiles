@@ -1,4 +1,4 @@
-# dotconfig – Nix Managed Dotfiles for macOS
+# dotfiles – Nix Managed Dotfiles for macOS
 
 このリポジトリは、macOS向けの開発環境を構築するためのdotfilesを**Nix (Flakes)** を利用した管理方式へ移行したものです。  
 nix-darwin（システム設定）とhome-manager（ユーザー設定）をFlake経由で一元管理することで、再現性のある環境構築を実現します。
@@ -28,14 +28,14 @@ nix-darwin（システム設定）とhome-manager（ユーザー設定）をFlak
 ## ディレクトリ構成
 
 ```text
-dotconfig/
+dotfiles/
 ├── README.md
 ├── flake.nix              # nix-darwin / home-manager 設定を統合した Flake 定義
 ├── flake.lock             # Flake 依存関係のロックファイル
 ├── treefmt.nix            # treefmt-nix フォーマッター設定
 ├── setup.sh               # 環境セットアップ用スクリプト（Nix インストール & 更新）
-├── darwin/
-│   └── default.nix        # nix-darwin（システム設定）の定義
+├── darwin/                # nix-darwin（システム設定）: default.nix / homebrew.nix / nix.nix /
+│                          # agent-vault.nix / remote-access.nix
 ├── home-manager/
 │   ├── default.nix        # home-manager 全体の設定
 │   ├── home/              # ユーザー固有の dotfiles 設定（nvim, zellij, git など）
@@ -43,9 +43,10 @@ dotconfig/
 ├── common/                # 全ユーザー共通の Nix モジュール（packages.nix など）
 ├── lib/                   # Flake 内ヘルパー（cli-packages.nix など）
 ├── claude-code/           # Claude Code 設定（settings.json / hooks / RULES.md）
-├── codex/                 # Codex CLI 設定（config / prompts / policy / rules）
-└── scripts/
-    └── setup-skills.sh    # Agent Skills セットアップスクリプト
+├── codex/                 # Codex CLI 設定（config / policy / hooks / rules）
+├── scripts/               # setup-skills.sh（Agent Skills）、install-git-hooks.sh など
+├── tests/                 # tests/run-all.sh が拾うテスト
+└── .githooks/             # pre-commit / pre-push
 ```
 
 ## サブシステム
@@ -55,7 +56,7 @@ dotconfig/
 | ディレクトリ | 概要 | ドキュメント |
 |------------|------|------------|
 | `claude-code/` | Claude Code 用の `settings.json`（permissions / hooks）・guardrail hooks・`RULES.md` | [claude-code/README.md](claude-code/README.md) |
-| `codex/` | Codex CLI の base config・prompts・policy・rules を dotfiles で管理し、`~/.codex/` へ展開 | [codex/README.md](codex/README.md) |
+| `codex/` | Codex CLI の base config・policy・hooks・rules を dotfiles で管理し、`~/.codex/` へ展開 | [codex/README.md](codex/README.md) |
 
 hermes-agent (全社横断 ChatOps 基盤) は個人PC設定とは性質が異なるため、
 [playpark-llc/hermes](https://github.com/playpark-llc/hermes) として独立リポジトリで管理する。
@@ -104,7 +105,7 @@ marker のチェックは `nix run .#update` の activation 実行時のみで�
   リポジトリのルートディレクトリに移動し、以下のコマンドを実行してください。
 
   ```bash
-  ./setup.sh
+  ./setup.sh <username>   # 例: ./setup.sh naramotoyuuji
   ```
 
   このスクリプトは以下を実施します：
@@ -180,7 +181,8 @@ Codex の設定は `codex/` ディレクトリで管理し、`nix run .#update` 
 | Nix | nixfmt | - |
 | Python | ruff format | ruff check |
 | Lua | stylua | - |
-| Shell | shfmt | shellcheck |
+| Shell | shfmt | -（shellcheck は pre-commit が別に実行） |
+| JSON | json-sort-cli（キーをソート） | - |
 
 ### 使い方
 
@@ -206,7 +208,7 @@ PR と main への push で GitHub Actions（`.github/workflows/ci.yml`、macOS�
 ローカルでは追跡している `.githooks/` の hook が動きます。
 
 - pre-commit: staged ファイルを treefmt で整形して add し直し、`.sh` を shellcheck
-- pre-push: `nix flake check` + `tests/run-all.sh`（CI と同じ検査。飛ばすなら `git push --no-verify`）
+- pre-push: `nix flake check` + `tests/run-all.sh`（CI から darwin / home-manager 設定の評価を除いたもの。飛ばすなら `git push --no-verify`）
 
 `nix run .#update` か `nix develop` を一度実行すると、`scripts/install-git-hooks.sh` が
 git の hooks ディレクトリに `.githooks/` を呼ぶ shim を置きます（worktree でも各ブランチの `.githooks` が効く）。

@@ -14,14 +14,16 @@ nix flake check               # Check formatting (CI)
 bash tests/run-all.sh         # Run all tests in parallel (CI: nix develop --command tests/run-all.sh)
 ```
 
-CI (`.github/workflows/ci.yml`) runs flake check, darwin/home config evaluation and `tests/run-all.sh` on every PR. Tracked hooks live in `.githooks/` (pre-commit: treefmt + shellcheck, pre-push: same checks as CI); `nix run .#update` / `nix develop` install shims via `scripts/install-git-hooks.sh`. The hooks do nothing inside Claude Code (`CLAUDECODE=1`); Claude's pushes are checked by CI — run `bash tests/run-all.sh` yourself before pushing.
+CI (`.github/workflows/ci.yml`) runs flake check, darwin/home config evaluation and `tests/run-all.sh` on every PR. Tracked hooks live in `.githooks/` (pre-commit: treefmt + shellcheck, pre-push: flake check + tests, without the config evaluation step); `nix run .#update` / `nix develop` install shims via `scripts/install-git-hooks.sh`. The hooks do nothing inside Claude Code (`CLAUDECODE=1`); Claude's pushes are checked by CI — run `bash tests/run-all.sh` yourself before pushing.
 
 ## Edit Paths
 
 | What | Where |
 |------|-------|
 | System settings | `darwin/default.nix` |
-| User packages | `home-manager/home/default.nix` |
+| Homebrew (brews / casks) | `darwin/homebrew.nix` |
+| CLI tool packages | `lib/cli-packages.nix` |
+| Other user packages, launchd agents, activation | `home-manager/home/default.nix` |
 | Program configs | `home-manager/programs/` |
 | Dotfiles | `home-manager/home/file/` |
 | Shared packages | `common/packages.nix` |
