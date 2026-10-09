@@ -67,7 +67,7 @@ with pkgs;
   (callPackage ./pglite-server { })
 ]
 ++ lib.optionals stdenv.hostPlatform.isDarwin [
-  # agent-browser 用の headless Chromium（claude-code/settings.json の env AGENT_BROWSER_EXECUTABLE_PATH から使う）。
+  # agent-browser 用の headless Chromium（claude-code/hooks/session-start-account-path.sh が AGENT_BROWSER_EXECUTABLE_PATH に入れる）。
   # Claude Code の sandbox（Seatbelt）は mach-register と $TMPDIR 外の Unix socket を塞ぐので、Google Chrome /
   # Chrome for Testing は crashpad・ProcessSingleton で起動できない。headless shell を --single-process で
   # 起動すると sandbox 内で動く（CDP の localhost 待ち受けも可）。nixpkgs 固定版なのでパスが Playwright の版に左右されない
