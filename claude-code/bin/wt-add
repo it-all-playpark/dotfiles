@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# wt-add: sandbox が書けないパスを追跡する repo でも worktree を作る
+#
+# Usage: wt-add <repo> <path> <branch> [<start>]
+#   <branch> があれば checkout し、無ければ <start>（省略時は <repo> の HEAD）から --no-track で作る
+#   （起動元 repo の .git/config に upstream を書かない）。
+#   stdout には skip-worktree を付けたパスを 1 行 1 つ出す（full checkout できたときは何も出さない）。
+#
+# dotfiles のように `.githooks` / `.husky`（settings.json の denyWrite）や組み込み保護の対象（`.ripgreprc` 等）を
+# 追跡する repo では、sandbox 内の `git worktree add` が `cannot create directory at '.githooks': Operation not
+# permitted` で落ち、git は作りかけの worktree を片付ける。そこで checkout を省いて作り直し、取り出せるパスだけを
+# 取り出して、取り出せないパスに skip-worktree を付ける。付けずに残すと未ステージの削除（` D`）になり、
+# `git add -A` がそのパスの削除を stage する。`checkout-index -a` はディレクトリを作れないと最初のパスで fatal
+# 終了するので、パスごとに取り出す。
+# 処理は skills の plugins/dev-flow/_shared/scripts/worktree-checkout.sh（worktree_add）と同じ。
+#
+# sandbox 内で動かす前提（excludedCommands には入れない。sandbox 外で走らせると denyWrite を迂回して書ける）。
+set -euo pipefail
+
+if [ $# -lt 3 ] || [ $# -gt 4 ]; then
+  echo "usage: wt-add <repo> <path> <branch> [<start>]" >&2
+  exit 2
+fi
+
+root="$1"
+wt="$2"
+branch="$3"
+start="${4:-HEAD}"
+# git -C <root> は相対パスを <root> から解決するので、呼び出し元の cwd からの絶対パスにしておく
+case "$wt" in
+/*) ;;
+*) wt="$PWD/$wt" ;;
+esac
+
+# git の進捗・"HEAD is now at" は stderr に回し、stdout は skip-worktree の一覧だけにする
+if git -C "$root" show-ref --verify --quiet "refs/heads/${branch}"; then
+  full_err="$(git -C "$root" worktree add "$wt" "$branch" 2>&1)" && rc=0 || rc=$?
+else
+  full_err="$(git -C "$root" worktree add --no-track -b "$branch" "$wt" "$start" 2>&1)" && rc=0 || rc=$?
+fi
+if [ "$rc" -eq 0 ]; then
+  printf '%s\n' "$full_err" >&2
+  exit 0
+fi
+
+# -b で作った branch は full checkout が失敗しても残る。checkout を省いても作れない（branch が別の worktree で
+# checkout 済み等、checkout 以外の失敗）なら full checkout のエラーを返す
+if ! git -C "$root" show-ref --verify --quiet "refs/heads/${branch}" ||
+  ! git -C "$root" worktree add --no-checkout "$wt" "$branch" >/dev/null 2>&1; then
+  echo "wt-add: $full_err" >&2
+  exit 1
+fi
+
+# --no-checkout の worktree は index が空なので HEAD から作る
+if ! out="$(git -C "$wt" read-tree HEAD 2>&1)"; then
+  git -C "$root" worktree remove --force "$wt" >/dev/null 2>&1 || true
+  echo "wt-add: ${full_err}; checkout を省いて作り直した worktree の index を作れなかった: ${out}" >&2
+  exit 1
+fi
+
+skipped=()
+list="$(mktemp "${TMPDIR:-/tmp}/wt-add.XXXXXX")"
+git -C "$wt" ls-files -z >"$list"
+while IFS= read -r -d '' p; do
+  git -C "$wt" checkout-index -f -- "$p" >/dev/null 2>&1 || skipped+=("$p")
+done <"$list"
+rm -f "$list"
+
+if [ ${#skipped[@]} -gt 0 ] &&
+  ! out="$(git -C "$wt" update-index --skip-worktree -- "${skipped[@]}" 2>&1)"; then
+  git -C "$root" worktree remove --force "$wt" >/dev/null 2>&1 || true
+  echo "wt-add: ${full_err}; 取り出せないパスに skip-worktree を付けられなかった: ${out}" >&2
+  exit 1
+fi
+# 取り出したファイルの stat を index に載せる（載せないと以後の git status が毎回全ファイルを読み直す）
+git -C "$wt" update-index -q --refresh >/dev/null 2>&1 || true
+
+if [ ${#skipped[@]} -gt 0 ]; then
+  printf '%s\n' "${skipped[@]}"
+fi

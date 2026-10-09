@@ -176,6 +176,7 @@ for f in \
   pretool-bash-credential-guard.sh \
   pretool-gh-pr-self-approve-guard.sh \
   pretool-npx-guard.sh \
+  pretool-ps-guard.sh \
   session-start-replay.sh \
   stop-unfinished-guard.sh \
   permission-summary.sh; do
@@ -187,6 +188,26 @@ if [ "${#missing[@]}" -eq 0 ]; then
   pass "machine_specific_hooks_present"
 else
   fail "machine_specific_hooks_present" "Missing from claude-code/hooks: ${missing[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# settings_pretool_ps_guard_wired
+#
+# ps / pgrep / lsof / top の書き方ガードは全 Bash コマンドで走らせる（`if` で
+# 絞ると `cd x && ps` のような複合形を見逃す）。
+# ---------------------------------------------------------------------------
+echo "- settings_pretool_ps_guard_wired"
+count="$(jq '
+    [.hooks.PreToolUse // [] | .[]
+      | select(.matcher == "Bash")
+      | .hooks[]
+      | select(.command == "bash \"$HOME/.claude/hooks/pretool-ps-guard.sh\"" and (has("if") | not))
+    ] | length
+  ' "${SETTINGS}")"
+if [ "${count}" -eq 1 ]; then
+  pass "settings_pretool_ps_guard_wired"
+else
+  fail "settings_pretool_ps_guard_wired" "Expected 1 unconditional PreToolUse(Bash) entry for pretool-ps-guard.sh, got ${count}"
 fi
 
 # ---------------------------------------------------------------------------
