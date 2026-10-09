@@ -100,7 +100,8 @@ sandbox に塞がれたら:
   代償: sandbox 内のプロセスが Neon の API を持ち主の権限で叩ける（branch / DB の削除も可能）。
 - nix fmt: treefmt が ~/Library/Caches/treefmt にキャッシュ DB を書こうとして落ちる。allowWrite に足せば通るが、キャッシュなので --no-cache で足りる。
 - skill スクリプトの excludedCommands 登録: plugin cache ~/.claude/plugins/cache/playpark/ を bare / bash / python3 の 3 形で登録。
-  前置形は先頭トークンマッチの仕組み上パターンで表現できない。
+  前置形は先頭トークンマッチの仕組み上パターンで表現できない。ホームは `~/` で書く（絶対パスへの展開は
+  agent-vault-managed-env が managed-settings.d/60-home-paths.json に書く。`/Users/<name>` の直書きはテストで落ちる）。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。

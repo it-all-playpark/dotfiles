@@ -113,13 +113,15 @@ fi
 # ---------------------------------------------------------------------------
 # Copy-mode plugins run from ~/.claude/plugins/cache/playpark/<plugin>/<version>/;
 # skill scripts that call gh internally need the same 3 launch forms as the
-# skills checkout paths.
+# skills checkout paths. The ~/ forms are expanded to absolute paths per user by
+# agent-vault-managed-env.sh (managed-settings.d/60-home-paths.json).
 echo "- excluded_commands_cover_plugin_cache"
 missing=()
+# shellcheck disable=SC2016,SC2088 # 意図的に非展開: settings.json に格納された literal string と照合する
 for form in \
-  "/Users/naramotoyuuji/.claude/plugins/cache/playpark/*" \
-  "bash /Users/naramotoyuuji/.claude/plugins/cache/playpark/*" \
-  "python3 /Users/naramotoyuuji/.claude/plugins/cache/playpark/*" \
+  "~/.claude/plugins/cache/playpark/*" \
+  "bash ~/.claude/plugins/cache/playpark/*" \
+  "python3 ~/.claude/plugins/cache/playpark/*" \
   'bash $HOME/.claude/plugins/cache/playpark/*' \
   'python3 $HOME/.claude/plugins/cache/playpark/*'; do
   if ! jq -e --arg f "${form}" '.sandbox.excludedCommands | index($f) != null' "${SETTINGS}" >/dev/null 2>&1; then
