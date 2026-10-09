@@ -250,9 +250,6 @@ REMOVED_GLOBS=(
   'bash ~/.claude/skills/*'
   'node ~/.claude/skills/*'
   'python3 ~/.claude/skills/*'
-  '/Users/naramotoyuuji/.claude/skills/*'
-  'bash /Users/naramotoyuuji/.claude/skills/*'
-  'python3 /Users/naramotoyuuji/.claude/skills/*'
   'bash $HOME/.claude/skills/*'
   'python3 $HOME/.claude/skills/*'
 )

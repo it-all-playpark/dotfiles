@@ -296,6 +296,123 @@ else
 fi
 
 echo ""
+echo "--- excludedCommands のホームパス（60-home-paths.json） ---"
+
+# settings.json は ~/.claude/settings.json → repo の symlink なので、fixture も symlink にする
+SETTINGS_SRC="${TMPROOT}/repo/claude-code/settings.json"
+mkdir -p "$(dirname "${SETTINGS_SRC}")" "${HOME_T}/.claude"
+ln -s "${SETTINGS_SRC}" "${HOME_T}/.claude/settings.json"
+cat >"${SETTINGS_SRC}" <<'EOF'
+{"sandbox": {"excludedCommands": [
+  "~/.claude/plugins/cache/playpark/*",
+  "bash ~/.claude/plugins/cache/playpark/*",
+  "python3 $HOME/.claude/plugins/cache/playpark/*",
+  "git status",
+  "/opt/tool/*"
+]}}
+EOF
+HP_DIR="${TMPROOT}/home-paths/managed-settings.d"
+HP_OUT="${HP_DIR}/60-home-paths.json"
+HP_LISTING="$(printf '50-agent-vault.json\n60-home-paths.json')"
+
+# ---------------------------------------------------------------------------
+# tilde_entries_are_expanded_to_home: ~/ で始まるエントリ（コマンド名の後ろの ~/ も）だけを対象ユーザーの
+# ホームに置き換えて書く。$HOME 形式・他のエントリは settings.json 側でそのまま効くので書かない。
+# 50-agent-vault.json と同じ書き方（root:wheel 0640 + 実行ユーザーだけの読み取り ACL）
+# ---------------------------------------------------------------------------
+echo "- tilde_entries_are_expanded_to_home"
+rm -f "${STUB_OUT}/chown"
+run_script "${HP_DIR}/50-agent-vault.json"
+want="$(jq -n --arg h "${HOME_T}" '{sandbox: {excludedCommands: [
+  "\($h)/.claude/plugins/cache/playpark/*", "bash \($h)/.claude/plugins/cache/playpark/*"]}}')"
+acl="$(/bin/ls -le "${HP_OUT}" 2>/dev/null | sed -n '2,$p' || true)"
+if [ "${RC}" -eq 0 ] && jq -e --argjson want "${want}" '. == $want' "${HP_OUT}" >/dev/null 2>&1 &&
+  [ "$(mode_of "${HP_OUT}")" = 0o640 ] &&
+  grep -q "^root:wheel ${HP_DIR}/.60-home-paths.json." "${STUB_OUT}/chown" &&
+  [ "$(printf '%s\n' "${acl}" | sed 's/^ *//')" = "0: user:$(id -un) allow read" ] &&
+  [ "$(ls -A "${HP_DIR}")" = "${HP_LISTING}" ]; then
+  pass "tilde_entries_are_expanded_to_home"
+else
+  fail "tilde_entries_are_expanded_to_home" \
+    "rc=${RC} out=$(cat "${HP_OUT}" 2>/dev/null || echo '<missing>') dir=[$(ls -A "${HP_DIR}")] err=${ERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# invalid_settings_keep_previous_dropin: settings.json が JSON として読めない（git 操作の途中など）ときは
+# 前回の drop-in を残す（空にすると plugin のスクリプトが sandbox 内に戻る）
+# ---------------------------------------------------------------------------
+echo "- invalid_settings_keep_previous_dropin"
+before="$(cat "${HP_OUT}")"
+cp "${SETTINGS_SRC}" "${TMPROOT}/settings.bak"
+printf '{"sandbox": ' >"${SETTINGS_SRC}"
+run_script "${HP_DIR}/50-agent-vault.json"
+cp "${TMPROOT}/settings.bak" "${SETTINGS_SRC}"
+if [ "${RC}" -eq 0 ] && [ "$(cat "${HP_OUT}")" = "${before}" ] &&
+  [ "$(ls -A "${HP_DIR}")" = "${HP_LISTING}" ]; then
+  pass "invalid_settings_keep_previous_dropin"
+else
+  fail "invalid_settings_keep_previous_dropin" "rc=${RC} out=$(cat "${HP_OUT}") dir=[$(ls -A "${HP_DIR}")] err=${ERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# settings_owned_by_other_user_is_not_read: root で読むので、対象ユーザーのファイルでなければ読まない
+# （root 専用の JSON への symlink にされると、その中身が drop-in に漏れる）。前回の drop-in も消す
+# ---------------------------------------------------------------------------
+echo "- settings_owned_by_other_user_is_not_read"
+out_dir="${TMPROOT}/home-paths-other/managed-settings.d"
+mkdir -p "${out_dir}"
+cp "${HP_OUT}" "${out_dir}/60-home-paths.json"
+run_script "${out_dir}/50-agent-vault.json" AGENT_VAULT_TOKEN_OWNER=root
+if [ "${RC}" -eq 0 ] && [ ! -e "${out_dir}/60-home-paths.json" ] &&
+  printf '%s\n' "${ERR}" | grep -q "removed ${out_dir}/60-home-paths.json: .* is not a regular file owned by root"; then
+  pass "settings_owned_by_other_user_is_not_read"
+else
+  fail "settings_owned_by_other_user_is_not_read" "rc=${RC} dir=[$(ls -A "${out_dir}" 2>/dev/null)] err=${ERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# missing_settings_removes_dropin: settings.json が無い（symlink 先が消えた）ときは前回の drop-in を消す
+# （sandbox 外で動かす許可を settings.json の実態より長く残さない）。無いままなら何もしない（ログも出さない）
+# ---------------------------------------------------------------------------
+echo "- missing_settings_removes_dropin"
+mv "${SETTINGS_SRC}" "${TMPROOT}/settings.moved"
+run_script "${HP_DIR}/50-agent-vault.json"
+rc1="${RC}" err1="${ERR}"
+run_script "${HP_DIR}/50-agent-vault.json"
+mv "${TMPROOT}/settings.moved" "${SETTINGS_SRC}"
+if [ "${rc1}" -eq 0 ] && [ "${RC}" -eq 0 ] && [ ! -e "${HP_OUT}" ] &&
+  [ "$(ls -A "${HP_DIR}")" = "50-agent-vault.json" ] &&
+  printf '%s\n' "${err1}" | grep -q "removed ${HP_OUT}: .* is missing" &&
+  ! printf '%s\n' "${ERR}" | grep -q removed; then
+  pass "missing_settings_removes_dropin"
+else
+  fail "missing_settings_removes_dropin" "rc1=${rc1} rc=${RC} dir=[$(ls -A "${HP_DIR}")] err1=${err1} err=${ERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# repo_settings_have_no_unexpanded_home: repo の settings.json を展開すると、ホーム基点のエントリが
+# drop-in に揃う（plugin cache のスクリプトの 3 つの起動形を含む）
+# ---------------------------------------------------------------------------
+echo "- repo_settings_have_no_unexpanded_home"
+cp "${REPO_ROOT}/claude-code/settings.json" "${SETTINGS_SRC}"
+out_dir="${TMPROOT}/home-paths-repo/managed-settings.d"
+run_script "${out_dir}/50-agent-vault.json"
+got="$(jq -r '.sandbox.excludedCommands[]' "${out_dir}/60-home-paths.json" 2>/dev/null || true)"
+want_n="$(jq '[.sandbox.excludedCommands[] | select(test("(^| )~/"))] | length' "${REPO_ROOT}/claude-code/settings.json")"
+missing=""
+for e in "${HOME_T}/.claude/plugins/cache/playpark/*" \
+  "bash ${HOME_T}/.claude/plugins/cache/playpark/*" \
+  "python3 ${HOME_T}/.claude/plugins/cache/playpark/*"; do
+  printf '%s\n' "${got}" | grep -qxF -- "${e}" || missing="${missing} [${e}]"
+done
+if [ "${RC}" -eq 0 ] && [ -z "${missing}" ] && [ "${want_n}" -gt 0 ] &&
+  [ "$(printf '%s\n' "${got}" | grep -c "^\(bash \|python3 \)\{0,1\}${HOME_T}/")" -eq "${want_n}" ]; then
+  pass "repo_settings_have_no_unexpanded_home"
+else
+  fail "repo_settings_have_no_unexpanded_home" "rc=${RC} missing=${missing} want_n=${want_n} got=[${got}] err=${ERR}"
+fi
+
+echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 if [ "${FAIL}" -gt 0 ]; then
   echo "Failed tests:"
