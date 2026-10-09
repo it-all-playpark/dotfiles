@@ -150,6 +150,16 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "[ -f \"$HOME/.claude/hooks/posttoolfail-guard-hint.sh\" ] && bash \"$HOME/.claude/hooks/posttoolfail-guard-hint.sh\" || true",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ],
     "PreCompact": [
