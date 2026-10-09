@@ -16,12 +16,15 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LAUNCHER="${REPO_ROOT}/home-manager/home/file/agent-vault/agent-vault-server.sh"
-SERVICES="${REPO_ROOT}/home-manager/home/file/agent-vault/services.yaml"
+SERVICES_EXAMPLE="${REPO_ROOT}/home-manager/home/file/agent-vault/services.example.yaml"
 SETTINGS="${REPO_ROOT}/claude-code/settings.json"
 WRAPPER="${REPO_ROOT}/claude-code/bin/claude"
 MANAGED_ENV="${REPO_ROOT}/home-manager/home/file/agent-vault/agent-vault-managed-env.sh"
-ACCOUNT_MAP="${REPO_ROOT}/claude-code/account-map.json"
+ACCOUNT_MAP_EXAMPLE="${REPO_ROOT}/claude-code/account-map.example.json"
 VAULT_GH_SRC="${REPO_ROOT}/home-manager/home/file/agent-vault-gh"
+VAULT_GH_EXAMPLE="${REPO_ROOT}/home-manager/home/file/agent-vault-gh.example"
+DOTFILES_PRIVATE="${DOTFILES_PRIVATE:-${HOME}/ghq/github.com/it-all-playpark/dotfiles-private}"
+LABEL=""
 
 PASS=0
 FAIL=0
@@ -29,15 +32,15 @@ SKIP=0
 ERRORS=()
 
 pass() {
-  echo "  PASS: $1"
+  echo "  PASS: $1${LABEL:+ [${LABEL}]}"
   PASS=$((PASS + 1))
 }
 
 fail() {
-  echo "  FAIL: $1"
+  echo "  FAIL: $1${LABEL:+ [${LABEL}]}"
   echo "        $2"
   FAIL=$((FAIL + 1))
-  ERRORS+=("$1: $2")
+  ERRORS+=("$1${LABEL:+ [${LABEL}]}: $2")
 }
 
 skip() {
@@ -163,111 +166,139 @@ else
   fail "launcher_fails_without_keychain_item" "rc=${RC} err=$(cat "${TMPROOT}/launcher.err")"
 fi
 
-echo ""
-echo "--- services.yaml ---"
+# check_config_set <label> <services.yaml> <account-map.json> <hosts.yml の dir>...:
+# gh のアカウント（placeholder）と git の振り分けが services / account-map / hosts.yml の 3 か所で
+# 食い違わないことを確かめる。public の example 一式は常に、private repo（取引先の名前を含む本物）は
+# checkout があるときだけ確かめる
+check_config_set() {
+  LABEL="$1"
+  SERVICES="$2"
+  ACCOUNT_MAP="$3"
+  shift 3
+  VAULT_GH_DIRS=("$@")
 
-SERVICES_JSON="$(yq -o=json '.' "${SERVICES}")"
+  echo ""
+  echo "--- services.yaml / account-map.json / hosts.yml (${LABEL}) ---"
 
-# service_auth <host>: host がちょうど一致する service の auth を compact JSON で出す
-service_auth() {
-  printf '%s' "${SERVICES_JSON}" | jq -c --arg h "$1" '[.services[] | select(.host == $h) | .auth]'
-}
+  SERVICES_JSON="$(yq -o=json '.' "${SERVICES}")"
 
-# ---------------------------------------------------------------------------
-# services_api_is_passthrough_with_header_substitutions: api.github.com は認証を付けず
-# （placeholder を送らない client は認証なし）、ヘッダの placeholder だけを vault の token に置き換える。
-# REST の owner 別 service は持たない（GraphQL は path で振り分けられないので、アカウントは送る側が選ぶ）
-# ---------------------------------------------------------------------------
-echo "- services_api_is_passthrough_with_header_substitutions"
-api_services="$(printf '%s' "${SERVICES_JSON}" | jq -c '[.services[] | select(.host | startswith("api.github.com"))]')"
-if printf '%s' "${api_services}" | jq -e '
+  # service_auth <host>: host がちょうど一致する service の auth を compact JSON で出す
+  service_auth() {
+    printf '%s' "${SERVICES_JSON}" | jq -c --arg h "$1" '[.services[] | select(.host == $h) | .auth]'
+  }
+
+  # ---------------------------------------------------------------------------
+  # services_api_is_passthrough_with_header_substitutions: api.github.com は認証を付けず
+  # （placeholder を送らない client は認証なし）、ヘッダの placeholder だけを vault の token に置き換える。
+  # REST の owner 別 service は持たない（GraphQL は path で振り分けられないので、アカウントは送る側が選ぶ）
+  # ---------------------------------------------------------------------------
+  echo "- services_api_is_passthrough_with_header_substitutions"
+  api_services="$(printf '%s' "${SERVICES_JSON}" | jq -c '[.services[] | select(.host | startswith("api.github.com"))]')"
+  if printf '%s' "${api_services}" | jq -e '
     length == 1 and .[0].host == "api.github.com" and .[0].auth == {"type": "passthrough"}
     and (.[0].substitutions | length > 0)
     and all(.[0].substitutions[]; .in == ["header"] and (.placeholder | test("^__gh_[a-z0-9_]+__$")))' >/dev/null; then
-  pass "services_api_is_passthrough_with_header_substitutions"
-else
-  fail "services_api_is_passthrough_with_header_substitutions" "api.github.com services=${api_services}"
-fi
+    pass "services_api_is_passthrough_with_header_substitutions"
+  else
+    fail "services_api_is_passthrough_with_header_substitutions" "api.github.com services=${api_services}"
+  fi
 
-# vault_key_of_dir <~/.config/agent-vault-gh/<account>>: その dir の hosts.yml（repo の
-# home-manager/home/file/agent-vault-gh/<account>/hosts.yml）の placeholder を置き換える vault の key。
-# hosts.yml が無い・user の token と既定の token が食い違う・置換の定義が無いときは空
-vault_key_of_dir() {
-  local account hosts placeholder
-  # shellcheck disable=SC2088 # 意図的: account-map の値の "~/" を文字列として比べる（展開しない）
-  case "$1" in
-  "~/.config/agent-vault-gh/"*) account="${1#"~/.config/agent-vault-gh/"}" ;;
-  *) return 0 ;;
-  esac
-  hosts="${VAULT_GH_SRC}/${account}/hosts.yml"
-  [ -f "${hosts}" ] || return 0
-  placeholder="$(yq -o=json '.' "${hosts}" | jq -r '
+  # vault_key_of_dir <~/.config/agent-vault-gh/<account>>: その dir の hosts.yml（repo の
+  # home-manager/home/file/agent-vault-gh/<account>/hosts.yml）の placeholder を置き換える vault の key。
+  # hosts.yml が無い・user の token と既定の token が食い違う・置換の定義が無いときは空
+  vault_key_of_dir() {
+    local account hosts placeholder
+    # shellcheck disable=SC2088 # 意図的: account-map の値の "~/" を文字列として比べる（展開しない）
+    case "$1" in
+    "~/.config/agent-vault-gh/"*) account="${1#"~/.config/agent-vault-gh/"}" ;;
+    *) return 0 ;;
+    esac
+    hosts=""
+    for d in "${VAULT_GH_DIRS[@]}"; do
+      if [ -f "${d}/${account}/hosts.yml" ]; then
+        hosts="${d}/${account}/hosts.yml"
+        break
+      fi
+    done
+    [ -n "${hosts}" ] || return 0
+    placeholder="$(yq -o=json '.' "${hosts}" | jq -r '
     .["github.com"] as $h
     | if ($h.users[$h.user].oauth_token) == $h.oauth_token then $h.oauth_token else empty end')"
-  [ -n "${placeholder}" ] || return 0
-  printf '%s' "${SERVICES_JSON}" | jq -r --arg p "${placeholder}" '
+    [ -n "${placeholder}" ] || return 0
+    printf '%s' "${SERVICES_JSON}" | jq -r --arg p "${placeholder}" '
     [.services[] | select(.host == "api.github.com") | .substitutions[]? | select(.placeholder == $p) | .key] | first // empty'
-}
+  }
 
-# ---------------------------------------------------------------------------
-# accounts_resolve_to_substitutions: account-map の gh_vault_config_dir（default と各 org）が、
-# placeholder 入りの hosts.yml を経て api.github.com の置換の key に届く
-# ---------------------------------------------------------------------------
-echo "- accounts_resolve_to_substitutions"
-unresolved=""
-while IFS= read -r dir; do
-  [ -n "${dir}" ] || continue
-  [ -n "$(vault_key_of_dir "${dir}")" ] || unresolved="${unresolved} ${dir}"
-done <<<"$(jq -r '[.default.gh_vault_config_dir] + [.orgs[].gh_vault_config_dir] | map(select(. != null)) | unique | .[]' "${ACCOUNT_MAP}")"
-if [ -n "$(jq -r '.default.gh_vault_config_dir // empty' "${ACCOUNT_MAP}")" ] && [ -z "${unresolved}" ]; then
-  pass "accounts_resolve_to_substitutions"
-else
-  fail "accounts_resolve_to_substitutions" "default missing or unresolved:${unresolved}"
-fi
+  # ---------------------------------------------------------------------------
+  # accounts_resolve_to_substitutions: account-map の gh_vault_config_dir（default と各 org）が、
+  # placeholder 入りの hosts.yml を経て api.github.com の置換の key に届く
+  # ---------------------------------------------------------------------------
+  echo "- accounts_resolve_to_substitutions"
+  unresolved=""
+  while IFS= read -r dir; do
+    [ -n "${dir}" ] || continue
+    [ -n "$(vault_key_of_dir "${dir}")" ] || unresolved="${unresolved} ${dir}"
+  done <<<"$(jq -r '[.default.gh_vault_config_dir] + [.orgs[].gh_vault_config_dir] | map(select(. != null)) | unique | .[]' "${ACCOUNT_MAP}")"
+  if [ -n "$(jq -r '.default.gh_vault_config_dir // empty' "${ACCOUNT_MAP}")" ] && [ -z "${unresolved}" ]; then
+    pass "accounts_resolve_to_substitutions"
+  else
+    fail "accounts_resolve_to_substitutions" "default missing or unresolved:${unresolved}"
+  fi
 
-# ---------------------------------------------------------------------------
-# git_routes_match_account_map: git（Basic 認証は置換が届かない）は path の owner で振り分ける。
-# github.com（既定）は default のアカウント、default と違うアカウントを使う org は
-# github.com/<org>/* でそのアカウント。それ以外の owner 別 git service は持たない
-# ---------------------------------------------------------------------------
-echo "- git_routes_match_account_map"
-default_key="$(vault_key_of_dir "$(jq -r '.default.gh_vault_config_dir // empty' "${ACCOUNT_MAP}")")"
-other_orgs="$(jq -r '.default.gh_vault_config_dir as $d
+  # ---------------------------------------------------------------------------
+  # git_routes_match_account_map: git（Basic 認証は置換が届かない）は path の owner で振り分ける。
+  # github.com（既定）は default のアカウント、default と違うアカウントを使う org は
+  # github.com/<org>/* でそのアカウント。それ以外の owner 別 git service は持たない
+  # ---------------------------------------------------------------------------
+  echo "- git_routes_match_account_map"
+  default_key="$(vault_key_of_dir "$(jq -r '.default.gh_vault_config_dir // empty' "${ACCOUNT_MAP}")")"
+  other_orgs="$(jq -r '.default.gh_vault_config_dir as $d
   | .orgs | to_entries[] | select(.value.gh_vault_config_dir != null and .value.gh_vault_config_dir != $d)
   | [.key, .value.gh_vault_config_dir] | @tsv' "${ACCOUNT_MAP}")"
-expected_git="github.com=${default_key}"
-while IFS=$'\t' read -r org dir; do
-  [ -n "${org}" ] || continue
-  expected_git="${expected_git}"$'\n'"github.com/${org}/*=$(vault_key_of_dir "${dir}")"
-done <<<"${other_orgs}"
-actual_git="$(printf '%s' "${SERVICES_JSON}" | jq -r '
+  expected_git="github.com=${default_key}"
+  while IFS=$'\t' read -r org dir; do
+    [ -n "${org}" ] || continue
+    expected_git="${expected_git}"$'\n'"github.com/${org}/*=$(vault_key_of_dir "${dir}")"
+  done <<<"${other_orgs}"
+  actual_git="$(printf '%s' "${SERVICES_JSON}" | jq -r '
   .services[] | select(.host == "github.com" or (.host | startswith("github.com/")))
   | select(.auth.type == "basic" and .auth.username == "GITHUB_GIT_USERNAME") | "\(.host)=\(.auth.password)"' | sort)"
-expected_git="$(printf '%s\n' "${expected_git}" | sort)"
-other_git="$(printf '%s' "${SERVICES_JSON}" | jq -r '
+  expected_git="$(printf '%s\n' "${expected_git}" | sort)"
+  other_git="$(printf '%s' "${SERVICES_JSON}" | jq -r '
   .services[] | select(.host == "github.com" or (.host | startswith("github.com/")))
   | select((.auth.type == "basic" and .auth.username == "GITHUB_GIT_USERNAME") | not) | .host')"
-if [ -n "${default_key}" ] && [ "${actual_git}" = "${expected_git}" ] && [ -z "${other_git}" ]; then
-  pass "git_routes_match_account_map"
-else
-  fail "git_routes_match_account_map" "expected=[${expected_git}] actual=[${actual_git}] other=[${other_git}]"
-fi
+  if [ -n "${default_key}" ] && [ "${actual_git}" = "${expected_git}" ] && [ -z "${other_git}" ]; then
+    pass "git_routes_match_account_map"
+  else
+    fail "git_routes_match_account_map" "expected=[${expected_git}] actual=[${actual_git}] other=[${other_git}]"
+  fi
 
-# ---------------------------------------------------------------------------
-# services_names_are_unique_slugs: name は 3-64 文字の小文字英数とハイフン、重複なし
-# （`vault service set` は name で upsert するので、重複すると後の定義が前を消す）
-# ---------------------------------------------------------------------------
-echo "- services_names_are_unique_slugs"
-bad_names="$(printf '%s' "${SERVICES_JSON}" | jq -r '
+  # ---------------------------------------------------------------------------
+  # services_names_are_unique_slugs: name は 3-64 文字の小文字英数とハイフン、重複なし
+  # （`vault service set` は name で upsert するので、重複すると後の定義が前を消す）
+  # ---------------------------------------------------------------------------
+  echo "- services_names_are_unique_slugs"
+  bad_names="$(printf '%s' "${SERVICES_JSON}" | jq -r '
   [.services[].name] as $n
   | ($n | map(select(test("^[a-z0-9]([a-z0-9]|-(?!-)){1,62}[a-z0-9]$") | not)))
     + ($n | group_by(.) | map(select(length > 1) | .[0]))
   | .[]')"
-if [ -z "${bad_names}" ]; then
-  pass "services_names_are_unique_slugs"
+  if [ -z "${bad_names}" ]; then
+    pass "services_names_are_unique_slugs"
+  else
+    fail "services_names_are_unique_slugs" "invalid or duplicated: ${bad_names}"
+  fi
+}
+
+check_config_set example "${SERVICES_EXAMPLE}" "${ACCOUNT_MAP_EXAMPLE}" "${VAULT_GH_SRC}" "${VAULT_GH_EXAMPLE}"
+if [ -d "${DOTFILES_PRIVATE}" ]; then
+  check_config_set private "${DOTFILES_PRIVATE}/agent-vault/services.yaml" "${DOTFILES_PRIVATE}/account-map.json" \
+    "${VAULT_GH_SRC}" "${DOTFILES_PRIVATE}/agent-vault-gh"
 else
-  fail "services_names_are_unique_slugs" "invalid or duplicated: ${bad_names}"
+  skip "config_set_private" "${DOTFILES_PRIVATE} not checked out"
 fi
+LABEL=""
+ACCOUNT_MAP="${ACCOUNT_MAP_EXAMPLE}"
 
 echo ""
 echo "--- settings.json ---"

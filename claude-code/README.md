@@ -15,7 +15,7 @@ claude-code/
 ├── RULES.md              # 振る舞いのルール（engineering / subagent / tool routing / git / sandbox）
 ├── settings.json         # permissions（allow/deny）+ hooks 設定 + env
 ├── container.settings.json  # hermes コンテナで /root/.claude/settings.json として mount する settings
-├── account-map.json      # gh / gcloud / tofu の org → アカウントマップ（bin/account-exec が読む）
+├── account-map.example.json  # gh / gcloud / tofu の org → アカウントマップの例（本物は dotfiles-private。下記）
 ├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）、
 │                         # 本体の上流 proxy を agent-vault に向ける claude wrapper、
 │                         # agent-vault-sync-gh（gh の token を agent-vault に写す）、wt-add（worktree 作成）
@@ -40,7 +40,9 @@ hook が強制していることは書かない。強調（IMPORTANT / 絵文字
 5. `hooks/*.{py,sh}` を `~/.claude/hooks/` に symlink（`*.test.sh` は除外）
 6. `bin/*` を `~/.claude/bin/` に symlink（`*.test.sh` は除外。`bin/gh` / `bin/gcloud` / `bin/tofu` は repo 内で
    `account-exec` への symlink なので `~/.claude/bin/gh` → `bin/gh` → `account-exec` の 2 段になる）
-7. `account-map.json` を `~/.claude/account-map.json` に symlink
+7. private repo（`~/ghq/github.com/it-all-playpark/dotfiles-private`）の `account-map.json` を
+   `~/.claude/account-map.json` に、`agent-vault-gh/<account>/*` を `~/.config/agent-vault-gh/<account>/` に symlink
+   （checkout が無ければ警告を出して飛ばす。下記「非公開の設定」）
 
 `skills/` は貼らない。skill は playpark marketplace の plugin で読み込む（`~/.claude/skills` が repo を指すと
 組み込み保護が repo の `.git` まで及び、sandbox 内で commit できなくなる）。
@@ -62,11 +64,11 @@ gh と gcloud を複数アカウントで使い分けるとき、`gh auth switch
 ### 仕組み
 
 ```
-Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/worktrees/x)
+Bash: gh pr create …  (cwd=~/ghq/github.com/acme-corp/repo/.claude/worktrees/x)
   └─ ~/.claude/bin/gh → claude-code/bin/gh → account-exec
-       ├─ $PWD（不一致なら pwd -P）から org=BusinessProcessDX を取る
+       ├─ $PWD（不一致なら pwd -P）から org=acme-corp を取る
        ├─ ~/.claude/account-map.json の .orgs[org] を jq で引く
-       ├─ GH_CONFIG_DIR=~/.config/gh-th-it-dev を export
+       ├─ GH_CONFIG_DIR=~/.config/gh-client-account を export
        └─ exec ~/.nix-profile/bin/gh pr create …
             （PATH から shim dir を除いて解決した実体。exec 先の PATH は元のまま）
 ```
@@ -112,12 +114,27 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
 - 実体が PATH に無い、または解決先が shim 自身なら exit 127（無限再帰しない）
 - `ACCOUNT_EXEC_DEBUG=1 gh …` で判定結果（org / 付けた env / exec 先）を stderr に 1 行出す
 
+### 非公開の設定（`it-all-playpark/dotfiles-private`）
+
+取引先の org・アカウント名を含む設定は、この public repo ではなく private repo に置く。
+public 側には汎用名（`acme-corp` / `client-account`）の例だけを置き、CI はその例で整合を確かめる。
+
+| 本物（dotfiles-private） | 例（この repo） | 配置 |
+|------|------|------|
+| `account-map.json` | `claude-code/account-map.example.json` | activation が `~/.claude/account-map.json` に symlink |
+| `agent-vault/services.yaml` | `home-manager/home/file/agent-vault/services.example.yaml` | 手で `agent-vault vault service set -f` に渡す |
+| `agent-vault-gh/<account>/hosts.yml` | `home-manager/home/file/agent-vault-gh.example/` | activation が `~/.config/agent-vault-gh/<account>/` に symlink（`main` はこの repo から home.file で配る） |
+| `agent-vault/sync-gh-accounts` | — | `bin/agent-vault-sync-gh` が main に加えて写すアカウント |
+
+新しいマシンでは `ghq get it-all-playpark/dotfiles-private` してから `nix run .#update` する。
+checkout があれば `tests/agent-vault.test.sh` は本物の整合も確かめる。
+
 ### マップの編集（`account-map.json`）
 
 ```json
 {
   "orgs": {
-    "BusinessProcessDX": { "gcloud_config_dir": "~/.config/gcloud-th-it-dev", "gh_config_dir": "~/.config/gh-th-it-dev" },
+    "acme-corp": { "gcloud_config_dir": "~/.config/gcloud-client-account", "gh_config_dir": "~/.config/gh-client-account" },
     "it-all-playpark":   { "gcloud_config_dir": "~/.config/gcloud",           "gh_config_dir": "~/.config/gh" }
   }
 }
@@ -133,36 +150,36 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
 - `gh_vault_config_dir` は agent-vault 経由のセッション（`CLAUDE_GH_VAULT=1`）で gh が使う config dir
   （下記「agent-vault」）。org に無ければトップレベルの `default.gh_vault_config_dir` を使い、未登録 org・ghq 外
   （お客さんの repo 等）も `default` になる。main 以外のアカウントを使う org だけ書き、同じ org を
-  `home-manager/home/file/agent-vault/services.yaml` の git の振り分けにも書く（`tests/agent-vault.test.sh` が一致を確かめる）
+  dotfiles-private の `agent-vault/services.yaml` の git の振り分けにも書く（`tests/agent-vault.test.sh` が一致を確かめる）
 - dir の存在や妥当性は shim では検証しない（gh / gcloud が「未ログイン」、tofu が「ファイルが無い」を正しく言う）
 - 編集後は `nix run .#update` 不要（`~/.claude/account-map.json` は symlink）。`nix fmt` がキーをソートする
 
 ### 初回セットアップ（人間の作業）
 
 ```bash
-gh auth logout -h github.com -u th-it-dev            # ~/.config/gh から失効エントリを除去
-GH_CONFIG_DIR=~/.config/gh-th-it-dev gh auth login    # 分離 dir に th-it-dev を再ログイン
+gh auth logout -h github.com -u client-account            # ~/.config/gh から失効エントリを除去
+GH_CONFIG_DIR=~/.config/gh-client-account gh auth login    # 分離 dir に client-account を再ログイン
 nix run .#update                                      # symlink / PATH / settings を反映
 exec $SHELL -l                                        # PATH を取り直す
 
 # gcloud: 分離 dir にログイン（shim が cwd から CLOUDSDK_CONFIG を付けるので cd してから）
-cd ~/ghq/github.com/BusinessProcessDX/<repo>
-gcloud auth login                                     # → ~/.config/gcloud-th-it-dev/
+cd ~/ghq/github.com/acme-corp/<repo>
+gcloud auth login                                     # → ~/.config/gcloud-client-account/
 gcloud config set project th-all
-gcloud auth application-default login                 # → ~/.config/gcloud-th-it-dev/application_default_credentials.json
+gcloud auth application-default login                 # → ~/.config/gcloud-client-account/application_default_credentials.json
 cd ~/ghq/github.com/playpark-llc/<repo>
 gcloud auth application-default login                 # ~/.config/gcloud/ の ADC が別アカウントで上書きされていたら戻す
-gcloud config configurations delete th-it-all         # 旧構成（~/.config/gcloud 内）は不要になったので消す（任意）
+gcloud config configurations delete client-config         # 旧構成（~/.config/gcloud 内）は不要になったので消す（任意）
 ```
 
 確認:
 
 ```bash
-cd ~/ghq/github.com/BusinessProcessDX/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/BusinessProcessDX/<repo>
+cd ~/ghq/github.com/acme-corp/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/acme-corp/<repo>
 which gh                      # → ~/.claude/bin/gh
-gh auth status                # → th-it-dev
-gcloud config list            # → account th.it.dev@…（~/.config/gcloud-th-it-dev/）
-ACCOUNT_EXEC_DEBUG=1 tofu version   # stderr: GOOGLE_APPLICATION_CREDENTIALS=…/gcloud-th-it-dev/application_default_credentials.json
+gh auth status                # → client-account
+gcloud config list            # → account client-account@…（~/.config/gcloud-client-account/）
+ACCOUNT_EXEC_DEBUG=1 tofu version   # stderr: GOOGLE_APPLICATION_CREDENTIALS=…/gcloud-client-account/application_default_credentials.json
 cd ~/ghq/github.com/it-all-playpark/dotfiles
 gh auth status                # → it-all-playpark
 gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud/）
@@ -197,9 +214,9 @@ vault に入れる token は、人間の端末で `gh auth login` 済みの gh �
 | binary（v0.40.0 固定。更新手順は冒頭コメント） | `lib/agent-vault/default.nix` |
 | LaunchAgent `com.playpark.agent-vault` | `home-manager/programs/agent-vault.nix` |
 | 起動（Keychain のマスターパスワードを `--password-stdin` で渡し、CA bundle を書く） | `home-manager/home/file/agent-vault/agent-vault-server.sh` |
-| services（api.github.com の placeholder 置換、git の owner 振り分け） | `home-manager/home/file/agent-vault/services.yaml` |
-| gh 用の config dir（アカウントごとの `hosts.yml`。token は placeholder） | `home-manager/home/file/agent-vault-gh/<account>/` → `~/.config/agent-vault-gh/<account>/` |
-| どの repo でどのアカウントか（`gh_vault_config_dir`、未登録は `default`） | `account-map.json` |
+| services（api.github.com の placeholder 置換、git の owner 振り分け） | dotfiles-private の `agent-vault/services.yaml`（例: `home-manager/home/file/agent-vault/services.example.yaml`） |
+| gh 用の config dir（アカウントごとの `hosts.yml`。token は placeholder） | `main` は `home-manager/home/file/agent-vault-gh/main/`、それ以外は dotfiles-private の `agent-vault-gh/<account>/` → `~/.config/agent-vault-gh/<account>/` |
+| どの repo でどのアカウントか（`gh_vault_config_dir`、未登録は `default`） | dotfiles-private の `account-map.json` |
 | Claude Code 本体に `HTTPS_PROXY` と CA を付ける wrapper | `bin/claude` |
 | wrapper を通らない起動に同じ env を渡す managed settings の drop-in を書く（LaunchDaemon `com.playpark.agent-vault-managed-env`） | `darwin/agent-vault.nix`、`home-manager/home/file/agent-vault/agent-vault-managed-env.sh` |
 | gh の token を vault に写す（人間の端末で実行） | `bin/agent-vault-sync-gh` |
@@ -226,7 +243,7 @@ gh pr create（cwd = ~/ghq/github.com/<org>/repo、sandbox 内でも bg job で�
       └─ GH_CONFIG_DIR=~/.config/agent-vault-gh/<account> で gh を exec
            └─ Authorization: token __gh_<account>__ → agent-vault が vault の GH_TOKEN_<ACCOUNT> に置き換え
 git push / fetch（https。sandbox 内でも bg job でも）
- └─ agent-vault が URL の owner で Basic 認証を付ける（github.com/BusinessProcessDX/* は th-it-dev、
+ └─ agent-vault が URL の owner で Basic 認証を付ける（github.com/acme-corp/* は client-account、
     それ以外は main）。credential helper は bin/claude が空にしているので呼ばれない
 ```
 
@@ -261,10 +278,10 @@ tail -n 2 ~/.local/state/agent-vault.err.log   # "wrote CA bundle: …" が出�
 agent-vault auth register
 agent-vault owner config set --invite-only
 agent-vault owner config get                   # invite_only: enabled
-# 2. credential: gh にログイン済みの token（main と th-it-dev）を写す
+# 2. credential: gh にログイン済みの token（main と client-account）を写す
 agent-vault-sync-gh
 # 3. services
-agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles/home-manager/home/file/agent-vault/services.yaml
+agent-vault vault service set -f ~/ghq/github.com/it-all-playpark/dotfiles-private/agent-vault/services.yaml
 # 4. Claude Code 用の agent と proxy token
 agent-vault agent create claude-code --vault default:proxy --token-only > ~/.agent-vault/proxy-token
 chmod 600 ~/.agent-vault/proxy-token
@@ -312,13 +329,13 @@ ps eww -p "$(pgrep -f 'claude daemon run')" | tr ' ' '\n' | grep -E '^GIT_CONFIG
 ```bash
 tok=$(tr -d '[:space:]' < ~/.agent-vault/proxy-token)
 p="http://$tok:default@127.0.0.1:14322"
-# gh: placeholder が置き換わり main / th-it-dev が返る
+# gh: placeholder が置き換わり main / client-account が返る
 HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/main gh api user --jq .login
-HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/th-it-dev gh api user --jq .login
-# git: owner ごとの Basic 認証（BusinessProcessDX の private repo で th-it-dev、それ以外で main）。
+HTTPS_PROXY=$p SSL_CERT_FILE=~/.local/state/agent-vault/ca-bundle.pem GH_CONFIG_DIR=~/.config/agent-vault-gh/client-account gh api user --jq .login
+# git: owner ごとの Basic 認証（acme-corp の private repo で client-account、それ以外で main）。
 # credential helper を外して、vault の認証だけで通ることを見る
 HTTPS_PROXY=$p GIT_SSL_CAINFO=~/.local/state/agent-vault/ca-bundle.pem GIT_TERMINAL_PROMPT=0 \
-  git -c credential.helper= ls-remote https://github.com/BusinessProcessDX/<private-repo> HEAD
+  git -c credential.helper= ls-remote https://github.com/acme-corp/<private-repo> HEAD
 HTTPS_PROXY=$p GIT_SSL_CAINFO=~/.local/state/agent-vault/ca-bundle.pem GIT_TERMINAL_PROMPT=0 \
   git -c credential.helper= ls-remote https://github.com/playpark-llc/<private-repo> HEAD
 unset tok p
@@ -337,7 +354,7 @@ agent-vault vault credential list # 失敗する（管理 API に sandbox から
 ps eww -p $PPID                   # 失敗するか、HTTPS_PROXY（proxy token 入り）が見えない
                                   # （見えると 14322 経由で allowedDomains を迂回できる）
 echo "$CLAUDE_GH_VAULT"           # 1
-gh api user --jq .login           # cwd のアカウント（BusinessProcessDX の repo では th-it-dev）
+gh api user --jq .login           # cwd のアカウント（acme-corp の repo では client-account）
 gh pr list --limit 1              # GraphQL が通る（playpark-llc・お客さんの repo でも）
 git config --get-urlmatch credential.helper https://github.com; echo "rc=$?"   # 空行 1 行・rc=0（github.com の helper が空）
 git fetch --dry-run               # sandbox 内で通る（git / gh は excludedCommands に無い）

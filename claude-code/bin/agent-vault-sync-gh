@@ -13,11 +13,34 @@
 # 実行中は同じユーザーのプロセスから ps で見えるが、同じユーザーなら `gh auth token` で直接読めるので
 # 新しく露出するものは無い。sandbox 内からは ps が使えない（Operation not permitted）。
 #
-# 環境変数（テスト用）:
-#   AGENT_VAULT_SYNC_GH_ACCOUNTS  "<credential key>=<gh config dir>" を空白区切り
+# main（GH_TOKEN_MAIN=~/.config/gh）以外のアカウントは、取引先のアカウント名を含むので private repo の
+# agent-vault/sync-gh-accounts に 1 行 1 つ "<credential key>=<gh config dir>" で書く（~/ は $HOME に展開）。
+#
+# 環境変数:
+#   AGENT_VAULT_SYNC_GH_ACCOUNTS       "<credential key>=<gh config dir>" を空白区切り（指定時はこれだけを使う。テスト用）
+#   AGENT_VAULT_SYNC_GH_ACCOUNTS_FILE  追加アカウントの一覧
+#                                      （既定 ~/ghq/github.com/it-all-playpark/dotfiles-private/agent-vault/sync-gh-accounts）
 set -euo pipefail
 
-accounts="${AGENT_VAULT_SYNC_GH_ACCOUNTS:-GH_TOKEN_MAIN=$HOME/.config/gh GH_TOKEN_TH_IT_DEV=$HOME/.config/gh-th-it-dev}"
+accounts_file="${AGENT_VAULT_SYNC_GH_ACCOUNTS_FILE:-$HOME/ghq/github.com/it-all-playpark/dotfiles-private/agent-vault/sync-gh-accounts}"
+if [ -n "${AGENT_VAULT_SYNC_GH_ACCOUNTS:-}" ]; then
+  accounts="$AGENT_VAULT_SYNC_GH_ACCOUNTS"
+else
+  accounts="GH_TOKEN_MAIN=$HOME/.config/gh"
+  if [ -f "$accounts_file" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+      "" | "#"*) continue ;;
+      esac
+      key="${line%%=*}"
+      dir="${line#*=}"
+      case "$dir" in
+      "~/"*) dir="$HOME/${dir#"~/"}" ;;
+      esac
+      accounts="$accounts $key=$dir"
+    done <"$accounts_file"
+  fi
+fi
 
 args=(GITHUB_GIT_USERNAME=x-access-token)
 for pair in $accounts; do

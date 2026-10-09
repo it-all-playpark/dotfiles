@@ -150,7 +150,9 @@ in
       # 落とすうえ、終了コード 0 なので switch は成功として報告され気づけない。
       (
       DOTFILES_CLAUDE="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles/claude-code"
+      DOTFILES_PRIVATE="${config.home.homeDirectory}/ghq/github.com/it-all-playpark/dotfiles-private"
       CLAUDE_DIR="${config.home.homeDirectory}/.claude"
+      VAULT_GH_DIR="${config.home.homeDirectory}/.config/agent-vault-gh"
 
       # dotfiles が存在しない場合はスキップ（初回セットアップ時などを考慮）
       if [ ! -d "$DOTFILES_CLAUDE" ]; then
@@ -179,16 +181,30 @@ in
         [ -f "$DOTFILES_CLAUDE/$f" ] && ln -sf "$DOTFILES_CLAUDE/$f" "$target"
       done
 
-      # account-map-symlink: begin
-      # gh / gcloud / tofu の cwd 連動アカウント shim (bin/account-exec) が引く org → アカウントマップ
+      # private-config-symlink: begin
+      # 取引先の org・アカウント名を含む設定は private repo（it-all-playpark/dotfiles-private）の
+      # checkout から張る（public 側には汎用名の *.example だけを置く）。checkout が無いマシンでは
+      # account-map を張らず、account-exec は既定のアカウントのまま動く。
+      # - account-map.json: gh / gcloud / tofu の cwd 連動アカウント shim (bin/account-exec) が引く org → アカウントマップ
+      # - agent-vault-gh/<account>/*: agent-vault 経由の gh が使う hosts.yml（main は home.file が配る）
       target="$CLAUDE_DIR/account-map.json"
       if [ -f "$target" ] && [ ! -L "$target" ]; then
         rm "$target"
       fi
-      if [ -f "$DOTFILES_CLAUDE/account-map.json" ]; then
-        ln -sf "$DOTFILES_CLAUDE/account-map.json" "$target"
+      if [ -f "$DOTFILES_PRIVATE/account-map.json" ]; then
+        ln -sf "$DOTFILES_PRIVATE/account-map.json" "$target"
+      else
+        echo "Warning: $DOTFILES_PRIVATE/account-map.json not found (ghq get it-all-playpark/dotfiles-private). Skipping account-map."
       fi
-      # account-map-symlink: end
+      for d in "$DOTFILES_PRIVATE"/agent-vault-gh/*/; do
+        [ -d "$d" ] || continue
+        account="$(basename "$d")"
+        mkdir -p "$VAULT_GH_DIR/$account"
+        for f in "$d"*; do
+          [ -f "$f" ] && ln -sf "$f" "$VAULT_GH_DIR/$account/$(basename "$f")"
+        done
+      done
+      # private-config-symlink: end
 
       # MCP_*.md files
       for f in "$DOTFILES_CLAUDE"/MCP_*.md; do
