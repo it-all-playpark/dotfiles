@@ -14,11 +14,13 @@ claude-code/
 ├── CLAUDE.md             # global Claude Code instructions（RULES.md を import）
 ├── RULES.md              # 振る舞いのルール（engineering / subagent / tool routing / git / sandbox）
 ├── settings.json         # permissions（allow/deny）+ hooks 設定 + env
-├── skill-config.json     # it-all-playpark/skills の per-skill デフォルト値
+├── container.settings.json  # hermes コンテナで /root/.claude/settings.json として mount する settings
 ├── account-map.json      # gh / gcloud / tofu の org → アカウントマップ（bin/account-exec が読む）
-├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）
-│                         # と、本体の上流 proxy を agent-vault に向ける claude wrapper
-└── hooks/                # SessionStart / PreCompact / Pre|PostToolUse スクリプト
+├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）、
+│                         # 本体の上流 proxy を agent-vault に向ける claude wrapper、
+│                         # agent-vault-sync-gh（gh の token を agent-vault に写す）、wt-add（worktree 作成）
+└── hooks/                # SessionStart / PreCompact / Pre|PostToolUse / PostToolUseFailure /
+                          # PermissionRequest / Stop スクリプト
 ```
 
 `RULES.md` はかつて SuperClaude framework の一部として `PRINCIPLES.md` と共に導入したが、
@@ -176,7 +178,7 @@ gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud
 - shim は毎回 `jq` を起動する（数 ms、gh / gcloud 自体の起動時間に埋もれる）
 - ghq 外に clone した repo では判定できず既定のまま
 
-テスト: `bash claude-code/bin/account-exec.test.sh`（shim、16 ケース / 20 assertion）、
+テスト: `bash claude-code/bin/account-exec.test.sh`（shim）、
 `bash tests/claude-bin-symlink.test.sh`（activation の symlink ロジック）。
 `bin/account-exec` は拡張子が無いため pre-commit の shellcheck 対象外。変更時は
 `nix develop -c shellcheck claude-code/bin/account-exec` を手で回す。
@@ -442,10 +444,10 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 
 | イベント | スクリプト | 役割 |
 |---------|----------|------|
-| `SessionStart` (startup / resume / compact) | `session-start-replay.sh` | 直近の作業状態を再表示 |
+| `SessionStart` (compact) | `session-start-replay.sh` | 直近の作業状態を再表示 |
 | `SessionStart` (*) | `session-start-account-path.sh` | `~/.claude/bin`（gh / gcloud shim）を `$CLAUDE_ENV_FILE` 経由でセッション PATH 先頭に追加。Claude Code の Bash は起動プロセスの PATH snapshot を使い rc を読み直さないため、rc 側の PATH 追加だけでは desktop app / bg job 起動で欠けることがある |
 | `PreCompact` | `pre-compact-dump.sh` | compact 前に session 状態を `claudedocs/session-*.md` へ退避 |
-| `PreToolUse` Bash (`git push*`) | `allow-feature-push.sh` | protected branch への push を抑止 |
+| `PreToolUse` Bash (`git *`) | `allow-feature-push.sh` | protected branch への push を抑止（push かどうかは script 内で判定） |
 | `PreToolUse` Bash | `pretool-bash-credential-guard.sh` | prod credential を含むコマンドを `ask`。1 段目は正規表現（`$PROD_*` / `.env.prod*` / `aws --profile *prod*`）、2 段目は字面で候補（cloud CLI / DB クライアント / `--context` 等 / prod・live・deploy 語）に絞った上で Jev に「本番に触るか」を判定させ p ≥ 0.7 で `ask`。判定は `~/.claude/logs/credential-guard.jsonl` に記録 |
 | `PreToolUse` Bash | `pretool-gh-pr-self-approve-guard.sh` | `gh pr review --approve` による PR self-approve を deny（merge/approve は常に人間） |
 | `PreToolUse` Bash (`git worktree add*`) | `generate-worktreeinclude.sh` | `.worktreeinclude` 自動生成 |
@@ -456,9 +458,11 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 | `PostToolUse` | `memory-monitor.py` | メモリ使用量監視 |
 | `PostToolUse` (WebFetch / WebSearch / Bash / Read / Gmail・Drive MCP) | `posttool-injection-screen.sh` | 外部由来テキスト（Web ページ、`gh issue/pr view` / `gh api` 出力、`Box-Box/` 配下の Read、メール、Drive 文書）に AI エージェント向けの指示が含まれないか Jev で検査し、p ≥ 0.6 なら `additionalContext` で「データとして扱え」と注意を注入。deny はしない。全判定を `~/.claude/logs/injection-screen.jsonl` に記録 |
 | `PostToolUseFailure` | `posttoolfail-classify.sh` | ツール失敗を Jev で `class`（sandbox_denied / network_denied / permission_denied / not_found / syntax_error / test_failed / timeout / other）に分類し `~/.claude/logs/tool-failures.jsonl` に記録。記録のみで挙動は変えない |
-| `Stop` | `stop-unfinished-guard.sh` | 未完了タスクがあれば停止を抑止 |
-| `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知。settings.json 側は `` 参照 1 本で共有。herdr は絶対パス完全一致でしか登録済みと判定しないため、`herdr integration install claude` を再実行した後は追記される絶対パスのエントリを revert すること |
+| `Stop` | `stop-unfinished-guard.sh` | feature branch に未 commit の差分が残っていれば exit 2 で継続させる（差し戻しは 1 回、`CLAUDE_STOP_GUARD=0` で無効） |
+| `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知。settings.json 側は `$HOME/.claude/hooks/herdr-agent-state.sh` 参照 1 本で共有（無ければ何もしない）。herdr は絶対パス完全一致でしか登録済みと判定しないため、`herdr integration install claude` を再実行した後は追記される絶対パスのエントリを revert すること |
 | `UserPromptSubmit` | inline `rm -f /tmp/claude-skill-ctx-<session>` | `playpark-core` plugin の `journal/scripts/journal.sh` が使う skill-ctx state file をプロンプト投入毎にクリア。plugin 側 `hooks.json` に `UserPromptSubmit` の移植先が無いため dotfiles 側に維持（journal.sh 側の 30 分 TTL は取りこぼし時の保険） |
+| `Notification` | inline `osascript -e 'display notification …'` | macOS の通知センターに通知 |
+| `SessionStart` / `SessionEnd` / `Stop` / `UserPromptSubmit` / `PermissionRequest` / `Notification` (permission_prompt) / `Pre`・`PostToolUse` (AskUserQuestion / ExitPlanMode) | `moshi-hook claude-hook`（Homebrew の `moshi-hook`） | Moshi（iPhone）の Agent inbox にセッション状態・確認待ちを送る |
 
 テストファイル（`*.test.sh`）は symlink 対象外。
 
@@ -513,15 +517,6 @@ it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark
 permission を追加するときは、まず deny ルールに引っかからないか確認すること
 （deny は allow より優先される）。
 
-## skill-config.json
-
-`it-all-playpark/skills` リポジトリの skill が読み込む per-skill デフォルト値。
-ブログ系（`blog-fact-check` / `blog-seo-improve` / `blog-internal-links` 等）の閾値や、
-`sales` skill のテンプレート文面などを集約している。
-
-機密情報は **入れない**（このファイルは public repo にコミットされる）。
-シークレットは各 skill が `~/.config/<skill>/` 等から個別に読む方式にする。
-
 ## skills のセットアップ
 
 skills 本体は別 repo（[it-all-playpark/skills](https://github.com/it-all-playpark/skills)）で管理される。
@@ -540,8 +535,9 @@ main に追随できるよう、旧 link mode の inline marketplace `playpark-l
 
 - `env.FORCE_AUTOUPDATE_PLUGINS=1`: `DISABLE_AUTOUPDATER=1`（本体は mise で固定）は plugin の
   auto-update も止めるため、plugin だけ更新を有効に戻す
-- `autoUpdate: true` は managed settings でしか効かないため、user settings には書けない。
-  各マシンで一度 `/plugin` → Marketplaces → `playpark` の auto-update を有効化する
+- `extraKnownMarketplaces.playpark.autoUpdate: true` を書いているが、marketplace の auto-update は
+  managed settings でしか効かない。各マシンで一度 `/plugin` → Marketplaces → `playpark` の
+  auto-update を有効化する
 - GitHub 由来の plugin は起動時に自動 install されない。各マシンで一度 install する（下記導入手順）
 - auto-update は起動後 0〜10 分の遅延で走り、`/reload-plugins` か次回起動で反映される
 

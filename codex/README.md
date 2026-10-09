@@ -6,7 +6,7 @@ This directory stores shared Codex configuration managed by dotfiles.
 
 - `config.base.toml`: shared defaults merged into `~/.codex/config.toml`
 - `config.local.toml.template`: template for local-only overrides/secrets
-- `prompts/`, `policy/`: static assets synced as symlinks
+- `policy/`: static assets synced as symlinks (a `prompts/` directory, if added, is synced the same way)
 - `hooks/`: Codex hook scripts synced as symlinks for existing `~/.codex/hooks.json`
 - `rules/default.rules`: baseline template copied once to `~/.codex/rules/default.rules`
 
