@@ -66,7 +66,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 - nix（daemon socket 許可済み）: nix を書いたら apply 前に `nix build` / `nix flake check` で自分で確かめる。ただし daemon は sandbox 外なので、nix 経由の取得は `allowedDomains` の制限を受けない。未知の flake や URL は通常の外部アクセスと同じ慎重さで扱う
 - Jev: `~/.local/state/jev-broker/jev.sock` 経由。sandbox 内では Keychain が exit 36 で読めないのが正常なので、ロック解除を試さない
 - Postgres: sandbox 内で `initdb` / docker は使わず、pg-broker に頼む。`pg-broker create` が返す `database_url`（非 superuser の `app`、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`。curl は deny なので使わない
-- プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/bin/ps` `/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は `top -l 1 -o mem -n 15 -stats pid,command,mem` のように引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
+- プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。`ps` は使わない（環境変数を出せるので hook が deny する）。一覧・CPU・メモリは `/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time`、引数まで含むコマンドラインは `/usr/bin/pgrep -lf <pattern>`。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
 - pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
 
 sandbox に塞がれたら:
@@ -124,4 +124,8 @@ sandbox に塞がれたら:
   特定・停止できなかった。どれも SIP 保護下で書き換え不可。PATH 解決で別物に化けないよう絶対パスだけで登録する。
   見るだけに留め、kill / pkill は登録しない: sandbox 外の kill は持ち主の任意プロセスに signal を送れ（`kill -9 -1` で全プロセス、
   `pkill -f node` で Claude 本体・他セッション）、歯止めが auto mode の判定だけになる。取り残し対策は寿命ルール（#268）で先回りする。
+- 2026-10-09 /bin/ps を excludedCommands から撤去（issue #274）: macOS の ps は `e` / `-E` で他プロセスの環境変数を出し、sandbox 外で
+  wrapper が Claude 本体に渡す HTTPS_PROXY（agent-vault の proxy token）が読めた。excludedCommands は前方一致の glob なので option を
+  絞っても後ろに -E を足せ、permissions.deny で BSD 形式の組み合わせを網羅するのも fragile なので除外そのものを外した。
+  top（-stats の key に環境変数が無い）/ pgrep -lf（引数まで）で用途は足りる。pretool-ps-guard.sh は ps をどの形でも deny する。
 -->
