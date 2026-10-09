@@ -16,6 +16,13 @@ bash tests/run-all.sh         # Run all tests in parallel (CI: nix develop --com
 
 CI (`.github/workflows/ci.yml`) runs flake check, darwin/home config evaluation and `tests/run-all.sh` on every PR. Tracked hooks live in `.githooks/` (pre-commit: treefmt + shellcheck, pre-push: flake check + tests, without the config evaluation step); `nix run .#update` / `nix develop` install shims via `scripts/install-git-hooks.sh`. The hooks do nothing inside Claude Code (`CLAUDECODE=1`); Claude's pushes are checked by CI — run `bash tests/run-all.sh` yourself before pushing.
 
+## Public repo
+
+This repo is **public**: a pushed branch, commit messages, and PR / issue text are published the moment they leave the machine.
+Never put personal info (phone numbers, addresses, other people's names or booking URLs), client org / account names, or secrets here.
+They go in the private repo `it-all-playpark/dotfiles-private` (`~/ghq/github.com/it-all-playpark/dotfiles-private`, symlinked by activation); keep only generic `*.example` files here (`acme-corp` / `client-account`).
+`claude-code/hooks/pretool-public-repo-guard.sh` asks before `git push` / `gh pr|issue create|comment|edit` when it finds such strings (repos with a `.public-repo` file only). Do not work around it; move the content to dotfiles-private instead.
+
 ## Edit Paths
 
 | What | Where |
