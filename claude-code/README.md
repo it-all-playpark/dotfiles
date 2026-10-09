@@ -429,7 +429,8 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の g
     展開し、`managed-settings.d/60-home-paths.json` に書く。excludedCommands は Claude が打ったコマンド文字列と
     そのまま照合する（`~` / `$HOME` を展開しない）ので、絶対パスで呼ばれるスクリプトには絶対パスのエントリが要る。
     `settings.json` には `~/` で書けば clone した人のホストでも効く（excludedCommands は設定元をまたいで連結される）。
-    `settings.json` は対象ユーザーの通常ファイルのときだけ読み、JSON として壊れているときは前回の drop-in を残す
+    `settings.json` は対象ユーザーの通常ファイルのときだけ読み、JSON として壊れているときは前回の drop-in を残す。
+    `settings.json` が無い・対象ユーザーのファイルでないときは drop-in を消す（sandbox 外で動かす許可を残さない）
   - drop-in は proxy token を含むので、`settings.json` の `denyRead` で sandbox から読めない（他のユーザーには group を `wheel`・ACL を対象ユーザーだけにして隠す。macOS の標準ユーザーは全員 primary group が `staff` なので、`staff` の 0640 では同じ Mac の他ユーザーが読める）
   - 残る制約（実機で確かめる）: Desktop が launch environment で同じ変数（`HTTPS_PROXY` / CA 系 / `GIT_CONFIG_COUNT`）を
     設定していると、Desktop のセッションでは settings の `env` が無視される（2026-10-09 の実測では設定していなかった。

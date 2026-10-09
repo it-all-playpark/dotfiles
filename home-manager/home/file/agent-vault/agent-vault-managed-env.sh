@@ -23,7 +23,8 @@
 # settings.json は全ユーザー共通なので ~/ で書き、ユーザーごとの絶対パスはここで作る。excludedCommands は設定元を
 # またいで連結され、managed は信頼される設定元なので、settings.json に直書きしたのと同じに効く。
 # settings.json はユーザーが書けるので、開いたファイルが対象ユーザーの通常ファイルのときだけ読む（token と同じ）。
-# 読めない・JSON として壊れているときは前回の drop-in を残す。
+# JSON として壊れている（git 操作の途中など）ときは前回の drop-in を残し、settings.json が無い・対象ユーザーの
+# ファイルでないときは drop-in を消す（sandbox 外で動かす許可を settings.json の実態より長く残さない）。
 #
 # 書き出し: 同じ dir の一時ファイル（名前が .json で終わらないので読まれない）に書き、root:wheel 0640 + 対象ユーザーだけの
 # 読み取り ACL にしてから mv で置き換える（壊れた JSON の drop-in があると Claude Code は起動しない）。内容が同じなら書き換えない。
@@ -132,6 +133,16 @@ install_dropin "$tmp" "$out" "$state"
 settings="${CLAUDE_USER_SETTINGS:-$HOME/.claude/settings.json}"
 user_home="${CLAUDE_USER_HOME:-$HOME}"
 paths_out="${CLAUDE_HOME_PATHS_MANAGED_SETTINGS:-$(dirname "$out")/60-home-paths.json}"
+
+# remove_paths_dropin <reason>: settings.json を読めないときは drop-in を消す（sandbox 外で動かす許可なので、
+# settings.json を消した・差し替えたあとまで前回の内容を効かせない）
+remove_paths_dropin() {
+  if [ -e "$paths_out" ]; then
+    rm -f "$paths_out"
+    log "removed $paths_out: $1"
+  fi
+}
+
 # settings.json は repo への symlink なのでたどる。開いた先が対象ユーザーの通常ファイルかを fd で確かめる
 if [ -f "$settings" ] && exec 4<"$settings"; then
   if [ "$(/usr/bin/stat -f '%u %HT' /dev/fd/4)" = "$owner_uid Regular File" ]; then
@@ -145,7 +156,9 @@ if [ -f "$settings" ] && exec 4<"$settings"; then
       log "skipped $paths_out: $settings is not valid JSON"
     fi
   else
-    log "skipped $paths_out: $settings is not a regular file owned by $token_owner"
+    remove_paths_dropin "$settings is not a regular file owned by $token_owner"
   fi
   exec 4<&-
+else
+  remove_paths_dropin "$settings is missing"
 fi

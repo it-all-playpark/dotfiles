@@ -356,15 +356,37 @@ fi
 
 # ---------------------------------------------------------------------------
 # settings_owned_by_other_user_is_not_read: root で読むので、対象ユーザーのファイルでなければ読まない
-# （root 専用の JSON への symlink にされると、その中身が drop-in に漏れる）
+# （root 専用の JSON への symlink にされると、その中身が drop-in に漏れる）。前回の drop-in も消す
 # ---------------------------------------------------------------------------
 echo "- settings_owned_by_other_user_is_not_read"
 out_dir="${TMPROOT}/home-paths-other/managed-settings.d"
+mkdir -p "${out_dir}"
+cp "${HP_OUT}" "${out_dir}/60-home-paths.json"
 run_script "${out_dir}/50-agent-vault.json" AGENT_VAULT_TOKEN_OWNER=root
-if [ "${RC}" -eq 0 ] && [ ! -e "${out_dir}/60-home-paths.json" ]; then
+if [ "${RC}" -eq 0 ] && [ ! -e "${out_dir}/60-home-paths.json" ] &&
+  printf '%s\n' "${ERR}" | grep -q "removed ${out_dir}/60-home-paths.json: .* is not a regular file owned by root"; then
   pass "settings_owned_by_other_user_is_not_read"
 else
   fail "settings_owned_by_other_user_is_not_read" "rc=${RC} dir=[$(ls -A "${out_dir}" 2>/dev/null)] err=${ERR}"
+fi
+
+# ---------------------------------------------------------------------------
+# missing_settings_removes_dropin: settings.json が無い（symlink 先が消えた）ときは前回の drop-in を消す
+# （sandbox 外で動かす許可を settings.json の実態より長く残さない）。無いままなら何もしない（ログも出さない）
+# ---------------------------------------------------------------------------
+echo "- missing_settings_removes_dropin"
+mv "${SETTINGS_SRC}" "${TMPROOT}/settings.moved"
+run_script "${HP_DIR}/50-agent-vault.json"
+rc1="${RC}" err1="${ERR}"
+run_script "${HP_DIR}/50-agent-vault.json"
+mv "${TMPROOT}/settings.moved" "${SETTINGS_SRC}"
+if [ "${rc1}" -eq 0 ] && [ "${RC}" -eq 0 ] && [ ! -e "${HP_OUT}" ] &&
+  [ "$(ls -A "${HP_DIR}")" = "50-agent-vault.json" ] &&
+  printf '%s\n' "${err1}" | grep -q "removed ${HP_OUT}: .* is missing" &&
+  ! printf '%s\n' "${ERR}" | grep -q removed; then
+  pass "missing_settings_removes_dropin"
+else
+  fail "missing_settings_removes_dropin" "rc1=${rc1} rc=${RC} dir=[$(ls -A "${HP_DIR}")] err1=${err1} err=${ERR}"
 fi
 
 # ---------------------------------------------------------------------------
