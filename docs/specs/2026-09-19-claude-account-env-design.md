@@ -4,7 +4,7 @@
 - 改訂 2026-09-21: gcloud を構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）から config dir
   （`CLOUDSDK_CONFIG`）の分離に変更し、ADC を org 単位に分けた。`tofu` を shim 対象に追加し
   `GOOGLE_APPLICATION_CREDENTIALS` で ADC ファイルを明示する（§2 / §5 / §6 / §10 / §12）。
-  きっかけ: BusinessProcessDX 側で `gcloud auth application-default login` した結果、
+  きっかけ: acme-corp 側で `gcloud auth application-default login` した結果、
   グローバルな ADC が別アカウントになり、playpark-llc/shift-bud の `tofu init`（GCS backend）が
   403 になった
 - 対象リポジトリ: `dotfiles`（`claude-code/bin`, `claude-code/settings.json`,
@@ -22,7 +22,7 @@ gh と gcloud をそれぞれ複数アカウントで使い分けている。Cla
    `~/.config/gcloud/active_config` を書き換える。並列セッション・bg job・dev-flow の
    subagent が別 org で動くと、どれか 1 つの切替が他全部を壊す
 2. **失効 token を掴んだまま切り替える**: 2026-09-19 時点で `gh auth status` は
-   `th-it-dev` の token を invalid と報告している。switch しても必ず失敗する
+   `client-account` の token を invalid と報告している。switch しても必ず失敗する
 3. **sandbox が gcloud の書込みを塞ぐ**: `gcloud` は `sandbox.excludedCommands` に
    入っておらず、sandbox 内では `~/.config/gcloud/credentials.db` と `logs/` に
    書けない。`gcloud auth list` すら `Operation not permitted` で落ち、token refresh も
@@ -76,18 +76,18 @@ shim dir を PATH に入れる場所は、Claude Code 限定（SessionStart で 
 
 gh 側を `GH_TOKEN` ではなく `GH_CONFIG_DIR` にした理由: token を env に出さない
 （keyring のまま）。既存の credential guard や hermes の blast radius 方針と整合する。
-代償は分離 dir への初回 `gh auth login` 1 回だが、th-it-dev はどのみち再ログイン必須
+代償は分離 dir への初回 `gh auth login` 1 回だが、client-account はどのみち再ログイン必須
 なので実質コストは無い。
 
 ## 4. 構成要素とデータフロー
 
 ```
-subagent (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/worktrees/x)
+subagent (cwd=~/ghq/github.com/acme-corp/repo/.claude/worktrees/x)
   └─ Bash: gh pr create …
        └─ ~/.claude/bin/gh  → account-exec   (shim)
-            ├─ $PWD → org=BusinessProcessDX
+            ├─ $PWD → org=acme-corp
             ├─ ~/.claude/account-map.json を引く
-            ├─ GH_CONFIG_DIR=~/.config/gh-th-it-dev を env に付ける
+            ├─ GH_CONFIG_DIR=~/.config/gh-client-account を env に付ける
             └─ exec ~/.nix-profile/bin/gh pr create …
                  (PATH から shim dir を除いて解決した実体。exec 先の PATH は元のまま)
 
@@ -127,17 +127,17 @@ tofu に `CLOUDSDK_CONFIG` ではなく `GOOGLE_APPLICATION_CREDENTIALS` を渡�
   "orgs": {
     "it-all-playpark":   { "gh_config_dir": "~/.config/gh",           "gcloud_config_dir": "~/.config/gcloud" },
     "playpark-llc":      { "gh_config_dir": "~/.config/gh",           "gcloud_config_dir": "~/.config/gcloud" },
-    "Cistree-dev":       { "gh_config_dir": "~/.config/gh",           "gcloud_config_dir": "~/.config/gcloud" },
+    "other-org":       { "gh_config_dir": "~/.config/gh",           "gcloud_config_dir": "~/.config/gcloud" },
     "YujiNaramoto":      { "gh_config_dir": "~/.config/gh",           "gcloud_config_dir": "~/.config/gcloud" },
-    "BusinessProcessDX": { "gh_config_dir": "~/.config/gh-th-it-dev", "gcloud_config_dir": "~/.config/gcloud-th-it-dev" }
+    "acme-corp": { "gh_config_dir": "~/.config/gh-client-account", "gcloud_config_dir": "~/.config/gcloud-client-account" }
   }
 }
 ```
 
-- 既存の `~/.config/gh` は `it-all-playpark` 専用に戻す（`th-it-dev` の失効エントリは
-  logout する）。`th-it-dev` は `~/.config/gh-th-it-dev` に分離する
-- 同様に既存の `~/.config/gcloud` は playpark 系専用に戻し、`th.it.dev` は
-  `~/.config/gcloud-th-it-dev` に分離する（旧 `th-it-all` 構成は不要になる）
+- 既存の `~/.config/gh` は `it-all-playpark` 専用に戻す（`client-account` の失効エントリは
+  logout する）。`client-account` は `~/.config/gh-client-account` に分離する
+- 同様に既存の `~/.config/gcloud` は playpark 系専用に戻し、`client-account` は
+  `~/.config/gcloud-client-account` に分離する（旧 `client-config` 構成は不要になる）
 - `gh_config_dir` / `gcloud_config_dir` は両方 optional。無いキーは env を付けない
   （gcloud を使わない org は `gcloud_config_dir` を省略する）
 - 値の先頭 `~` は shim が `$HOME` に展開する。それ以外の展開はしない
@@ -225,7 +225,7 @@ PATH:
 
 `~/.config/gcloud` を allowWrite にするのは §1-3 の修正。credentials.db / logs /
 access token cache がここに書かれる。`~/.config/gcloud-*` は 2026-09-21 改訂で分離した
-org 別 config dir（`~/.config/gcloud-th-it-dev` 等）に同じ扱いをするため。
+org 別 config dir（`~/.config/gcloud-client-account` 等）に同じ扱いをするため。
 
 `~/.config/gh-*/**` の denyRead は、分離した gh config dir を既存の `~/.config/gh/**`
 と同じ扱いにするため。gh 自体は `gh:*` で sandbox 除外なので影響を受けない。
@@ -272,29 +272,29 @@ fake の `gh` / `gcloud` / `tofu`
 ## 10. 初回セットアップ（人間の作業、README に記載）
 
 ```bash
-gh auth logout -h github.com -u th-it-dev            # ~/.config/gh から失効エントリを除去
-GH_CONFIG_DIR=~/.config/gh-th-it-dev gh auth login    # 分離 dir に th-it-dev を再ログイン
+gh auth logout -h github.com -u client-account            # ~/.config/gh から失効エントリを除去
+GH_CONFIG_DIR=~/.config/gh-client-account gh auth login    # 分離 dir に client-account を再ログイン
 nix run .#update                                      # symlink / PATH / settings を反映
 exec $SHELL -l                                        # PATH を取り直す
 
 # gcloud（2026-09-21 改訂）: 分離 dir にログイン。shim が cwd から CLOUDSDK_CONFIG を付けるので cd してから
-cd ~/ghq/github.com/BusinessProcessDX/<repo>
-gcloud auth login                                     # → ~/.config/gcloud-th-it-dev/
+cd ~/ghq/github.com/acme-corp/<repo>
+gcloud auth login                                     # → ~/.config/gcloud-client-account/
 gcloud config set project th-all
-gcloud auth application-default login                 # → ~/.config/gcloud-th-it-dev/application_default_credentials.json
+gcloud auth application-default login                 # → ~/.config/gcloud-client-account/application_default_credentials.json
 cd ~/ghq/github.com/playpark-llc/<repo>
 gcloud auth application-default login                 # ~/.config/gcloud/ の ADC が別アカウントで上書きされていたら戻す
-gcloud config configurations delete th-it-all         # 旧構成（~/.config/gcloud 内）は不要になったので消す（任意）
+gcloud config configurations delete client-config         # 旧構成（~/.config/gcloud 内）は不要になったので消す（任意）
 ```
 
 確認:
 
 ```bash
-cd ~/ghq/github.com/BusinessProcessDX/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/BusinessProcessDX/<repo>
+cd ~/ghq/github.com/acme-corp/<repo>   # SSH alias 運用なら ~/ghq/github.com-<alias>/acme-corp/<repo>
 which gh                      # → ~/.claude/bin/gh
-gh auth status                # → th-it-dev
-gcloud config list            # → account th.it.dev@…（~/.config/gcloud-th-it-dev/）
-ACCOUNT_EXEC_DEBUG=1 tofu version   # stderr: GOOGLE_APPLICATION_CREDENTIALS=…/gcloud-th-it-dev/application_default_credentials.json
+gh auth status                # → client-account
+gcloud config list            # → account client-account@…（~/.config/gcloud-client-account/）
+ACCOUNT_EXEC_DEBUG=1 tofu version   # stderr: GOOGLE_APPLICATION_CREDENTIALS=…/gcloud-client-account/application_default_credentials.json
 cd ~/ghq/github.com/it-all-playpark/dotfiles
 gh auth status                # → it-all-playpark
 gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud/）
@@ -302,15 +302,15 @@ gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud
 
 ## 11. 受け入れ基準
 
-1. `BusinessProcessDX` 配下の cwd で `gh auth status` が `th-it-dev`、
-   `gcloud config list` の account が `th.it.dev@…` になる。`~/.config/gh/hosts.yml`
+1. `acme-corp` 配下の cwd で `gh auth status` が `client-account`、
+   `gcloud config list` の account が `client-account@…` になる。`~/.config/gh/hosts.yml`
    と `~/.config/gcloud/active_config` は変化しない
-2. 1 つの Claude Code セッション内で、`it-all-playpark` と `BusinessProcessDX` の
+2. 1 つの Claude Code セッション内で、`it-all-playpark` と `acme-corp` の
    worktree をそれぞれ cwd にした subagent が同時に `gh` を叩いても互いに影響しない
 3. sandbox 内で `gcloud auth list` が `Operation not permitted` で落ちない
 4. §9 のテスト 16 件が通り、`nix flake check` が通る
 5. `playpark-llc/shift-bud` で `pnpm tf:init:stg` が playpark の ADC で通り、
-   `BusinessProcessDX` 配下で `gcloud auth application-default login` しても
+   `acme-corp` 配下で `gcloud auth application-default login` しても
    `~/.config/gcloud/application_default_credentials.json` が変化しない
 
 ## 12. 既知の限界
@@ -319,7 +319,7 @@ gcloud config list            # → account yuji.naramoto@…（~/.config/gcloud
   スクリプトには env が付かず既定の `~/.config/gcloud/` を探す（§2）
 - `GH_CONFIG_DIR` / `CLOUDSDK_CONFIG` を分けると `config.yml` / `configurations/`（alias, editor,
   project 等）も dir ごとに独立する。
-  th-it-dev 側は初回 login 時の既定値になる。共有したくなったら config.yml だけ
+  client-account 側は初回 login 時の既定値になる。共有したくなったら config.yml だけ
   symlink する
 - shim は `jq` を毎回起動する（数 ms）。gh / gcloud 自体の起動時間に埋もれる
 - ghq 外に clone した repo では判定できず、既定（グローバル状態）のまま

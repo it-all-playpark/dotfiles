@@ -43,11 +43,11 @@
 ```json
 {
   "orgs": {
-    "BusinessProcessDX": {
-      "gcloud_config": "th-it-all",
-      "gh_config_dir": "~/.config/gh-th-it-dev"
+    "acme-corp": {
+      "gcloud_config": "client-config",
+      "gh_config_dir": "~/.config/gh-client-account"
     },
-    "Cistree-dev": {
+    "other-org": {
       "gcloud_config": "default",
       "gh_config_dir": "~/.config/gh"
     },
@@ -1159,11 +1159,11 @@ gh と gcloud を複数アカウントで使い分けるとき、`gh auth switch
 ### 仕組み
 
 ```
-Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/worktrees/x)
+Bash: gh pr create …  (cwd=~/ghq/github.com/acme-corp/repo/.claude/worktrees/x)
   └─ ~/.claude/bin/gh → claude-code/bin/gh → account-exec
-       ├─ $PWD（不一致なら pwd -P）から org=BusinessProcessDX を取る
+       ├─ $PWD（不一致なら pwd -P）から org=acme-corp を取る
        ├─ ~/.claude/account-map.json の .orgs[org] を jq で引く
-       ├─ GH_CONFIG_DIR=~/.config/gh-th-it-dev を export（gcloud なら CLOUDSDK_ACTIVE_CONFIG_NAME）
+       ├─ GH_CONFIG_DIR=~/.config/gh-client-account を export（gcloud なら CLOUDSDK_ACTIVE_CONFIG_NAME）
        └─ exec ~/.nix-profile/bin/gh pr create …
             （PATH から shim dir を除いて解決した実体。exec 先の PATH は元のまま）
 ```
@@ -1185,7 +1185,7 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
 ```json
 {
   "orgs": {
-    "BusinessProcessDX": { "gcloud_config": "th-it-all", "gh_config_dir": "~/.config/gh-th-it-dev" },
+    "acme-corp": { "gcloud_config": "client-config", "gh_config_dir": "~/.config/gh-client-account" },
     "it-all-playpark":   { "gcloud_config": "default",   "gh_config_dir": "~/.config/gh" }
   }
 }
@@ -1201,8 +1201,8 @@ Bash: gh pr create …  (cwd=~/ghq/github.com/BusinessProcessDX/repo/.claude/wor
 ### 初回セットアップ（人間の作業）
 
 ```bash
-gh auth logout -h github.com -u th-it-dev            # ~/.config/gh から失効エントリを除去
-GH_CONFIG_DIR=~/.config/gh-th-it-dev gh auth login    # 分離 dir に th-it-dev を再ログイン
+gh auth logout -h github.com -u client-account            # ~/.config/gh から失効エントリを除去
+GH_CONFIG_DIR=~/.config/gh-client-account gh auth login    # 分離 dir に client-account を再ログイン
 nix run .#update                                      # symlink / PATH / settings を反映
 exec $SHELL -l                                        # PATH を取り直す
 ```
@@ -1210,10 +1210,10 @@ exec $SHELL -l                                        # PATH を取り直す
 確認:
 
 ```bash
-cd ~/ghq/github.com/BusinessProcessDX/<repo>
+cd ~/ghq/github.com/acme-corp/<repo>
 which gh                      # → ~/.claude/bin/gh
-gh auth status                # → th-it-dev
-gcloud config list            # → th-it-all (account th.it.dev@…)
+gh auth status                # → client-account
+gcloud config list            # → client-config (account client-account@…)
 cd ~/ghq/github.com/it-all-playpark/dotfiles
 gh auth status                # → it-all-playpark
 ```
@@ -1309,10 +1309,10 @@ Expected: commit 成功、`origin/worktree-claude-account-env` に push（featur
 - [ ] **Step 3: 失効 token の除去と分離 dir への再ログイン**
 
 ```bash
-gh auth logout -h github.com -u th-it-dev
-GH_CONFIG_DIR=~/.config/gh-th-it-dev gh auth login
+gh auth logout -h github.com -u client-account
+GH_CONFIG_DIR=~/.config/gh-client-account gh auth login
 ```
-Expected: `gh auth status` が `~/.config/gh` では `it-all-playpark` のみ、`GH_CONFIG_DIR=~/.config/gh-th-it-dev gh auth status` が `th-it-dev`
+Expected: `gh auth status` が `~/.config/gh` では `it-all-playpark` のみ、`GH_CONFIG_DIR=~/.config/gh-client-account gh auth status` が `client-account`
 
 - [ ] **Step 4: 適用とシェル再起動**
 
@@ -1328,10 +1328,10 @@ Expected: activation がエラーなく完了。`ls -l ~/.claude/bin` に `gh ->
 ```bash
 which gh                      # → ~/.claude/bin/gh
 fish -lc 'which gh'           # → ~/.claude/bin/gh（fish 側の PATH 合成順の確認。agent では実行不可）
-cd ~/ghq/github.com/BusinessProcessDX/<repo>
-gh auth status                # → th-it-dev
-gcloud config list            # → th-it-all (account th.it.dev@…)
-ACCOUNT_EXEC_DEBUG=1 gh auth status 2>&1 | grep account-exec   # org=BusinessProcessDX GH_CONFIG_DIR=…/gh-th-it-dev exec=…/.nix-profile/bin/gh
+cd ~/ghq/github.com/acme-corp/<repo>
+gh auth status                # → client-account
+gcloud config list            # → client-config (account client-account@…)
+ACCOUNT_EXEC_DEBUG=1 gh auth status 2>&1 | grep account-exec   # org=acme-corp GH_CONFIG_DIR=…/gh-client-account exec=…/.nix-profile/bin/gh
 cd ~/ghq/github.com/it-all-playpark/dotfiles
 gh auth status                # → it-all-playpark
 cat ~/.config/gcloud/active_config      # 変わっていない
@@ -1341,6 +1341,6 @@ Expected: 上記の通り。`~/.config/gh/hosts.yml` と `~/.config/gcloud/activ
 - [ ] **Step 6: Claude Code セッション内での確認（§11-2, §11-3）**
 
 新しい Claude Code セッションで:
-- `it-all-playpark` と `BusinessProcessDX` の worktree をそれぞれ cwd にした subagent を同時に走らせ、両方で `gh auth status` が各自のアカウントを返す
+- `it-all-playpark` と `acme-corp` の worktree をそれぞれ cwd にした subagent を同時に走らせ、両方で `gh auth status` が各自のアカウントを返す
 - sandbox 内の Bash で `gcloud auth list` が `Operation not permitted` で落ちない（settings.json の `~/.config/gcloud` allowWrite が効いている）
 - `bash claude-code/bin/account-exec.test.sh` と `nix flake check` が通る（§11-4）
