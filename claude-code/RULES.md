@@ -33,6 +33,7 @@
 - 機械的な文字列置換 → `sd`
 - フォーマッタ適用前後で挙動が変わらないことの確認 → `difft --exit-code old new`
 - 速い / 遅いの主張 → `hyperfine` で測る
+- `python3 -c` / `node -e` / `curl` / `rm -rf` は permissions.deny で止まるので最初から使わない → コードは Write で `$TMPDIR` に書いて `python3 "$TMPDIR/x.py"`、HTTP の確認は WebFetch、削除は `rip`
 
 ## Git
 - 保護ブランチ（main / dev / production 等）には push せず、feature branch から PR を出す。`保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなく `allow-feature-push.sh` hook
