@@ -36,6 +36,7 @@
 
 ## Git
 - 保護ブランチ（main / dev / production 等）には push せず、feature branch から PR を出す。`保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなく `allow-feature-push.sh` hook
+- PR / issue コメントの編集は `gh api -X PATCH` ではなく `gh pr comment <N> --edit-last --body-file <file>` / `gh issue comment <N> --edit-last --body-file <file>` を使う（`gh api -X PATCH` は permissions.deny で止まる）
 
 <!--
 保護ブランチ判定は allow-feature-push.sh（PreToolUse）が唯一の強制点。9 ブランチ（main / master / dev / develop /
@@ -51,6 +52,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - `~/.claude/skills` を repo への symlink にしない（skill は playpark marketplace の plugin で読み込む）。Claude Code の組み込み保護は `~/.claude/skills` の symlink 先にも掛かり、repo ルートを指すと `.git` ごと書けなくなって commit・worktree が sandbox 内で動かない
 - Bash から書けない場所（sandbox 外で実行されるので書き換えが脱出口になる）: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.claude/skills`・`.husky`・`.githooks`。編集は Edit / Write ツールで行う（dotfiles の 2 つは worktree 側なら Bash でも書ける）
 - 起動元 repo の `.git/config`（worktree も共有）は Claude Code の組み込み保護で書けない（設定で外せない）。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
+- `.githooks` / `.husky`（denyWrite）や組み込み保護の対象ファイル（`.ripgreprc` 等）を追跡する repo（dotfiles など）の worktree は、`git worktree add` ではなく `wt-add <repo> <path> <branch> [<start>]`（`~/.claude/bin`）で作る。取り出せないパスに skip-worktree を付け、付けたパスを stdout に出す
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
 - `&` で起動したプロセスは名前で止められない（`pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。取り残したら `/usr/bin/pgrep -l <名前>` で PID を確かめ、`! kill <PID>` を示して人間に止めてもらう（下の「プロセス調査」）（2026-10-08 に負荷用の `yes` 16 本が 8 時間残り、Mac が詰まった）
