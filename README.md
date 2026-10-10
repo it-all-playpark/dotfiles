@@ -161,7 +161,7 @@ Claude Code は playpark marketplace の plugin で読み込むので `~/.claude
 ./scripts/setup-skills.sh --skills-repo /path/to/your/skills
 ```
 
-Skills の詳細は [it-all-playpark/skills](https://github.com/it-all-playpark/skills) を参照してください。
+Skills の詳細は [it-all-playpark/claude-plugins](https://github.com/it-all-playpark/claude-plugins) を参照してください。
 
 ## Codex 設定管理
 

@@ -91,13 +91,10 @@ clone_skills_repo_if_needed() {
     repo_parent=$(dirname "${SKILLS_REPO}")
     mkdir -p "${repo_parent}"
 
-    if command -v ghq &>/dev/null; then
-      log_info "Using ghq to clone repository..."
-      ghq get -p it-all-playpark/skills
-    else
-      log_info "Cloning with git..."
-      git clone git@github.com:it-all-playpark/skills.git "${SKILLS_REPO}"
-    fi
+    # ghq get は repo 名（claude-plugins）のディレクトリに clone するので使わない。
+    # checkout は sandbox の書き込み保護などが前提にする ${SKILLS_REPO}（既定 .../skills）に置く。
+    log_info "Cloning with git..."
+    git clone git@github.com:it-all-playpark/claude-plugins.git "${SKILLS_REPO}"
 
     if [[ -d ${SKILLS_REPO} ]]; then
       log_success "Skills repository cloned to ${SKILLS_REPO}"
