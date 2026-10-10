@@ -71,7 +71,7 @@ Local configurations use `.template` files (copy and customize, not tracked by g
 
 ## Agent Skills
 
-Skills are in a separate repository: [it-all-playpark/skills](https://github.com/it-all-playpark/skills)
+Skills are in a separate repository: [it-all-playpark/claude-plugins](https://github.com/it-all-playpark/claude-plugins)
 
 `scripts/setup-skills.sh` creates symlinks for:
 

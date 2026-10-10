@@ -43,7 +43,7 @@
     "playpark": {
       "autoUpdate": true,
       "source": {
-        "repo": "it-all-playpark/skills",
+        "repo": "it-all-playpark/claude-plugins",
         "source": "github"
       }
     }

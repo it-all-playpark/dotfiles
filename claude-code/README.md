@@ -364,7 +364,7 @@ GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login            
 git config --get-all branch.autoSetupMerge; git config --get push.default   # false / current（wrapper の env）
 git push origin                   # vault の Basic 認証で通る。upstream が無くても同名 branch へ（-u は付けない）
 git worktree add -b wt-check "$TMPDIR/wt-check" origin/main && git worktree remove "$TMPDIR/wt-check" && git branch -D wt-check   # upstream を書かずに通る
-git clone https://github.com/it-all-playpark/skills.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
+git clone https://github.com/it-all-playpark/claude-plugins.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
 # .githooks / .husky を持つ repo（dotfiles 自身など）は、settings.json の denyWrite（~/ghq/**/.githooks 等）で
 # checkout が落ちる（Clone succeeded, but checkout failed）。hook を書き換えて sandbox 外で走らせないための意図した挙動。
 # 組み込み保護の対象ファイル（home-manager/home/file/.ripgreprc 等）も同じく取り出せない。
@@ -461,7 +461,7 @@ config dir の選び方を含む）、`bash claude-code/bin/agent-vault-sync-gh.
 
 dev-flow / skills 共通の hook（inline 生成区間ガード、inline 同期チェック、dev-flow telemetry、
 コンテキスト浪費ガード、secret マスク、SKILL.md frontmatter 検証、skill 使用ログ、zombie-kill）は
-it-all-playpark/skills#572 で plugin（`dev-flow` / `playpark-core` / `playpark-skills`）の
+it-all-playpark/claude-plugins#572 で plugin（`dev-flow` / `playpark-core` / `playpark-skills`）の
 `hooks/hooks.json` へ移植済みで、`${CLAUDE_PLUGIN_ROOT}` 経由で発火する。ここに残るのは
 マシン固有の hook に加え、`UserPromptSubmit`（plugin 側に移植先が無いため維持。下記参照）。
 
@@ -543,11 +543,11 @@ permission を追加するときは、まず deny ルールに引っかからな
 
 ## skills のセットアップ
 
-skills 本体は別 repo（[it-all-playpark/skills](https://github.com/it-all-playpark/skills)）で管理される。
+skills 本体は別 repo（[it-all-playpark/claude-plugins](https://github.com/it-all-playpark/claude-plugins)）で管理される。
 skills#571 以降は `plugins/{playpark-core,dev-flow,playpark-skills}` の 3 plugin 構成。
 
 全ホスト共通で `settings.json` の `extraKnownMarketplaces.playpark`（GitHub source
-`it-all-playpark/skills`、既定ブランチ main）から 3 plugin を copy mode で入れ、`enabledPlugins` で
+`it-all-playpark/claude-plugins`、既定ブランチ main）から 3 plugin を copy mode で入れ、`enabledPlugins` で
 `playpark-core@playpark` / `dev-flow@playpark` / `playpark-skills@playpark` を有効化している。
 skills の plugin は `version` を持たない（skills#722）ので git commit SHA が version になり、
 main への commit がそのまま更新として配布される。skills repo を checkout できないホストでも

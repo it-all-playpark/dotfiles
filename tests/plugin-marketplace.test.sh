@@ -3,7 +3,7 @@
 # Unit test for claude-code/settings.json's extraKnownMarketplaces /
 # enabledPlugins entries for the 3 playpark plugins
 # (playpark-core / dev-flow / playpark-skills). They are installed from the
-# GitHub marketplace "playpark" (it-all-playpark/skills) on every host, so
+# GitHub marketplace "playpark" (it-all-playpark/claude-plugins) on every host, so
 # hosts without a local skills checkout track main too (the plugins carry no
 # version, so every commit on main is a new version - skills#722).
 # Run from the repo root: bash tests/plugin-marketplace.test.sh
@@ -57,11 +57,11 @@ fi
 echo "- marketplace_is_github_source"
 if jq -e '
     .extraKnownMarketplaces["playpark"].source
-      == {"source": "github", "repo": "it-all-playpark/skills"}
+      == {"source": "github", "repo": "it-all-playpark/claude-plugins"}
   ' "${SETTINGS}" >/dev/null 2>&1; then
   pass "marketplace_is_github_source"
 else
-  fail "marketplace_is_github_source" "extraKnownMarketplaces.playpark.source is not {source: github, repo: it-all-playpark/skills}"
+  fail "marketplace_is_github_source" "extraKnownMarketplaces.playpark.source is not {source: github, repo: it-all-playpark/claude-plugins}"
 fi
 
 # ---------------------------------------------------------------------------
