@@ -13,7 +13,7 @@
 #   ./setup-skills.sh [--skills-repo PATH]
 #
 # Options:
-#   --skills-repo PATH  Path to skills repository (default: ~/ghq/github.com/it-all-playpark/skills)
+#   --skills-repo PATH  Path to skills repository (default: ~/ghq/github.com/it-all-playpark/claude-plugins)
 
 set -euo pipefail
 
@@ -25,7 +25,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default skills repository path
-DEFAULT_SKILLS_REPO="${HOME}/ghq/github.com/it-all-playpark/skills"
+DEFAULT_SKILLS_REPO="${HOME}/ghq/github.com/it-all-playpark/claude-plugins"
 SKILLS_REPO="${DEFAULT_SKILLS_REPO}"
 
 # Agent configurations: "config_dir:skills_subpath"
@@ -91,8 +91,6 @@ clone_skills_repo_if_needed() {
     repo_parent=$(dirname "${SKILLS_REPO}")
     mkdir -p "${repo_parent}"
 
-    # ghq get は repo 名（claude-plugins）のディレクトリに clone するので使わない。
-    # checkout は sandbox の書き込み保護などが前提にする ${SKILLS_REPO}（既定 .../skills）に置く。
     log_info "Cloning with git..."
     git clone git@github.com:it-all-playpark/claude-plugins.git "${SKILLS_REPO}"
 

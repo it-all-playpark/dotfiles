@@ -149,7 +149,7 @@ UNREGISTERED_BINS=(
   "sns-announce-get-posting-time|gh も git 書き込みも呼ばない"
   "sns-announce-load-config|gh も git 書き込みも呼ばない"
 )
-SKILLS_PLUGINS_DIR="${SKILLS_PLUGINS_DIR:-${HOME}/ghq/github.com/it-all-playpark/skills/plugins}"
+SKILLS_PLUGINS_DIR="${SKILLS_PLUGINS_DIR:-${HOME}/ghq/github.com/it-all-playpark/claude-plugins/plugins}"
 
 is_intentionally_unregistered() {
   local entry
@@ -220,7 +220,7 @@ fi
 # plugin cache（sandbox から書けない）のパスか bin/ の bare 名で登録する。
 # ---------------------------------------------------------------------------
 echo "- skills_checkout_globs_not_excluded"
-skills_checkout_left="$(jq -r '[.[] | select(test("it-all-playpark/skills(-dev|-wt)?/"))] | join(", ")' <<<"${EXCLUDED_JSON}")"
+skills_checkout_left="$(jq -r '[.[] | select(test("it-all-playpark/(skills|claude-plugins)(-dev|-wt)?/"))] | join(", ")' <<<"${EXCLUDED_JSON}")"
 if [ -z "${skills_checkout_left}" ]; then
   pass "skills_checkout_globs_not_excluded"
 else
