@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# jev-classify.sh: Jev（TypeSafe の判定専用モデル）に有界な質問を投げる共通スクリプト
+# jev-classify: Jev（TypeSafe の判定専用モデル）に有界な質問を投げる共通スクリプト
 #
-# 正本はこのファイル（plugins/dev-flow/_shared/scripts/）。dotfiles の
-# claude-code/hooks/jev-classify.sh は hook 用の複製で、変更は両方に同じ内容で入れる。
+# 鍵の扱い（Keychain / jev-broker）はこのマシンの環境なので、実装はここ 1 か所に置く。
+# claude-code/hooks の hook は ../bin/jev-classify で呼び、~/.claude/bin 経由で PATH に載るので
+# playpark plugin（dev-flow prerun）は bare 名 `jev-classify` で呼ぶ（無ければ Jev 未導入として扱う）。
 #
 # 目的:
 #   「read_only か / どの失敗種別か / この comment は body を上書きしているか」のような、
 #   正規表現では書けないが答えが有界（選択肢・yes/no・段階）な意味判定を安価に得る。
 #   Jev は文章を生成せず、各選択肢の較正済み確率を返す。呼び出し側は確率を閾値で
 #   切って決定論に落とし、低確信は fail-closed（uncertain）側へ倒す。
-#   dev-flow では prerun（dev-flow-prerun → prerun-analyze.sh）が issue の breaking 判定と
-#   comment の override/conflict/resolved 判定に使う。呼び出しは常に `--redact` と
-#   `--reason-file` 付き。
 #
 # 経路:
 #   Vercel AI Gateway の TypeSafe 互換エンドポイントを curl で直叩きする。
@@ -21,7 +19,7 @@
 #     Authorization: Bearer <AI Gateway API key (vck_…)>
 #
 # 使い方:
-#   echo "<state>" | jev-classify.sh --questions '<questions JSON>'
+#   echo "<state>" | jev-classify --questions '<questions JSON>'
 #     --questions  TypeSafe API の questions オブジェクト（必須）
 #                  例: {"kind":{"type":"choice","instructions":"…",
 #                        "criteria":{"a":"…","b":"…"}}}

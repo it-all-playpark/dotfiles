@@ -37,7 +37,7 @@
 #   CREDENTIAL_GUARD_JEV            0 で 2 段目を無効化（既定 1）
 #   CREDENTIAL_GUARD_JEV_THRESHOLD  ask にする確率の下限（既定 0.7）
 #   CREDENTIAL_GUARD_LOG            記録先（テスト用）
-#   JEV_*                           jev-classify.sh を参照
+#   JEV_*                           jev-classify を参照
 #
 # 誤検知（false-positive）テストケース:
 #   以下は検知「しない」ことをテストで担保している。
@@ -149,7 +149,7 @@ PROD_QUESTIONS='{
   }
 }'
 
-RESULT=$(printf '%s' "$CMD" | bash "$SCRIPT_DIR/jev-classify.sh" --redact --questions "$PROD_QUESTIONS" 2>/dev/null || true)
+RESULT=$(printf '%s' "$CMD" | bash "$SCRIPT_DIR/../bin/jev-classify" --redact --questions "$PROD_QUESTIONS" 2>/dev/null || true)
 [[ -n $RESULT ]] || exit 0
 P=$(echo "$RESULT" | jq -r '.answers.prod.noul // empty' 2>/dev/null || true)
 [[ -n $P ]] || exit 0

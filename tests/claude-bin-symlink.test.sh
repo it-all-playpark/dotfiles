@@ -10,7 +10,7 @@
 #   2. links_account_exec_and_tool_links  - account-exec と repo 内 symlink (gh, gcloud) が
 #                                           ~/.claude/bin に symlink される（gh は
 #                                           dotfiles 側 bin/gh を指す 2 段構成）
-#   3. skips_test_sh                      - *.test.sh は symlink されない
+#   3. skips_test_sh                      - *.test.sh / *.bats は symlink されない
 #   4. removes_dangling_dotfiles_symlink  - dotfiles/claude-code/bin を指す dangling
 #                                           symlink は削除される
 #   5. keeps_dangling_foreign_symlink     - dotfiles 以外を指す dangling symlink は残る
@@ -89,6 +89,7 @@ chmod +x "$DOTFILES_CLAUDE/bin/account-exec"
 ln -s account-exec "$DOTFILES_CLAUDE/bin/gh"
 ln -s account-exec "$DOTFILES_CLAUDE/bin/gcloud"
 echo "# test" >"$DOTFILES_CLAUDE/bin/account-exec.test.sh"
+echo "# test" >"$DOTFILES_CLAUDE/bin/account-exec.bats"
 echo '{"orgs":{}}' >"$DOTFILES_PRIVATE/account-map.json"
 echo 'github.com: {}' >"$DOTFILES_PRIVATE/agent-vault-gh/client/hosts.yml"
 run_block "$DOTFILES_CLAUDE" "$CLAUDE_DIR" >"$TMPROOT/s1.out" 2>&1 || true
@@ -102,10 +103,11 @@ else
   fail "links_account_exec_and_tool_links" "bin/* の symlink が期待通りでない (out=$(cat "$TMPROOT/s1.out"); ls=$(ls -l "$CLAUDE_DIR/bin" 2>&1))"
 fi
 
-if [ ! -e "$CLAUDE_DIR/bin/account-exec.test.sh" ] && [ ! -L "$CLAUDE_DIR/bin/account-exec.test.sh" ]; then
+if [ ! -e "$CLAUDE_DIR/bin/account-exec.test.sh" ] && [ ! -L "$CLAUDE_DIR/bin/account-exec.test.sh" ] &&
+  [ ! -e "$CLAUDE_DIR/bin/account-exec.bats" ] && [ ! -L "$CLAUDE_DIR/bin/account-exec.bats" ]; then
   pass "skips_test_sh"
 else
-  fail "skips_test_sh" "account-exec.test.sh が symlink されてしまっている"
+  fail "skips_test_sh" "account-exec.test.sh / account-exec.bats が symlink されてしまっている"
 fi
 
 if [ -L "$CLAUDE_DIR/account-map.json" ] && [ "$(readlink "$CLAUDE_DIR/account-map.json")" = "$DOTFILES_PRIVATE/account-map.json" ] &&

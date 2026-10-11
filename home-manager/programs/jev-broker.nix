@@ -10,7 +10,7 @@ in
 lib.mkIf pkgs.stdenv.isDarwin {
   # Jev の API 鍵を Keychain から読み、Unix ソケットで中継する（jev_broker.py 冒頭参照）。
   # gui ドメインに載せるのは、Aqua セッションでしか login keychain の解除が効かないため。
-  # bg job・sandbox 内の Bash は jev-classify.sh からこのソケット経由で Jev を呼ぶ。
+  # bg job・sandbox 内の Bash は jev-classify からこのソケット経由で Jev を呼ぶ。
   # ソケットのパスは claude-code/settings.json の sandbox.network.allowUnixSockets と揃える。
   launchd.agents.jev-broker = {
     enable = true;

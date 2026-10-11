@@ -9,7 +9,7 @@
 #   "tool_input": { "command": "docker ps" }
 # }
 #
-# Bash の要求には Jev（jev-classify.sh）で効果種別のラベルを付ける:
+# Bash の要求には Jev（jev-classify）で効果種別のラベルを付ける:
 #   class:   read_only | mutating_local | git_mutation | network | destructive
 #   class_p: その選択肢の確率
 # 実測では止められた Bash の大半が `cd X; grep …; echo "=== … ==="` のような
@@ -20,7 +20,7 @@
 #
 # 環境変数:
 #   PERMISSION_JOURNAL_FILE  記録先（既定 ~/.claude/logs/permission-requests.jsonl、テスト用）
-#   JEV_*                    jev-classify.sh を参照
+#   JEV_*                    jev-classify を参照
 
 set -euo pipefail
 
@@ -70,14 +70,14 @@ BASH_KIND_QUESTIONS='{
   }
 }'
 
-# 送信前の redaction は jev-classify.sh --redact に任せる（token/secret/鍵プレフィックス）。
+# 送信前の redaction は jev-classify --redact に任せる（token/secret/鍵プレフィックス）。
 # 記録側の detail は従来通り（500 文字切り詰めのみ）。
 CLASS=""
 CLASS_P=""
 if [[ $TOOL == "Bash" ]]; then
   CMD=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
   if [[ -n $CMD ]]; then
-    CLASS_JSON=$(printf '%s' "$CMD" | bash "$SCRIPT_DIR/jev-classify.sh" --redact --questions "$BASH_KIND_QUESTIONS" 2>/dev/null || true)
+    CLASS_JSON=$(printf '%s' "$CMD" | bash "$SCRIPT_DIR/../bin/jev-classify" --redact --questions "$BASH_KIND_QUESTIONS" 2>/dev/null || true)
     if [[ -n $CLASS_JSON ]]; then
       CLASS=$(echo "$CLASS_JSON" | jq -r '.answers.kind.choice // empty' 2>/dev/null || true)
       CLASS_P=$(echo "$CLASS_JSON" | jq -r '.answers.kind as $k | $k.probabilities[$k.choice] // empty' 2>/dev/null || true)
