@@ -488,9 +488,14 @@ skill-ctx クリア（`UserPromptSubmit`）も it-all-playpark/claude-plugins#93
 | `Notification` | inline `osascript -e 'display notification …'` | macOS の通知センターに通知 |
 | `SessionStart` / `SessionEnd` / `Stop` / `UserPromptSubmit` / `PermissionRequest` / `Notification` (permission_prompt) / `Pre`・`PostToolUse` (AskUserQuestion / ExitPlanMode) | `moshi-hook claude-hook`（Homebrew の `moshi-hook`） | Moshi（iPhone）の Agent inbox にセッション状態・確認待ちを送る |
 
-テストファイル（`*.test.sh`）は symlink 対象外。
+テストファイル（`*.test.sh` / `*.bats`）は symlink 対象外。
 
-### Jev 分類（`jev-classify.sh`）
+### Jev 分類（`bin/jev-classify`）
+
+Jev を呼ぶ実装は `claude-code/bin/jev-classify` の 1 か所だけに置く（鍵の扱いが Keychain と
+jev-broker というこのマシンの環境に依存するため）。hook は `../bin/jev-classify` で呼び、
+`~/.claude/bin` 経由で PATH に載るので、playpark plugin の dev-flow prerun も bare 名で呼ぶ
+（PATH に無いマシンでは Jev 未導入として uncertain に倒れる）。
 
 `permission-journal.sh` と `posttoolfail-classify.sh` は、正規表現では書けない「この失敗は
 何種か」「このコマンドは read-only か」の判定を Jev（TypeSafe の判定専用モデル。文章を
@@ -527,7 +532,7 @@ skill-ctx クリア（`UserPromptSubmit`）も it-all-playpark/claude-plugins#93
 - credential guard 2 段目は `CREDENTIAL_GUARD_JEV=0` で無効化、閾値は
   `CREDENTIAL_GUARD_JEV_THRESHOLD`（既定 0.7）
 
-テスト: `bash claude-code/hooks/jev-classify.test.sh` / `permission-journal.test.sh` /
+テスト: `bats claude-code/bin/jev-classify.bats` / `permission-journal.test.sh` /
 `permission-summary.test.sh` / `posttoolfail-classify.test.sh` / `posttool-injection-screen.test.sh` /
 `pretool-bash-credential-guard.test.sh`（PATH 先頭の偽 `curl` で応答を差し替え、ネットワークには出ない）。
 

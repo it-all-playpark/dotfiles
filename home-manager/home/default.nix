@@ -281,7 +281,7 @@ in
           if { [ -e "$f" ] || [ -L "$f" ]; } && [ ! -d "$f" ]; then
             base="$(basename "$f")"
             case "$base" in
-              *.test.sh) continue ;;
+              *.test.sh | *.bats) continue ;;
             esac
             target="$CLAUDE_DIR/bin/$base"
             if [ -e "$target" ] && [ ! -L "$target" ]; then

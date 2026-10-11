@@ -5,7 +5,7 @@
   Claude Code の bg job は別の asid で動くので、解除済みでも security が exit 36 になる。
   sandbox 内の Bash は securityd に届かず、同じく 36 になる。gui ドメインの LaunchAgent は
   Aqua セッションで動くので鍵を読める。ここで鍵をメモリにだけ持ち、呼び出し側
-  （jev-classify.sh）には鍵を渡さずに中継する。
+  （jev-classify）には鍵を渡さずに中継する。
 
 不変条件:
   - 転送先の URL と model は固定。呼び出し側が送った model は上書きする

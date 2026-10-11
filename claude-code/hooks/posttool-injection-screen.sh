@@ -28,7 +28,7 @@
 #   INJECTION_SCREEN_MAX_BYTES   Jev に送る上限（既定 48000 ≈ 12k tokens）
 #   INJECTION_SCREEN_READ_PATHS  Read を検査するパス prefix（: 区切り）
 #   INJECTION_SCREEN_LOG         記録先（テスト用）
-#   JEV_*                        jev-classify.sh を参照
+#   JEV_*                        jev-classify を参照
 
 set -euo pipefail
 
@@ -108,7 +108,7 @@ QUESTIONS='{
 
 RESULT=$(printf '%s' "$TEXT" |
   JEV_STATE_MAX_BYTES="${INJECTION_SCREEN_MAX_BYTES:-48000}" JEV_MAX_TIME="${JEV_MAX_TIME:-3}" \
-    bash "$SCRIPT_DIR/jev-classify.sh" --redact --questions "$QUESTIONS" 2>/dev/null || true)
+    bash "$SCRIPT_DIR/../bin/jev-classify" --redact --questions "$QUESTIONS" 2>/dev/null || true)
 [[ -n $RESULT ]] || exit 0
 
 P=$(echo "$RESULT" | jq -r '.answers.injection.noul // empty' 2>/dev/null || true)

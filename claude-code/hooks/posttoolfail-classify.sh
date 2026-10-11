@@ -75,12 +75,12 @@ FAILURE_KIND_QUESTIONS='{
   }
 }'
 
-# 送信前 redaction は jev-classify.sh --redact に任せる
+# 送信前 redaction は jev-classify --redact に任せる
 CLASS=""
 CLASS_P=""
 STATE=$(printf 'tool: %s\ninput: %s\nerror: %s\noutput:\n%s\n' \
   "$TOOL" "$(printf '%s' "$DETAIL" | head -c 2000)" "$(printf '%s' "$ERROR" | head -c 2000)" "$(printf '%s' "$RESPONSE" | head -c 6000)")
-CLASS_JSON=$(printf '%s' "$STATE" | bash "$SCRIPT_DIR/jev-classify.sh" --redact --questions "$FAILURE_KIND_QUESTIONS" 2>/dev/null || true)
+CLASS_JSON=$(printf '%s' "$STATE" | bash "$SCRIPT_DIR/../bin/jev-classify" --redact --questions "$FAILURE_KIND_QUESTIONS" 2>/dev/null || true)
 if [[ -n $CLASS_JSON ]]; then
   CLASS=$(echo "$CLASS_JSON" | jq -r '.answers.kind.choice // empty' 2>/dev/null || true)
   CLASS_P=$(echo "$CLASS_JSON" | jq -r '.answers.kind as $k | $k.probabilities[$k.choice] // empty' 2>/dev/null || true)
