@@ -462,8 +462,9 @@ config dir の選び方を含む）、`bash claude-code/bin/agent-vault-sync-gh.
 dev-flow / skills 共通の hook（inline 生成区間ガード、inline 同期チェック、dev-flow telemetry、
 コンテキスト浪費ガード、secret マスク、SKILL.md frontmatter 検証、skill 使用ログ、zombie-kill）は
 it-all-playpark/claude-plugins#572 で plugin（`dev-flow` / `playpark-core` / `playpark-skills`）の
-`hooks/hooks.json` へ移植済みで、`${CLAUDE_PLUGIN_ROOT}` 経由で発火する。ここに残るのは
-マシン固有の hook に加え、`UserPromptSubmit`（plugin 側に移植先が無いため維持。下記参照）。
+`hooks/hooks.json` へ移植済みで、`${CLAUDE_PLUGIN_ROOT}` 経由で発火する。skill 使用ログの
+skill-ctx クリア（`UserPromptSubmit`）も it-all-playpark/claude-plugins#937 で `playpark-core` へ移した。
+ここに残るのはマシン固有の hook。
 
 | イベント | スクリプト | 役割 |
 |---------|----------|------|
@@ -484,7 +485,6 @@ it-all-playpark/claude-plugins#572 で plugin（`dev-flow` / `playpark-core` / `
 | `PostToolUseFailure` | `posttoolfail-classify.sh` | ツール失敗を Jev で `class`（sandbox_denied / network_denied / permission_denied / not_found / syntax_error / test_failed / timeout / other）に分類し `~/.claude/logs/tool-failures.jsonl` に記録。記録のみで挙動は変えない |
 | `Stop` | `stop-unfinished-guard.sh` | feature branch に未 commit の差分が残っていれば exit 2 で継続させる（差し戻しは 1 回、`CLAUDE_STOP_GUARD=0` で無効） |
 | `SessionStart` (*) | `herdr-agent-state.sh`（`~/.claude/hooks` に直置き、dotfiles 管理外） | herdr agent 状態通知。settings.json 側は `$HOME/.claude/hooks/herdr-agent-state.sh` 参照 1 本で共有（無ければ何もしない）。herdr は絶対パス完全一致でしか登録済みと判定しないため、`herdr integration install claude` を再実行した後は追記される絶対パスのエントリを revert すること |
-| `UserPromptSubmit` | inline `rm -f /tmp/claude-skill-ctx-<session>` | `playpark-core` plugin の `journal/scripts/journal.sh` が使う skill-ctx state file をプロンプト投入毎にクリア。plugin 側 `hooks.json` に `UserPromptSubmit` の移植先が無いため dotfiles 側に維持（journal.sh 側の 30 分 TTL は取りこぼし時の保険） |
 | `Notification` | inline `osascript -e 'display notification …'` | macOS の通知センターに通知 |
 | `SessionStart` / `SessionEnd` / `Stop` / `UserPromptSubmit` / `PermissionRequest` / `Notification` (permission_prompt) / `Pre`・`PostToolUse` (AskUserQuestion / ExitPlanMode) | `moshi-hook claude-hook`（Homebrew の `moshi-hook`） | Moshi（iPhone）の Agent inbox にセッション状態・確認待ちを送る |
 
@@ -573,8 +573,8 @@ PATH に載せることで解決する。`sandbox.excludedCommands` には bare 
 
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
 移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。
-ただし `UserPromptSubmit` の skill-ctx クリアは plugin 側 `hooks.json` 3 種いずれにも移植先が無いため、
-`claude-code/settings.json` に残している（上記 hooks 表参照）。
+`UserPromptSubmit` の skill-ctx クリアも claude-plugins#937 で `journal.sh clear-skill-ctx` として
+`playpark-core` の hooks.json へ移した。
 
 hermes コンテナ（`container.settings.json` を `/root/.claude/settings.json` として mount、
 `enabledPlugins` は空）では plugin が動かないため、#185 以降 PostToolUse の secret マスクと

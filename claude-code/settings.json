@@ -350,19 +350,6 @@
       {
         "hooks": [
           {
-            "args": [
-              "-c",
-              "rm -f \"/tmp/claude-skill-ctx-${CLAUDE_CODE_SESSION_ID:-unknown}\" 2>/dev/null || true"
-            ],
-            "command": "bash",
-            "timeout": 1,
-            "type": "command"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
             "async": true,
             "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
