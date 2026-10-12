@@ -72,7 +72,7 @@ if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>
   filter='{env: {
     HTTPS_PROXY: $ENV.MANAGED_PROXY,
     HTTP_PROXY: $ENV.MANAGED_PROXY,
-    NO_PROXY: "localhost,127.0.0.1,::1",
+    NO_PROXY: "localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com",
     NODE_EXTRA_CA_CERTS: $ENV.MANAGED_CA_BUNDLE,
     SSL_CERT_FILE: $ENV.MANAGED_CA_BUNDLE,
     GIT_SSL_CAINFO: $ENV.MANAGED_CA_BUNDLE,

@@ -145,7 +145,7 @@ dropin_env() {
 }
 
 ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" --arg ca "${CA_BUNDLE}" '{
-  HTTPS_PROXY: $proxy, HTTP_PROXY: $proxy, NO_PROXY: "localhost,127.0.0.1,::1",
+  HTTPS_PROXY: $proxy, HTTP_PROXY: $proxy, NO_PROXY: "localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com",
   NODE_EXTRA_CA_CERTS: $ca, SSL_CERT_FILE: $ca, GIT_SSL_CAINFO: $ca,
   CLAUDE_GH_VAULT: "1",
   GIT_CONFIG_COUNT: "3",
