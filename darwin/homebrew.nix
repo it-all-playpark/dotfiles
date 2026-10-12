@@ -29,7 +29,6 @@ _: {
     ];
     casks = [
       # インストールするCaskアプリケーションのリスト
-      "blackhole-2ch"
       "box-drive"
       "box-tools"
       "chatgpt"
