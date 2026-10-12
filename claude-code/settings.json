@@ -564,9 +564,6 @@
     ],
     "failIfUnavailable": true,
     "filesystem": {
-      "allowRead": [
-        "~/ghq/**/.env.example"
-      ],
       "allowWrite": [
         "~/.cache/nix",
         "~/.local/state/nix",
