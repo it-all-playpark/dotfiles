@@ -18,7 +18,8 @@ claude-code/
 ├── account-map.example.json  # gh / gcloud / tofu の org → アカウントマップの例（本物は dotfiles-private。下記）
 ├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）、
 │                         # 本体の上流 proxy を agent-vault に向ける claude wrapper、
-│                         # agent-vault-sync-gh（gh の token を agent-vault に写す）、wt-add（worktree 作成）
+│                         # agent-vault-sync-gh（gh の token を agent-vault に写す）、wt-add（worktree 作成）、
+│                         # dotfiles-sync（merge 後にメイン checkout を origin/main まで fast-forward）
 └── hooks/                # SessionStart / PreCompact / Pre|PostToolUse / PostToolUseFailure /
                           # PermissionRequest / Stop スクリプト
 ```
