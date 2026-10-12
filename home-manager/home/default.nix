@@ -139,6 +139,9 @@ in
         source = ./file/bin/git-worktree-gc;
         executable = true;
       };
+      # minutes の CLI は cask (darwin/homebrew.nix) のアプリに同梱されていて PATH に入らない
+      ".local/bin/minutes".source =
+        config.lib.file.mkOutOfStoreSymlink "/Applications/Minutes.app/Contents/MacOS/minutes";
     };
 
     # Claude Code 設定を dotfiles/claude-code/ からシンボリックリンクで参照
