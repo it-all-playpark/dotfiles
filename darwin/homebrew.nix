@@ -15,6 +15,7 @@ _: {
     };
     taps = [
       "rjyo/moshi" # moshi-hook 配布用 tap (formula は moshi-hook のみで、完全修飾名により trust 済み)
+      "silverstein/tap" # minutes 配布用 tap (cask は完全修飾名で指定する)
     ];
     brews = [
       {
@@ -47,6 +48,9 @@ _: {
       "onedrive"
       "orbstack"
       "postman"
+      # 会議の録音・文字起こし。相手側の音は ScreenCaptureKit で録るので BlackHole は入れない。
+      # CLI はアプリ同梱のものを使う (formula は rust でソースビルドになるため入れない)
+      "silverstein/tap/minutes"
       "raycast"
       "sequel-ace"
       "setapp"
