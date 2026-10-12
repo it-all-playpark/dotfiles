@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# dotfiles-sync: dotfiles のメイン checkout を origin/main まで fast-forward する
+#
+# Usage: dotfiles-sync
+#
+# dotfiles の PR を merge したあと、メイン checkout に取り込むときに host-exec（sandbox の外）で実行する固定の
+# コマンド。メイン checkout の claude-code/settings.json・CLAUDE.md・bin・hooks は sandbox から書けないので、
+# それらを変える PR の取り込みは sandbox の外でしかできない。その場で git 操作を組み立てると手順が毎回変わり、
+# 人間の未 commit の変更（settings.json / flake.lock 等）を reset / restore で書き換えることがあったので、
+# 手順をここに固定する: fetch → ローカル変更と取り込む差分の重なりの確認 → merge --ff-only。
+#
+# 止まる条件（どれも作業ツリーと HEAD を変えずに非 0 で終わる）:
+#   - main 以外を checkout している
+#   - HEAD と origin/main が分岐していて fast-forward できない
+#   - 取り込む差分とローカル変更（staged / unstaged / untracked）が同じファイルに重なっている。重なったファイルと、
+#     ローカル変更が取り込む内容と同じかどうかを表示する
+# reset / restore / stash は使わない。ローカル変更を捨てるかどうかは人間が決める。
+#
+# 環境変数:
+#   DOTFILES_SYNC_REPO  取り込む checkout（既定 ~/ghq/github.com/it-all-playpark/dotfiles。テスト用）
+set -euo pipefail
+
+if [ $# -ne 0 ]; then
+  echo "usage: dotfiles-sync" >&2
+  exit 2
+fi
+
+repo="${DOTFILES_SYNC_REPO:-$HOME/ghq/github.com/it-all-playpark/dotfiles}"
+target=refs/remotes/origin/main
+
+branch="$(git -C "$repo" symbolic-ref --quiet --short HEAD || true)"
+if [ "$branch" != main ]; then
+  echo "dotfiles-sync: $repo が main ではなく '${branch:-detached HEAD}' を checkout している。何も変えずに止めた" >&2
+  exit 1
+fi
+
+git -C "$repo" fetch --quiet origin
+
+if git -C "$repo" merge-base --is-ancestor "$target" HEAD; then
+  echo "dotfiles-sync: 取り込む commit は無い（HEAD は origin/main を含んでいる）"
+  exit 0
+fi
+if ! git -C "$repo" merge-base --is-ancestor HEAD "$target"; then
+  echo "dotfiles-sync: HEAD と origin/main が分岐していて fast-forward できない。何も変えずに止めた" >&2
+  exit 1
+fi
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/dotfiles-sync.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+
+git -C "$repo" diff -z --name-only --no-renames HEAD "$target" >"$tmp/incoming"
+{
+  git -C "$repo" diff -z --name-only --no-renames --cached HEAD
+  git -C "$repo" diff -z --name-only --no-renames HEAD
+  git -C "$repo" ls-files -z --others --exclude-standard
+} >"$tmp/local"
+
+incoming=()
+while IFS= read -r -d '' p; do
+  incoming+=("$p")
+done <"$tmp/incoming"
+
+overlap=()
+while IFS= read -r -d '' p; do
+  for q in "${overlap[@]+"${overlap[@]}"}"; do
+    [ "$q" = "$p" ] && continue 2
+  done
+  for q in "${incoming[@]}"; do
+    if [ "$q" = "$p" ]; then
+      overlap+=("$p")
+      break
+    fi
+  done
+done <"$tmp/local"
+
+if [ ${#overlap[@]} -gt 0 ]; then
+  echo "dotfiles-sync: 取り込む差分とローカル変更が同じファイルに重なっている。何も変えずに止めた:" >&2
+  for p in "${overlap[@]}"; do
+    # 作業ツリーの内容（無ければ削除）と origin/main の内容（無ければ削除）を比べる
+    want="$(git -C "$repo" rev-parse --quiet --verify "$target:$p" 2>/dev/null || echo deleted)"
+    if [ -e "$repo/$p" ] || [ -L "$repo/$p" ]; then
+      have="$(git -C "$repo" hash-object -- "$p")"
+    else
+      have=deleted
+    fi
+    if [ "$want" = "$have" ]; then
+      echo "  ${p}（ローカル変更は取り込む内容と同じ）" >&2
+    else
+      echo "  ${p}（ローカル変更は取り込む内容と異なる）" >&2
+    fi
+  done
+  echo "ローカル変更を残すか捨てるかを決めてから、もう一度 dotfiles-sync を実行する" >&2
+  exit 1
+fi
+
+git -C "$repo" merge --ff-only "$target"

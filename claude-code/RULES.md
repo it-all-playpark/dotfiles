@@ -38,6 +38,7 @@
 ## Git
 - 保護ブランチ（main / dev / production 等）には push せず、feature branch から PR を出す。`保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなく `allow-feature-push.sh` hook
 - PR / issue コメントの編集は `gh api -X PATCH` ではなく `gh pr comment <N> --edit-last --body-file <file>` / `gh issue comment <N> --edit-last --body-file <file>` を使う（`gh api -X PATCH` は permissions.deny で止まる）
+- dotfiles の PR を merge したあとメイン checkout に取り込むときは、host-exec で `dotfiles-sync` だけを実行する。止まったら人間に判断を渡す
 
 <!--
 保護ブランチ判定は allow-feature-push.sh（PreToolUse）が唯一の強制点。9 ブランチ（main / master / dev / develop /
