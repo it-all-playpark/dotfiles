@@ -4,7 +4,7 @@
 
 本物の pg_broker.Server を一時ディレクトリの Unix ソケットで立て、Postgres の起動は
 pg_broker_test.FakeRunner が受ける。Claude の sandbox 内では、一時ディレクトリが
-allowUnixSockets に入っている $TMPDIR の下にできるので bind / connect できる。
+allowUnixSockets に入っている $TMPDIR/sock の下にできるので bind / connect できる。
 """
 
 import fnmatch
@@ -12,19 +12,18 @@ import io
 import json
 import os
 import shutil
-import tempfile
 import threading
 import unittest
 from contextlib import redirect_stderr
 
 import pg_broker
 import pg_broker_client
-from pg_broker_test import BIN, REPO_ROOT, FakeClock, FakeRunner
+from pg_broker_test import BIN, REPO_ROOT, FakeClock, FakeRunner, socket_tempdir
 
 
 class ClientTest(unittest.TestCase):
     def setUp(self):
-        self.root = tempfile.mkdtemp(prefix="pgbc-")
+        self.root = socket_tempdir("pgbc-")
         self.addCleanup(shutil.rmtree, self.root, True)
         self.broker_stderr = io.StringIO()
         redirect = redirect_stderr(self.broker_stderr)

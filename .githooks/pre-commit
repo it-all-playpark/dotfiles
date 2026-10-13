@@ -3,10 +3,6 @@
 # scripts/install-git-hooks.sh が置く shim から呼ばれる（nix develop / nix run .#update が設置）。
 set -euo pipefail
 
-# Claude Code の git は sandbox 外で動くので、ここで作業ツリーのスクリプトや flake.nix
-# （nix develop の shellHook）を実行すると脱出口になる。Claude の commit / push は CI で検査する。
-[ -n "${CLAUDECODE:-}" ] && exit 0
-
 STAGED=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$STAGED" ] && exit 0
 
