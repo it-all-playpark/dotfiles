@@ -603,6 +603,7 @@
     },
     "network": {
       "allowLocalBinding": true,
+      "allowMachLookup": ["com.apple.trustd.agent"],
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
         "~/.local/state/jev-broker/jev.sock",

@@ -131,4 +131,13 @@ sandbox に塞がれたら:
   wrapper が Claude 本体に渡す HTTPS_PROXY（agent-vault の proxy token）が読めた。excludedCommands は前方一致の glob なので option を
   絞っても後ろに -E を足せ、permissions.deny で BSD 形式の組み合わせを網羅するのも fragile なので除外そのものを外した。
   top（-stats の key に環境変数が無い）/ pgrep -lf（引数まで）で用途は足りる。pretool-ps-guard.sh は ps をどの形でも deny する。
+- 2026-10-13 `network.allowMachLookup: ["com.apple.trustd.agent"]`: OS の trust store で TLS を検証するツール（Turbopack の
+  rustls-platform-verifier = Security.framework）は、sandbox 内だと trustd.agent への mach-lookup が拒否されて CT（SCT）検証だけ落ち、
+  接続エラーになる。corporate-site の pre-push（next build の next/font）が毎日これで止まり、push を人間か host-exec に回していた。
+  NODE_EXTRA_CA_CERTS / SSL_CERT_FILE は読まれず、fonts.googleapis.com は agent-vault の MITM 対象でもない（CA の問題ではない）。
+  `security verify-cert -p ssl` が sandbox 内 exit 1・外 exit 0 で再現し、カーネルの Sandbox 拒否ログに trustd.agent が出る。
+  この 1 行で verify-cert・next build・pre-push 込みの git push --dry-run が sandbox 内で通ることを、`.next` を消した対照実験で実測。
+  同じ効果の `enableWeakerNetworkIsolation: true` より名前が狭いのでこちらを使う。
+  代償（公式 docs の注記）: trustd は sandbox の proxy を通らず OCSP / CRL / AIA を取りに行くので、細工した証明書の URL で
+  allowedDomains 外へ情報を持ち出せる経路になる。
 -->
