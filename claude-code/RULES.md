@@ -109,6 +109,10 @@ sandbox に塞がれたら:
   走ることを実測した。cache 内にも local-verify / run-tests / pr-push など作業ツリーのコードを実行する bin があり、bare 名では
   UNREGISTERED_BINS にしているのにフルパスで素通りしていた。30 日の transcript でフルパス実行は 3,481 回中 1 回（mem-triage）。
   sandbox 外が要る mem-triage（/bin/ps）と generate-thumbnail（codex）は plugin の bin/ に足して bare 名で登録した。
+  同日、corporate-site の daily-blog-factory/scripts/*（bare / bash / bash $HOME、worktrees/** 版の 6 行）も同じ形なので撤去し、
+  SKILL.md が sandbox 外を要すると挙げる preflight / harvest_topics / seed_harvest / format_gate / premise_gate の 5 本だけを
+  `bash ~/…/scripts/<name>.sh` の絶対パスで登録した（.claude/skills は Bash から書けない）。worktree 版は glob なしでは書けないので外し、
+  worktree からの実行は sandbox 内に落ちる。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。
