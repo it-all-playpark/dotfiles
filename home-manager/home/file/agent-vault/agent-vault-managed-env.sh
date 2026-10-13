@@ -76,6 +76,7 @@ if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>
     NODE_EXTRA_CA_CERTS: $ENV.MANAGED_CA_BUNDLE,
     SSL_CERT_FILE: $ENV.MANAGED_CA_BUNDLE,
     GIT_SSL_CAINFO: $ENV.MANAGED_CA_BUNDLE,
+    CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: $ENV.MANAGED_CA_BUNDLE,
     CLAUDE_GH_VAULT: "1",
     GIT_CONFIG_COUNT: "3",
     GIT_CONFIG_KEY_0: "credential.https://github.com.helper",

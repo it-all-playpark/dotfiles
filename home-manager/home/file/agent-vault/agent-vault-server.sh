@@ -9,7 +9,7 @@
 # server が立ったら MITM の CA 証明書を取り、システムの CA bundle と連結して AGENT_VAULT_CA_BUNDLE に書く。
 # ~/.agent-vault（DB と CA 鍵）は sandbox から読めない（settings.json の denyRead）ので、
 # sandbox 内のコマンドが信頼する CA は外に出す。claude-code/bin/claude がこの bundle を
-# GIT_SSL_CAINFO / SSL_CERT_FILE / NODE_EXTRA_CA_CERTS に渡す。
+# GIT_SSL_CAINFO / SSL_CERT_FILE / NODE_EXTRA_CA_CERTS / CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE に渡す。
 #
 # 環境変数（home-manager/programs/agent-vault.nix の launchd 定義が渡す）:
 #   AGENT_VAULT_BIN               agent-vault の実体

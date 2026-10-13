@@ -78,8 +78,8 @@ chmod +x "${STUB_BIN}/chown" "${STUB_BIN}/mv"
 # wrapper が exec する偽の実体: wrapper が付ける env のうち、付いているものを K=V で 1 行ずつ出す
 cat >"${FAKE_BIN}/claude" <<'EOF'
 #!/usr/bin/env bash
-for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO CLAUDE_GH_VAULT \
-  GIT_CONFIG_COUNT; do
+for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO \
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT GIT_CONFIG_COUNT; do
   if [ -n "${!v+x}" ]; then printf '%s=%s\n' "$v" "${!v}"; fi
 done
 i=0
@@ -147,6 +147,7 @@ dropin_env() {
 ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" --arg ca "${CA_BUNDLE}" '{
   HTTPS_PROXY: $proxy, HTTP_PROXY: $proxy, NO_PROXY: "localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com",
   NODE_EXTRA_CA_CERTS: $ca, SSL_CERT_FILE: $ca, GIT_SSL_CAINFO: $ca,
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: $ca,
   CLAUDE_GH_VAULT: "1",
   GIT_CONFIG_COUNT: "3",
   GIT_CONFIG_KEY_0: "credential.https://github.com.helper", GIT_CONFIG_VALUE_0: "",
