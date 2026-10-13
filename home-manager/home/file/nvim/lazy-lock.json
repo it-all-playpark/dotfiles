@@ -5,7 +5,7 @@
   },
   "SchemaStore.nvim": {
     "branch": "main",
-    "commit": "9ec57eeac6e2e14b7b9b9e74dc8b0ca4954a684b"
+    "commit": "5e132f7176ddcf2a0c557cdc9c47d3508a8b9e42"
   },
   "blink.cmp": {
     "branch": "main",
@@ -73,19 +73,19 @@
   },
   "mini.ai": {
     "branch": "main",
-    "commit": "c2c4278beb759aa24b9506f56a67186a6cc2209c"
+    "commit": "d0c4987a1ead2bcf4eb22cc9815c662d76677c08"
   },
   "mini.hipatterns": {
     "branch": "main",
-    "commit": "7c840c71d6a91f53d734cab2b6fe2290d285ec3b"
+    "commit": "8e18b4970f21be0db157104786d2be43058cdd44"
   },
   "mini.icons": {
     "branch": "main",
-    "commit": "f642e3ba8c12afbc8f32f6d77ef6597eac56786f"
+    "commit": "f916635dc5ae2f479fbb9ab8184bb9444b62e86c"
   },
   "mini.pairs": {
     "branch": "main",
-    "commit": "b1c5a726921b7a8c9321e9a7a208aa0571de5810"
+    "commit": "03eb1f0062a2cee5314d1ac3939246e4bb21352e"
   },
   "neo-tree.nvim": {
     "branch": "main",
@@ -105,7 +105,7 @@
   },
   "nvim-lspconfig": {
     "branch": "master",
-    "commit": "6d27c288ff951e1e94cb5f91c800adeddf0dc0c2"
+    "commit": "ac062d0d01c019c0dbdb798968f3e5d8b35c3853"
   },
   "nvim-surround": {
     "branch": "main",
