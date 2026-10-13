@@ -59,6 +59,7 @@ require("lazy").setup({
       },
     },
   },
-  -- lockfileをリポジトリ内に直接保存して管理
-  lockfile = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h:h") .. "/lazy-lock.json",
+  -- lockfileはdotfilesのcheckoutに直接書く。~/.config/nvim は home-manager が
+  -- nix store（読み取り専用）へリンクしているので、隣に置くと更新が書き戻せない
+  lockfile = vim.fn.expand("~/ghq/github.com/it-all-playpark/dotfiles/home-manager/home/file/nvim/lazy-lock.json"),
 })
