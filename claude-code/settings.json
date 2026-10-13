@@ -19,6 +19,7 @@
   "enabledPlugins": {
     "dev-flow@playpark": true,
     "host-exec@playpark": true,
+    "meeting@playpark": true,
     "playpark-core@playpark": true,
     "playpark-skills@playpark": true,
     "playwright@claude-plugins-official": false,
