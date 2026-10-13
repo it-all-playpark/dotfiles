@@ -19,7 +19,8 @@ MARKER="# dotfiles: .githooks dispatcher"
 top="$(git rev-parse --show-toplevel)"
 hooks_dir="$(git rev-parse --path-format=absolute --git-path hooks)"
 
-# hooksPath が直接 .githooks を指していれば shim は要らない
+# hooksPath が直接 .githooks を指していれば shim は要らない。
+# ただしその構成では shim を通らないので、上の sandbox 外判定が効かない（dotfiles は .git/hooks を使う）
 [ "$hooks_dir" = "$top/.githooks" ] && exit 0
 
 mkdir -p "$hooks_dir"

@@ -8,7 +8,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$REPO_ROOT/scripts/install-git-hooks.sh"
 TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/install-git-hooks-test.XXXXXX")"
-trap 'rm -rf "$TMPROOT"' EXIT
+trap 'chmod -R u+w "$TMPROOT"; rm -rf "$TMPROOT"' EXIT
 
 PASS=0
 FAIL=0
@@ -85,7 +85,7 @@ fi
 echo "- shim_runs_in_claude_code_inside_sandbox"
 # hooks dir に書けない = sandbox 内
 chmod a-w "$HOOKS"
-out="$(cd "$REPO" && CLAUDECODE=1 "$HOOKS/pre-push")"
+out="$(cd "$REPO" && CLAUDECODE=1 "$HOOKS/pre-push")" || true
 chmod u+w "$HOOKS"
 if [ "$out" = "main-hook" ]; then
   pass "shim_runs_in_claude_code_inside_sandbox"
