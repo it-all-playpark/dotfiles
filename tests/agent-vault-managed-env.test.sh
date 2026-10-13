@@ -413,6 +413,47 @@ else
 fi
 
 echo ""
+echo "--- LaunchDaemon の plist（darwin/agent-vault.nix、nix daemon 到達時のみ） ---"
+
+# ---------------------------------------------------------------------------
+# launchd_plist_waits_for_nix_store: 生成 plist は /bin/sh -c で /bin/wait4path /nix/store を待ってから
+# bash でスクリプトを exec する（/nix/store の bash を直接起動すると、再起動直後にボリュームが未マウントで
+# spawn failed のまま止まる）。他のキーは ProgramArguments 直書きだったときと同じ値
+# ---------------------------------------------------------------------------
+echo "- launchd_plist_waits_for_nix_store"
+if command -v nix >/dev/null 2>&1 && nix store info >/dev/null 2>&1; then
+  plist="$(nix build --no-link --print-out-paths \
+    "${REPO_ROOT}#darwinConfigurations.MyMBP-naramotoyuuji.config.environment.launchDaemons.\"com.playpark.agent-vault-managed-env.plist\".source" \
+    2>"${TMPROOT}/nix-build.err" || true)"
+  got="$(python3 -I -c 'import json, plistlib, sys; print(json.dumps(plistlib.load(open(sys.argv[1], "rb"))))' \
+    "${plist}" 2>/dev/null || true)"
+  h=/Users/naramotoyuuji
+  if [ -n "${got}" ] && printf '%s\n' "${got}" | jq -e --arg h "${h}" '
+    (keys == ["EnvironmentVariables", "Label", "ProgramArguments", "RunAtLoad", "StandardErrorPath",
+      "StandardOutPath", "StartInterval", "WatchPaths"]) and
+    (.ProgramArguments | length == 3 and .[0] == "/bin/sh" and .[1] == "-c" and
+      (.[2] | test("^/bin/wait4path /nix/store && exec /nix/store/[^/ ]+-bash[^/ ]*/bin/bash /nix/store/[^/ ]+-agent-vault-managed-env\\.sh$"))) and
+    .Label == "com.playpark.agent-vault-managed-env" and
+    (.EnvironmentVariables | del(.PATH) == {
+      AGENT_VAULT_PROXY_TOKEN_FILE: "\($h)/.agent-vault/proxy-token",
+      AGENT_VAULT_CA_BUNDLE: "\($h)/.local/state/agent-vault/ca-bundle.pem",
+      AGENT_VAULT_TOKEN_OWNER: "naramotoyuuji",
+      CLAUDE_USER_SETTINGS: "\($h)/.claude/settings.json",
+      CLAUDE_USER_HOME: $h}) and
+    (.EnvironmentVariables.PATH | test("^/nix/store/[^/]+-jq-[^/]+/bin:/usr/bin:/bin:/usr/sbin:/sbin$")) and
+    .RunAtLoad == true and .StartInterval == 30 and
+    .WatchPaths == ["\($h)/.agent-vault/proxy-token", "\($h)/.local/state/agent-vault/ca-bundle.pem"] and
+    .StandardOutPath == "/var/log/agent-vault-managed-env.log" and
+    .StandardErrorPath == "/var/log/agent-vault-managed-env.log"' >/dev/null; then
+    pass "launchd_plist_waits_for_nix_store"
+  else
+    fail "launchd_plist_waits_for_nix_store" "plist=${plist} got=${got} err=$(tail -5 "${TMPROOT}/nix-build.err")"
+  fi
+else
+  echo "  SKIP: launchd_plist_waits_for_nix_store (nix daemon unreachable)"
+fi
+
+echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 if [ "${FAIL}" -gt 0 ]; then
   echo "Failed tests:"
