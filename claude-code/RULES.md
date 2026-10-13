@@ -74,6 +74,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
 - `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin cache の CLI）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
+- sandbox を広げる変更（`allowMachLookup`・`allowUnixSockets`・`allowedDomains`・`excludedCommands` 等）は、広げた口の悪用を防ぐ手当てまで dotfiles（`nix run .#update`）で完結するものだけにする。手当てに dotfiles の外（システム拡張・GUI での許可・MDM）が要るものは入れず、repo 側か手順で直す。設定が分散すると、片方だけ外れても気付けない
 - auto mode classifier が settings / RULES の commit を Self-Modification として止めたら回避しない。worktree パスと実行コマンド（commit → push → PR）を渡して止まる
 - Unix ソケットへの接続は `filesystem.allowWrite` では開かない。`sandbox.network.allowUnixSockets` にパスを足す（`allowAllUnixSockets` は使わない）
 
@@ -131,4 +132,9 @@ sandbox に塞がれたら:
   wrapper が Claude 本体に渡す HTTPS_PROXY（agent-vault の proxy token）が読めた。excludedCommands は前方一致の glob なので option を
   絞っても後ろに -E を足せ、permissions.deny で BSD 形式の組み合わせを網羅するのも fragile なので除外そのものを外した。
   top（-stats の key に環境変数が無い）/ pgrep -lf（引数まで）で用途は足りる。pretool-ps-guard.sh は ps をどの形でも deny する。
+- 2026-10-13 `com.apple.trustd.agent`（`allowMachLookup` / `enableWeakerNetworkIsolation`）は入れない（#302 で close）: OS の trust store で
+  TLS を検証するツール（Turbopack の rustls-platform-verifier、Swift 等）は sandbox 内だと trust 評価自体が走らず失敗し、これを開ければ
+  直る。ただし AIA / OCSP の URL を細工した証明書を検証させると、trustd がプロキシを通さずその URL へ GET する（sandbox から直接は
+  deny される LAN 側 IP 宛てで実測）。trustd の取得を止める defaults キーは無く、agent はログインユーザーで動くので pf でも絞れない。
+  該当ツールは repo 側で直す（corporate-site は next/font/google をやめてフォントを同梱）。
 -->
