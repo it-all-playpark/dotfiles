@@ -225,7 +225,8 @@ vault に入れる token は、人間の端末で `gh auth login` 済みの gh �
 `bin/claude` は `~/.claude/bin`（PATH 先頭）から実体の claude を exec する前に、
 `~/.agent-vault/proxy-token` を読んで `HTTPS_PROXY` / `HTTP_PROXY` を
 `http://<proxy token>:default@127.0.0.1:14322` にし、`~/.local/state/agent-vault/ca-bundle.pem`
-（システムの CA + agent-vault の CA）を `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `GIT_SSL_CAINFO` に、
+（システムの CA + agent-vault の CA）を `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE` / `GIT_SSL_CAINFO` /
+`CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE`（gcloud は `SSL_CERT_FILE` を読まず同梱の certifi で検証するため）に、
 目印の `CLAUDE_GH_VAULT=1` を付ける。github.com 向けの git credential helper は `GIT_CONFIG_KEY_n=credential.https://github.com.helper` /
 `GIT_CONFIG_VALUE_n=`（空）で外す（空の helper は、それより前に読んだ `config.local` の `gh auth git-credential` を
 一覧から消す。この helper は `~/.config/gh` を読むので sandbox 内では動かない）。他ホストの helper は残す。

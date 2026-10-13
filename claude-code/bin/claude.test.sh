@@ -70,8 +70,8 @@ done
 
 cat >"$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO CLAUDE_GH_VAULT \
-  GIT_CONFIG_COUNT; do
+for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO \
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT GIT_CONFIG_COUNT; do
   printf '%s=%s\n' "$v" "${!v-<unset>}"
 done
 i=0
@@ -173,6 +173,7 @@ if [[ $RC -eq 0 ]] &&
   contains "$OUT" "NODE_EXTRA_CA_CERTS=$CA_BUNDLE" &&
   contains "$OUT" "SSL_CERT_FILE=$CA_BUNDLE" &&
   contains "$OUT" "GIT_SSL_CAINFO=$CA_BUNDLE" &&
+  contains "$OUT" "CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE=$CA_BUNDLE" &&
   contains "$OUT" "CLAUDE_GH_VAULT=1" &&
   contains "$OUT" $'GIT_CONFIG_COUNT=3\ngit_config=credential.https://github.com.helper=\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n' &&
   contains "$OUT" $'argc=2\narg=[--bg]\narg=[do it]' && [[ -z $ERR ]]; then
