@@ -609,7 +609,7 @@
         "~/.local/state/pg-broker/broker.sock",
         "~/.local/state/pg-broker/sock",
         "/private/tmp/claude/agent-browser",
-        "/private/tmp/claude-501",
+        "/private/tmp/claude-501/sock",
         "/private/tmp/claude-502"
       ],
       "allowedDomains": [

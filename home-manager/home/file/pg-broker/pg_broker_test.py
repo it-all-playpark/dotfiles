@@ -435,12 +435,20 @@ class SandboxSettingsTest(unittest.TestCase):
             )
 
 
+def socket_tempdir(prefix):
+    # Claude の sandbox は $TMPDIR/sock の下でだけ Unix socket の bind / connect を許す
+    # （claude-code/settings.json の allowUnixSockets）。sandbox 外では普通の一時ディレクトリになる
+    parent = os.path.join(tempfile.gettempdir(), "sock")
+    os.makedirs(parent, exist_ok=True)
+    return tempfile.mkdtemp(prefix=prefix, dir=parent)
+
+
 def short_tempdir():
     # Postgres のソケットパスは 103 バイトまで。/var/folders/... の TMPDIR だと際どいので /tmp を先に試す
     try:
         return tempfile.mkdtemp(prefix="pgb-", dir="/tmp")
     except OSError:
-        return tempfile.mkdtemp(prefix="pgb-")
+        return socket_tempdir("pgb-")
 
 
 def find_postgres_17():
