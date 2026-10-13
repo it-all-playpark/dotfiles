@@ -221,7 +221,7 @@ check_token_rejected() {
 # root 専用ファイルの代わり: 中身が token として通る別ファイルへの symlink
 printf 'secret_from_target\n' >"${TMPROOT}/link-target"
 ln -s "${TMPROOT}/link-target" "${TMPROOT}/proxy-token-link"
-check_token_rejected token_symlink_is_not_followed AGENT_VAULT_PROXY_TOKEN_FILE=[REDACTED:ENV_SECRET]
+check_token_rejected token_symlink_is_not_followed AGENT_VAULT_PROXY_TOKEN_FILE="${TMPROOT}/proxy-token-link"
 check_token_rejected token_owned_by_other_user_is_not_read AGENT_VAULT_TOKEN_OWNER=root
 
 echo ""
@@ -392,7 +392,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # repo_settings_have_no_unexpanded_home: repo の settings.json を展開すると、ホーム基点のエントリが
-# drop-in に揃う（plugin cache のスクリプトの 3 つの起動形を含む）
+# すべて対象ユーザーのホームに置き換わって drop-in に揃う
 # ---------------------------------------------------------------------------
 echo "- repo_settings_have_no_unexpanded_home"
 cp "${REPO_ROOT}/claude-code/settings.json" "${SETTINGS_SRC}"
@@ -401,11 +401,10 @@ run_script "${out_dir}/50-agent-vault.json"
 got="$(jq -r '.sandbox.excludedCommands[]' "${out_dir}/60-home-paths.json" 2>/dev/null || true)"
 want_n="$(jq '[.sandbox.excludedCommands[] | select(test("(^| )~/"))] | length' "${REPO_ROOT}/claude-code/settings.json")"
 missing=""
-for e in "${HOME_T}/.claude/plugins/cache/playpark/*" \
-  "bash ${HOME_T}/.claude/plugins/cache/playpark/*" \
-  "python3 ${HOME_T}/.claude/plugins/cache/playpark/*"; do
+while IFS= read -r e; do
   printf '%s\n' "${got}" | grep -qxF -- "${e}" || missing="${missing} [${e}]"
-done
+done <<<"$(jq -r --arg h "${HOME_T}" '.sandbox.excludedCommands[] | select(test("(^| )~/")) | sub("~/"; "\($h)/")' \
+  "${REPO_ROOT}/claude-code/settings.json")"
 if [ "${RC}" -eq 0 ] && [ -z "${missing}" ] && [ "${want_n}" -gt 0 ] &&
   [ "$(printf '%s\n' "${got}" | grep -c "^\(bash \|python3 \)\{0,1\}${HOME_T}/")" -eq "${want_n}" ]; then
   pass "repo_settings_have_no_unexpanded_home"

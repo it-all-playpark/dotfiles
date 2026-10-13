@@ -348,10 +348,22 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 28 ]; then
+if [ "${total_len}" -eq 31 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 28 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 31 entries, got ${total_len}"
+fi
+
+# ---------------------------------------------------------------------------
+# no_path_glob: パス中の * は .. にも一致し、<dir>/../../<書ける場所>/x.sh が sandbox 外で走る
+# （引数側の " *" は可）
+# ---------------------------------------------------------------------------
+echo "- no_path_glob"
+path_globs="$(jq -r '.[] | select(test("/[^ ]*\\*"))' <<<"${EXCLUDED_JSON}")"
+if [ -z "${path_globs}" ]; then
+  pass "no_path_glob"
+else
+  fail "no_path_glob" "path globs in excludedCommands: ${path_globs}"
 fi
 
 # ---------------------------------------------------------------------------

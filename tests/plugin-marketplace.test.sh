@@ -109,32 +109,6 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# excluded_commands_cover_plugin_cache
-# ---------------------------------------------------------------------------
-# Copy-mode plugins run from ~/.claude/plugins/cache/playpark/<plugin>/<version>/;
-# skill scripts that call gh internally need the same 3 launch forms as the
-# skills checkout paths. The ~/ forms are expanded to absolute paths per user by
-# agent-vault-managed-env.sh (managed-settings.d/60-home-paths.json).
-echo "- excluded_commands_cover_plugin_cache"
-missing=()
-# shellcheck disable=SC2016,SC2088 # 意図的に非展開: settings.json に格納された literal string と照合する
-for form in \
-  "~/.claude/plugins/cache/playpark/*" \
-  "bash ~/.claude/plugins/cache/playpark/*" \
-  "python3 ~/.claude/plugins/cache/playpark/*" \
-  'bash $HOME/.claude/plugins/cache/playpark/*' \
-  'python3 $HOME/.claude/plugins/cache/playpark/*'; do
-  if ! jq -e --arg f "${form}" '.sandbox.excludedCommands | index($f) != null' "${SETTINGS}" >/dev/null 2>&1; then
-    missing+=("${form}")
-  fi
-done
-if [ "${#missing[@]}" -eq 0 ]; then
-  pass "excluded_commands_cover_plugin_cache"
-else
-  fail "excluded_commands_cover_plugin_cache" "Missing: ${missing[*]}"
-fi
-
-# ---------------------------------------------------------------------------
 # no_dot_claude_skills_outside_hooks (AC1)
 # 対象はユーザー単位の ~/.claude/skills（plugin 化前の置き場）だけ。
 # repo 内の <repo>/.claude/skills（corporate-site の daily-blog-factory や

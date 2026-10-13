@@ -15,5 +15,7 @@ done
 echo "pre-push: nix flake check（フォーマット）"
 nix flake check
 
+# devShell は TMPDIR を $TMPDIR/nix-shell.* に付け替える。Claude の sandbox が Unix socket を許すのは
+# $TMPDIR/sock だけなので、外側の TMPDIR のまま走らせる（CI・人間の実行でも結果は変わらない）
 echo "pre-push: tests/run-all.sh"
-nix develop --command tests/run-all.sh
+nix develop --command env TMPDIR="${TMPDIR:-/tmp}" tests/run-all.sh

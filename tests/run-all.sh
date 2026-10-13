@@ -10,6 +10,10 @@
 
 set -uo pipefail
 
+# git の hook（pre-push）から呼ばれると GIT_DIR などが export されている。残すと、一時ディレクトリに
+# repo を作るテストの git 操作が呼び出し元の repo に向き、その branch・index・worktree 登録を書き換える
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}" || exit 1
 
