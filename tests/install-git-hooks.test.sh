@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/install-git-hooks.sh の検証。一時 repo に .githooks を置いてインストーラを走らせ、
-# shim の設置・冪等性・他の hook を壊さないこと・CLAUDECODE での停止・worktree への委譲を確かめる。
+# shim の設置・冪等性・他の hook を壊さないこと・CLAUDECODE でも動くこと・worktree への委譲を確かめる。
 # Run from the repo root: bash tests/install-git-hooks.test.sh
 
 set -euo pipefail
@@ -73,12 +73,12 @@ else
   fail "shim_dispatches_to_githooks" "expected main-hook, got '$out'"
 fi
 
-echo "- shim_skips_in_claude_code"
+echo "- shim_runs_in_claude_code"
 out="$(cd "$REPO" && CLAUDECODE=1 "$HOOKS/pre-push")"
-if [ -z "$out" ]; then
-  pass "shim_skips_in_claude_code"
+if [ "$out" = "main-hook" ]; then
+  pass "shim_runs_in_claude_code"
 else
-  fail "shim_skips_in_claude_code" "hook ran under CLAUDECODE=1: '$out'"
+  fail "shim_runs_in_claude_code" "expected main-hook under CLAUDECODE=1, got '$out'"
 fi
 
 echo "- shim_uses_worktree_hooks"

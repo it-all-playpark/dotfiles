@@ -6,10 +6,8 @@
 # hooksPath 自体は触らず、git が見る場所に .githooks/<name> へ委譲する shim を置く。
 # shim は実行時の作業ツリー（worktree を含む）の .githooks を呼ぶので、ブランチごとの hook が効く。
 #
-# Claude のセッション（CLAUDECODE=1）では shim が何も呼ばずに抜ける（Claude の push は CI が検査する）。
-# 入れた当時は Claude Code の git が sandbox 外で動き、sandbox から書ける作業ツリーの .githooks / tests /
-# flake.nix を hook から実行すると脱出口になったため（issue #249 で git は sandbox 内で動くようになった）。
-# shim の置き場（.git/hooks）は sandbox から書けないので、この判定は Claude から外せない。
+# Claude のセッションでも hook は動く。issue #249 以降 Claude Code の git は sandbox 内で動き、
+# hook もその子プロセスとして sandbox 内で走るので、作業ツリーのスクリプトを実行しても脱出口にならない。
 set -euo pipefail
 
 MARKER="# dotfiles: .githooks dispatcher"
@@ -28,10 +26,11 @@ for src in "$top"/.githooks/*; do
     echo "install-git-hooks: $dst は別の hook なので上書きしない" >&2
     continue
   fi
+  # shim の中身は展開せずにそのまま書き出す
+  # shellcheck disable=SC2016
   printf '%s\n' \
     '#!/bin/sh' \
     "$MARKER" \
-    '[ -n "${CLAUDECODE:-}" ] && exit 0' \
     "hook=\"\$(git rev-parse --show-toplevel)/.githooks/$name\"" \
     '[ -x "$hook" ] || exit 0' \
     'exec "$hook" "$@"' >"$dst"
