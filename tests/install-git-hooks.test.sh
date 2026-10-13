@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/install-git-hooks.sh の検証。一時 repo に .githooks を置いてインストーラを走らせ、
-# shim の設置・冪等性・他の hook を壊さないこと・CLAUDECODE でも動くこと・worktree への委譲を確かめる。
+# shim の設置・冪等性・他の hook を壊さないこと・CLAUDECODE では sandbox 内でだけ動くこと・worktree への委譲を確かめる。
 # Run from the repo root: bash tests/install-git-hooks.test.sh
 
 set -euo pipefail
@@ -73,12 +73,24 @@ else
   fail "shim_dispatches_to_githooks" "expected main-hook, got '$out'"
 fi
 
-echo "- shim_runs_in_claude_code"
+echo "- shim_skips_in_claude_code_outside_sandbox"
+# hooks dir に書ける = sandbox 外（excludedCommands 経由の git など）
 out="$(cd "$REPO" && CLAUDECODE=1 "$HOOKS/pre-push")"
-if [ "$out" = "main-hook" ]; then
-  pass "shim_runs_in_claude_code"
+if [ -z "$out" ] && [ -z "$(find "$HOOKS" -name '.sandbox-probe.*')" ]; then
+  pass "shim_skips_in_claude_code_outside_sandbox"
 else
-  fail "shim_runs_in_claude_code" "expected main-hook under CLAUDECODE=1, got '$out'"
+  fail "shim_skips_in_claude_code_outside_sandbox" "hook ran or probe left behind under CLAUDECODE=1 with a writable hooks dir: '$out'"
+fi
+
+echo "- shim_runs_in_claude_code_inside_sandbox"
+# hooks dir に書けない = sandbox 内
+chmod a-w "$HOOKS"
+out="$(cd "$REPO" && CLAUDECODE=1 "$HOOKS/pre-push")"
+chmod u+w "$HOOKS"
+if [ "$out" = "main-hook" ]; then
+  pass "shim_runs_in_claude_code_inside_sandbox"
+else
+  fail "shim_runs_in_claude_code_inside_sandbox" "expected main-hook under CLAUDECODE=1 with a read-only hooks dir, got '$out'"
 fi
 
 echo "- shim_uses_worktree_hooks"

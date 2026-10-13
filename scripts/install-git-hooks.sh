@@ -6,8 +6,12 @@
 # hooksPath 自体は触らず、git が見る場所に .githooks/<name> へ委譲する shim を置く。
 # shim は実行時の作業ツリー（worktree を含む）の .githooks を呼ぶので、ブランチごとの hook が効く。
 #
-# Claude のセッションでも hook は動く。issue #249 以降 Claude Code の git は sandbox 内で動き、
-# hook もその子プロセスとして sandbox 内で走るので、作業ツリーのスクリプトを実行しても脱出口にならない。
+# Claude のセッション（CLAUDECODE=1）では、sandbox 内で呼ばれたときだけ hook を動かす。
+# issue #249 以降 Claude Code の git は sandbox 内で動き、hook も sandbox 内で走るので脱出口にならない。
+# ただし excludedCommands 経由（plugin cache の pr-push をフルパスで呼ぶ等）の git は sandbox 外で動き、
+# そこで作業ツリーの .githooks / tests / flake.nix を実行すると脱出口になる。
+# sandbox 内からは .git/hooks に書けないので、shim の置き場に書けるかどうかで sandbox 外を見分けて抜ける。
+# 判定は sandbox から書けない shim 側に置く（.githooks 側に置いても作業ツリーから外せる）。
 set -euo pipefail
 
 MARKER="# dotfiles: .githooks dispatcher"
@@ -31,6 +35,10 @@ for src in "$top"/.githooks/*; do
   printf '%s\n' \
     '#!/bin/sh' \
     "$MARKER" \
+    'if [ -n "${CLAUDECODE:-}" ]; then' \
+    '  probe="$(dirname "$0")/.sandbox-probe.$$"' \
+    '  if (: >"$probe") 2>/dev/null; then rm -f "$probe"; exit 0; fi' \
+    'fi' \
     "hook=\"\$(git rev-parse --show-toplevel)/.githooks/$name\"" \
     '[ -x "$hook" ] || exit 0' \
     'exec "$hook" "$@"' >"$dst"
