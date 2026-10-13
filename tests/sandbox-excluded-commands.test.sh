@@ -348,10 +348,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 28 ]; then
+if [ "${total_len}" -eq 27 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 28 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 27 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------

@@ -573,9 +573,9 @@ main に追随できるよう、旧 link mode の inline marketplace `playpark-l
 
 `bin/` の bare 名（`journal` / `secfloor-classify` 等）は Claude Code が plugin の `bin/` を
 PATH に載せることで解決する。`sandbox.excludedCommands` には bare 名を登録し、
-`~/.claude/skills/*` 系 glob は撤去済み（issue #179）。gh を内部で呼ぶ skill スクリプトを
-パス指定で起動する形は、plugin cache（`~/.claude/plugins/cache/playpark/*`）だけを bare / `bash` / `python3`
-の 3 形で登録している。skills の checkout は sandbox から書けるので登録しない（書き換えて sandbox 外で実行できる脱出口になる）。
+`~/.claude/skills/*` 系 glob は撤去済み（issue #179）。plugin cache（`~/.claude/plugins/cache/playpark/*`）の
+パスの glob も撤去した: `*` が `..` に一致し、`<cache>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走るため。
+sandbox 外が要るスクリプトは plugin の `bin/` に足して bare 名で登録する。
 
 hooks の `journal.sh` / `zombie-kill.sh` 参照 3 箇所は skills#572 で plugin の hooks.json へ
 移植済み。dotfiles 側の重複 entry と `claude-code/hooks/` の移植済みスクリプトは issue #185 で削除した。

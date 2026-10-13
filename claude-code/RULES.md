@@ -73,7 +73,8 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 
 sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
-- `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin cache の CLI）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
+- `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin の `bin/` の CLI）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
+- plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る（2026-10-14 に plugin cache の glob で実測）
 - sandbox を広げる変更（`allowMachLookup`・`allowUnixSockets`・`allowedDomains`・`excludedCommands` 等）は、広げた口の悪用を防ぐ手当てまで dotfiles（`nix run .#update`）で完結するものだけにする。手当てに dotfiles の外（システム拡張・GUI での許可・MDM）が要るものは入れず、repo 側か手順で直す。設定が分散すると、片方だけ外れても気付けない
 - auto mode classifier が settings / RULES の commit を Self-Modification として止めたら回避しない。worktree パスと実行コマンド（commit → push → PR）を渡して止まる
 - Unix ソケットへの接続は `filesystem.allowWrite` では開かない。`sandbox.network.allowUnixSockets` にパスを足す（`allowAllUnixSockets` は使わない）
@@ -101,9 +102,13 @@ sandbox に塞がれたら:
   track.neon.tech は未許可なので --no-analytics がないと closeAndFlush が拒否された送信を待つ。
   代償: sandbox 内のプロセスが Neon の API を持ち主の権限で叩ける（branch / DB の削除も可能）。
 - nix fmt: treefmt が ~/Library/Caches/treefmt にキャッシュ DB を書こうとして落ちる。allowWrite に足せば通るが、キャッシュなので --no-cache で足りる。
-- skill スクリプトの excludedCommands 登録: plugin cache ~/.claude/plugins/cache/playpark/ を bare / bash / python3 の 3 形で登録。
-  前置形は先頭トークンマッチの仕組み上パターンで表現できない。ホームは `~/` で書く（絶対パスへの展開は
-  agent-vault-managed-env が managed-settings.d/60-home-paths.json に書く。`/Users/<name>` の直書きはテストで落ちる）。
+- ホーム基点の excludedCommands は `~/` で書く（絶対パスへの展開は agent-vault-managed-env が
+  managed-settings.d/60-home-paths.json に書く。`/Users/<name>` の直書きはテストで落ちる）。
+- 2026-10-14 plugin cache の glob（`~/.claude/plugins/cache/playpark/*` の bare / bash / python3 形）を撤去: `*` が `..` に一致し、
+  `bash ~/.claude/plugins/cache/playpark/../../../../../../private/tmp/claude-501/x.sh` で $TMPDIR のスクリプトが sandbox 外で
+  走ることを実測した。cache 内にも local-verify / run-tests / pr-push など作業ツリーのコードを実行する bin があり、bare 名では
+  UNREGISTERED_BINS にしているのにフルパスで素通りしていた。30 日の transcript でフルパス実行は 3,481 回中 1 回（mem-triage）。
+  sandbox 外が要る mem-triage（/bin/ps）と generate-thumbnail（codex）は plugin の bin/ に足して bare 名で登録した。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。
@@ -118,6 +123,9 @@ sandbox に塞がれたら:
 - 2026-10-05 dotfiles の .githooks（pre-commit: 整形、pre-push: flake check + tests/run-all.sh）: .git/hooks の shim が作業ツリーの
   .githooks を呼ぶ。Claude の git は sandbox 外なので、shim は CLAUDECODE=1 なら何も呼ばない（Claude の push は CI が検査）。
   shim は sandbox から書けない .git/hooks にあるのでこの判定は外せない。.githooks 自体も **/.githooks として denyWrite。
+- 2026-10-14 dotfiles の .githooks を Claude でも動かす（#307）: #249 以降 git は sandbox 内なので、shim は CLAUDECODE=1 でも
+  .git/hooks に probe を書けなければ（= sandbox 内）hook を実行し、書ければ（= excludedCommands 経由の sandbox 外）何もしない。
+  あわせて uid 501 の sandbox TMPDIR に socket 専用の /private/tmp/claude-501/sock を allowUnixSockets に足した（pg-broker のテスト用）。
 - dangerouslyDisableSandbox は policy で無効。
 - 2026-10-08 git / gh を excludedCommands から撤去（issue #249）: agent-vault（dotfiles#248）で sandbox 内のまま GitHub に
   認証できるようになったため。起動形（cd X && / VAR=x 前置 / リダイレクト / git -C）で一致が外れて EPERM になる問題と、
