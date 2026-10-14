@@ -17,6 +17,7 @@
   "effortLevel": "high",
   "enableAllProjectMcpServers": false,
   "enabledPlugins": {
+    "bg-sessions@playpark": true,
     "dev-flow@playpark": true,
     "host-exec@playpark": true,
     "meeting@playpark": true,
@@ -528,6 +529,13 @@
       "Read(~/.config/gh-*/**)"
     ],
     "disableBypassPermissionsMode": "disable"
+  },
+  "pluginConfigs": {
+    "bg-sessions@playpark": {
+      "options": {
+        "select_action": "attach"
+      }
+    }
   },
   "sandbox": {
     "allowUnsandboxedCommands": false,
