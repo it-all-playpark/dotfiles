@@ -27,6 +27,22 @@
       hub.protocol = "ssh";
       pull.rebase = true;
 
+      # it-all-playpark の repo は SSH の remote でも HTTPS で通信する。
+      # 各 repo の .git/config（起動元 repo のものは Claude Code の sandbox が書かせない）を
+      # 書き換えずに、既存の clone と今後の ghq get の両方に効かせる。
+      # sandbox 内の git は ~/.ssh を読めず、agent-vault が HTTPS に認証を付ける経路しか通らない。
+      url."https://github.com/it-all-playpark/".insteadOf = [
+        "ssh://git@github.com/it-all-playpark/"
+        "git@github.com:it-all-playpark/"
+      ];
+      # sandbox 外の端末で HTTPS の push / fetch に gh の token を使う。
+      # 空の helper で osxkeychain 等の既定を消してから gh を足す（gh auth setup-git と同じ形）。
+      # sandbox 内では claude wrapper（claude-code/bin/claude）がこの helper を env で空にする
+      credential."https://github.com".helper = [
+        ""
+        "!${pkgs.gh}/bin/gh auth git-credential"
+      ];
+
       # cachetextconv は変換結果を git notes にキャッシュする。
       # 数百件の Office ファイルを持つリポジトリで git log -p を回すと
       # 毎回全件再変換することになるため、有効にしておく。
