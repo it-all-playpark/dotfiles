@@ -43,7 +43,7 @@
 │       ├── fish.nix / zsh.nix / shell-common.nix / common.nix
 │       ├── git.nix / neovim.nix / yazi.nix / google-cloud-sdk.nix
 │       ├── agent-vault.nix / jev-broker.nix / pg-broker.nix   # Claude Code sandbox helpers
-│       ├── cc-launch.nix / cca.nix / antigravity-cli.nix
+│       ├── cc-launch.nix / antigravity-cli.nix
 │       └── uc-handoff.nix
 ├── claude-code/                # Claude Code config (settings, hooks, bin, RULES.md)
 ├── codex/                      # Codex AI agent config
