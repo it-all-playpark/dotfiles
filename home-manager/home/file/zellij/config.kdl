@@ -18,9 +18,12 @@ ui {
 mouse_mode true
 
 // コピーモード: vi キーバインド
-// クリップボードは pbcopy 経由。OSC52(copy_clipboard "system")は zellij 0.44.3 +
-// mosh 1.4.0 環境では実際のコピーが効かなかったため pbcopy に戻している。
-copy_command "pbcopy"
+// クリップボードは OSC52 で手元の端末(ghostty)へ送る。pane 内の OSC52(nvim のヤンク)も
+// zellij がここで受け直すので、copy_command "pbcopy" だと mosh 越しのコピーは全部
+// リモートホストに入り、手元へは Universal Clipboard 頼みになる(届かないことがある)。
+// zellij 0.45.1 + mosh 1.4.0 で コピーモード / マウス選択 / nvim yy の到達を実測済み。
+// mosh は OSC 文字列を 16KB で切るので、届くのは base64 前でおよそ 12KB まで。
+copy_clipboard "system"
 scrollback_editor "nvim"
 
 // セッション名を表示
