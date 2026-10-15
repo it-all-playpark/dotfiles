@@ -1,0 +1,14 @@
+{
+  "configRepo": {
+    "path": ".",
+    "paths": [
+      "claude-code/settings.json",
+      "claude-code/bin",
+      "claude-code/hooks",
+      "claude-code/RULES.md",
+      "darwin/agent-vault.nix"
+    ]
+  },
+  "criteriaFiles": ["claude-code/RULES.md"],
+  "issue": { "repo": "it-all-playpark/dotfiles" }
+}
