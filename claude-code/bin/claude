@@ -16,10 +16,10 @@
 #
 # 付ける env（agent-vault が使えるときだけ）:
 #   HTTPS_PROXY / HTTP_PROXY   http://<proxy token>:<vault>@127.0.0.1:<port>
-#   NO_PROXY                   loopback（agent-vault は private range へ転送しない）と Google Fonts の 2 ホスト。
-#                              Google Fonts は資格情報が要らず、agent-vault を通すと TLS が agent-vault の CA で
-#                              中継される。Turbopack（next build）のフォント取得は macOS キーチェーンで検証するので、
-#                              その CA を信頼できずに落ちる。sandbox-runtime は NO_PROXY に一致するホストを
+#   NO_PROXY                   loopback（agent-vault は private range へ転送しない）と Google Fonts の 2 ホスト・zernio.com。
+#                              どれも資格情報を agent-vault に頼らず、agent-vault を通すと TLS が agent-vault の CA で
+#                              中継される。Turbopack（next build）のフォント取得と zernio CLI（rustls + security-framework）は
+#                              macOS キーチェーンで検証するので、その CA を信頼できずに落ちる。sandbox-runtime は NO_PROXY に一致するホストを
 #                              上流 proxy を通さず直接つなぐ（反映は Claude Code の再起動後）
 #   NODE_EXTRA_CA_CERTS / SSL_CERT_FILE / GIT_SSL_CAINFO / CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE
 #                              agent-vault の CA を足した bundle（agent-vault-server.sh が書く）。
@@ -89,7 +89,7 @@ if [ -z "${HTTPS_PROXY:-}" ] && [ -r "$token_file" ]; then
   else
     proxy="http://$token:$vault@127.0.0.1:$port"
     export HTTPS_PROXY="$proxy" HTTP_PROXY="$proxy"
-    export NO_PROXY="localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com"
+    export NO_PROXY="localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com,zernio.com"
     export NODE_EXTRA_CA_CERTS="$ca_bundle" SSL_CERT_FILE="$ca_bundle" GIT_SSL_CAINFO="$ca_bundle"
     export CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE="$ca_bundle"
     export CLAUDE_GH_VAULT=1
