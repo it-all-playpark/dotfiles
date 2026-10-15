@@ -9,6 +9,10 @@
       "darwin/agent-vault.nix"
     ]
   },
-  "criteriaFiles": ["claude-code/RULES.md"],
-  "issue": { "repo": "it-all-playpark/dotfiles" }
+  "criteriaFiles": [
+    "claude-code/RULES.md"
+  ],
+  "issue": {
+    "repo": "it-all-playpark/dotfiles"
+  }
 }
