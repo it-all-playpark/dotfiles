@@ -392,24 +392,20 @@ fi
 
 # ---------------------------------------------------------------------------
 # repo_settings_have_no_unexpanded_home: repo の settings.json を展開すると、ホーム基点のエントリが
-# すべて対象ユーザーのホームに置き換わって drop-in に揃う
+# すべて対象ユーザーのホームに置き換わって drop-in に揃う（過不足なし。~/ のエントリが 0 件なら drop-in も空）
 # ---------------------------------------------------------------------------
 echo "- repo_settings_have_no_unexpanded_home"
 cp "${REPO_ROOT}/claude-code/settings.json" "${SETTINGS_SRC}"
 out_dir="${TMPROOT}/home-paths-repo/managed-settings.d"
 run_script "${out_dir}/50-agent-vault.json"
-got="$(jq -r '.sandbox.excludedCommands[]' "${out_dir}/60-home-paths.json" 2>/dev/null || true)"
-want_n="$(jq '[.sandbox.excludedCommands[] | select(test("(^| )~/"))] | length' "${REPO_ROOT}/claude-code/settings.json")"
-missing=""
-while IFS= read -r e; do
-  printf '%s\n' "${got}" | grep -qxF -- "${e}" || missing="${missing} [${e}]"
-done <<<"$(jq -r --arg h "${HOME_T}" '.sandbox.excludedCommands[] | select(test("(^| )~/")) | sub("~/"; "\($h)/")' \
+got="$(jq -c '.sandbox.excludedCommands | sort' "${out_dir}/60-home-paths.json" 2>/dev/null || true)"
+want="$(jq -c --arg h "${HOME_T}" \
+  '[.sandbox.excludedCommands[] | select(test("(^| )~/")) | sub("~/"; "\($h)/")] | sort' \
   "${REPO_ROOT}/claude-code/settings.json")"
-if [ "${RC}" -eq 0 ] && [ -z "${missing}" ] && [ "${want_n}" -gt 0 ] &&
-  [ "$(printf '%s\n' "${got}" | grep -c "^\(bash \|python3 \)\{0,1\}${HOME_T}/")" -eq "${want_n}" ]; then
+if [ "${RC}" -eq 0 ] && [ -n "${got}" ] && [ "${got}" = "${want}" ]; then
   pass "repo_settings_have_no_unexpanded_home"
 else
-  fail "repo_settings_have_no_unexpanded_home" "rc=${RC} missing=${missing} want_n=${want_n} got=[${got}] err=${ERR}"
+  fail "repo_settings_have_no_unexpanded_home" "rc=${RC} want=${want} got=${got} err=${ERR}"
 fi
 
 echo ""
