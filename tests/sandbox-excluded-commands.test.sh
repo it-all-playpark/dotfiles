@@ -367,6 +367,21 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# uv_cache_dir_rule_near_excluded_commands
+# issue #317: env の UV_CACHE_DIR（sandbox 内から書ける場所）は excludedCommands の
+# sandbox 外の起動にも渡る。settings.json にはコメントを書けないので、uv を使うものを
+# excludedCommands に足すときは UV_CACHE_DIR を外す旨を RULES.md の Sandbox 節に残す。
+# ---------------------------------------------------------------------------
+echo "- uv_cache_dir_rule_near_excluded_commands"
+RULES="${REPO_ROOT}/claude-code/RULES.md"
+sandbox_section="$(awk '/^## Sandbox$/ { in_s = 1; next } /^## / { in_s = 0 } in_s' "${RULES}")"
+if grep -E '^- .*uv.*`excludedCommands`.*`UV_CACHE_DIR` を外す' <<<"${sandbox_section}" >/dev/null; then
+  pass "uv_cache_dir_rule_near_excluded_commands"
+else
+  fail "uv_cache_dir_rule_near_excluded_commands" "RULES.md の Sandbox 節に「uv を使うものを excludedCommands に足すときは UV_CACHE_DIR を外す」行が無い"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

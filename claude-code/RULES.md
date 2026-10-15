@@ -74,6 +74,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
 - `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin の `bin/` の CLI）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
+- uv を使うものを `excludedCommands` に足すときは、その起動で `UV_CACHE_DIR` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/uv-cache` を sandbox 外で読ませることになる）
 - plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る（2026-10-14 に plugin cache の glob で実測）
 - sandbox を広げる変更（`allowMachLookup`・`allowUnixSockets`・`allowedDomains`・`excludedCommands` 等）は、広げた口の悪用を防ぐ手当てまで dotfiles（`nix run .#update`）で完結するものだけにする。手当てに dotfiles の外（システム拡張・GUI での許可・MDM）が要るものは入れず、repo 側か手順で直す。設定が分散すると、片方だけ外れても気付けない
 - auto mode classifier が settings / RULES の commit を Self-Modification として止めたら回避しない。worktree パスと実行コマンド（commit → push → PR）を渡して止まる
@@ -102,6 +103,9 @@ sandbox に塞がれたら:
   track.neon.tech は未許可なので --no-analytics がないと closeAndFlush が拒否された送信を待つ。
   代償: sandbox 内のプロセスが Neon の API を持ち主の権限で叩ける（branch / DB の削除も可能）。
 - nix fmt: treefmt が ~/Library/Caches/treefmt にキャッシュ DB を書こうとして落ちる。allowWrite に足せば通るが、キャッシュなので --no-cache で足りる。
+- uv: 2026-10-15（issue #317）sandbox 内の uv run は ~/.cache/uv を初期化できず exit 2。env の UV_CACHE_DIR を /private/tmp/claude/uv-cache に
+  向けた。~/.cache/uv を allowWrite に足すと sandbox 外の uv が使うキャッシュを sandbox 内から書き換えられるので足さない。
+  /private/tmp/claude は Claude Code の組み込みで書けるが、settings.json の allowWrite にも明示した（組み込みが変わっても cache が書ける）。
 - ホーム基点の excludedCommands は `~/` で書く（絶対パスへの展開は agent-vault-managed-env が
   managed-settings.d/60-home-paths.json に書く。`/Users/<name>` の直書きはテストで落ちる）。
 - 2026-10-14 plugin cache の glob（`~/.claude/plugins/cache/playpark/*` の bare / bash / python3 形）を撤去: `*` が `..` に一致し、

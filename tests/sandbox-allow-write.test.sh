@@ -140,6 +140,23 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# uv_cache_dir_writable
+# issue #317: sandbox 内の uv run は ~/.cache/uv を初期化できず exit 2 で落ちる。
+# env の UV_CACHE_DIR を allowWrite 内の /private/tmp/claude/uv-cache に向ける。
+# ~/.cache/uv は sandbox 外の uv と共有するキャッシュなので開けない。
+# ---------------------------------------------------------------------------
+echo "- uv_cache_dir_writable"
+uv_cache_dir="$(jq -r '.env.UV_CACHE_DIR // ""' "${SETTINGS}")"
+if [ "${uv_cache_dir}" = "/private/tmp/claude/uv-cache" ] &&
+  jq -e 'index("/private/tmp/claude") != null' <<<"${ALLOW_WRITE_JSON}" >/dev/null &&
+  write_allowed "${uv_cache_dir}/sdists-v10/.git" &&
+  ! write_allowed "${HOME}/.cache/uv/sdists-v10/.git"; then
+  pass "uv_cache_dir_writable"
+else
+  fail "uv_cache_dir_writable" "env.UV_CACHE_DIR=${uv_cache_dir:-<unset>} must be /private/tmp/claude/uv-cache under allowWrite's /private/tmp/claude, and ~/.cache/uv must not be writable"
+fi
+
+# ---------------------------------------------------------------------------
 # tmp_root_not_writable
 # ---------------------------------------------------------------------------
 echo "- tmp_root_not_writable"
