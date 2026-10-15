@@ -78,25 +78,30 @@ run_case "npx --no-install (no effect on npm 11)" 'npx --no-install biome' "deny
 run_case "npx -y actionlint" 'npx -y actionlint' "deny"
 run_case "npx --no overridden by --yes" 'npx --no --yes cowsay hi' "deny"
 run_case "npx --no overridden by -y" 'npx --no -y cowsay hi' "deny"
-run_case "pnpx --no (pnpm dlx has no --no)" 'pnpx --no biome check .' "deny"
+run_case "npx --no -- overridden by --yes" 'npx --no -- --yes cowsay hi' "deny"
+run_case "pnpx --no (pnpm dlx has no --no)" 'pnpx --no -- biome check .' "deny"
+# `--` が無いと <bin> より後ろのオプションも npm が読み、--no が打ち消される
+run_case "npx --no without -- (trailing --yes)" 'npx --no cowsay --yes' "deny"
+run_case "npx --no without -- (trailing -y)" 'npx --no cowsay -y' "deny"
+run_case "npx --no without -- (no trailing flag)" 'npx --no biome check .' "deny"
 
 # --- --no 付きと付いていない npx の混在 → 全体を deny（fail-closed） ---
 echo "[Mixed --no and bare npx — should deny]"
-run_case "--no then bare" 'npx --no biome check . && npx biome check .' "deny"
-run_case "bare then --no" 'npx -y actionlint; npx --no biome check .' "deny"
-run_case "--no then bare in substitution" 'npx --no biome check $(npx cowsay hi)' "deny"
+run_case "--no then bare" 'npx --no -- biome check . && npx biome check .' "deny"
+run_case "bare then --no" 'npx -y actionlint; npx --no -- biome check .' "deny"
+run_case "--no then bare in substitution" 'npx --no -- biome check $(npx cowsay hi)' "deny"
 
 # --- 許可形 → 素通し ---
 echo "[Allowed forms — should pass through]"
-run_case "npx --no biome" 'npx --no biome check .' "pass"
+run_case "npx --no -- biome" 'npx --no -- biome check .' "pass"
 run_case "npx vitest run" 'npx vitest run' "pass"
-run_case "absolute path npx --no" '/usr/local/bin/npx --no biome check .' "pass"
-run_case "two npx --no" 'npx --no biome check . && npx --no tsc --noEmit' "pass"
-run_case "vitest and npx --no" 'npx vitest run && npx --no biome check .' "pass"
+run_case "absolute path npx --no --" '/usr/local/bin/npx --no -- biome check .' "pass"
+run_case "two npx --no --" 'npx --no -- biome check . && npx --no -- tsc --noEmit' "pass"
+run_case "vitest and npx --no --" 'npx vitest run && npx --no -- biome check .' "pass"
 
 # --- deny 理由にローカル実行の形と代替を書く ---
 echo "[Deny reason]"
-run_reason_case "reason suggests npx --no" 'npx biome check .' 'npx --no <bin>'
+run_reason_case "reason suggests npx --no --" 'npx biome check .' 'npx --no -- <bin>'
 run_reason_case "reason suggests node_modules/.bin" 'npx biome check .' './node_modules/.bin/<bin>'
 run_reason_case "reason suggests pnpm exec" 'npx biome check .' 'pnpm exec <bin>'
 run_reason_case "reason suggests nix for remote tools" 'npx -y actionlint' 'リモート取得が要るツールは nix 等で入れる'

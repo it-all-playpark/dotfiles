@@ -25,12 +25,14 @@
 #   - vitest 実行:          `npx vitest ...` / `npx -y vitest ...`
 #   - vdelta の run:        `npx -y vdelta@<ver> run -- ...`
 #   いずれもプロジェクトのテスト実行系であり、日常的に必要。
-#   - ローカル依存の実行:   `npx --no <bin> ...`
+#   - ローカル依存の実行:   `npx --no -- <bin> ...`
 #   `--no` は npm 側で「未インストールのパッケージは実行しない」になる（npm 11 で実測。
 #   未インストールなら `npx canceled due to missing packages and no YES option` で exit 1）。
 #   旧形式の `--no-install` は npm 11 では取得を止める意味を持たないので許可しない。
-#   `--no` の直後は位置引数（パッケージ名）に限る。`npx --no --yes foo` のように後ろの
-#   オプションで `--no` を打ち消す形を通さないため。
+#   `--no` の直後は `--` と位置引数（パッケージ名）に限る。`--` が無いと <bin> より後ろの
+#   オプションも npm が読むため、`npx --no foo --yes` / `-y` で `--no` が打ち消され、
+#   `npx --no tsc --noEmit` の `--noEmit` も tsc に届かない。`--` より後ろは全て <bin> に渡る
+#   （`npx --no -- semver --yes` は未インストールなら canceled になることを実測済み）。
 #
 # 検出の考え方（fail-closed）:
 #   コマンド文字列中に「npx / pnpx を指しうる語」が 1 つでも現れたら、その全てが
@@ -86,7 +88,7 @@ ALLOW_VITEST_RE="(^|[^[:alnum:]_-])${PATH_PREFIX}p?npx${YES_FLAGS}[[:space:]]+vi
 ALLOW_VDELTA_RE="(^|[^[:alnum:]_-])${PATH_PREFIX}p?npx${YES_FLAGS}[[:space:]]+vdelta(@[^[:space:]]+)?[[:space:]]+run([[:space:]]|$)"
 
 # pnpx（= pnpm dlx）には `--no` が無いので npx だけ。
-ALLOW_NO_RE="(^|[^[:alnum:]_-])${PATH_PREFIX}npx[[:space:]]+--no[[:space:]]+[^-[:space:]]"
+ALLOW_NO_RE="(^|[^[:alnum:]_-])${PATH_PREFIX}npx[[:space:]]+--no[[:space:]]+--[[:space:]]+[^-[:space:]]"
 
 VITEST_COUNT=$(echo "$CMD" | { grep -oE "$ALLOW_VITEST_RE" || true; } | wc -l | tr -d ' ')
 VDELTA_COUNT=$(echo "$CMD" | { grep -oE "$ALLOW_VDELTA_RE" || true; } | wc -l | tr -d ' ')
@@ -100,5 +102,5 @@ if [[ $NPX_COUNT -eq $ALLOWED_COUNT ]]; then
   exit 0
 fi
 
-echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"npx / pnpx による任意リモートパッケージ実行は禁止（許可されるのは vitest 実行・vdelta run・npx --no <bin> のみ）。ローカルの依存は npx --no <bin> / ./node_modules/.bin/<bin> / pnpm exec <bin> で実行する。リモート取得が要るツールは nix 等で入れる"}}'
+echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"npx / pnpx による任意リモートパッケージ実行は禁止（許可されるのは vitest 実行・vdelta run・npx --no -- <bin> のみ）。ローカルの依存は npx --no -- <bin> / ./node_modules/.bin/<bin> / pnpm exec <bin> で実行する。リモート取得が要るツールは nix 等で入れる"}}'
 exit 0
