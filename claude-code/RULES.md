@@ -117,6 +117,9 @@ sandbox に塞がれたら:
   SKILL.md が sandbox 外を要すると挙げる preflight / harvest_topics / seed_harvest / format_gate / premise_gate の 5 本だけを
   `bash ~/…/scripts/<name>.sh` の絶対パスで登録した（.claude/skills は Bash から書けない）。worktree 版は glob なしでは書けないので外し、
   worktree からの実行は sandbox 内に落ちる。
+- 2026-10-15 corporate-site の daily-blog-factory 5 本（10 行）も撤去: 外に出していた理由（gh / git fetch の資格情報、Jev の Keychain の鍵）は
+  agent-vault と jev-broker で sandbox 内で解決済みと実測（gh auth status・git fetch・Jev classifier=jev）。repo 側の
+  jev-classify 参照の追随と、需要センサーの allowedDomains は corporate-site のプロジェクト settings で持つ。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。
