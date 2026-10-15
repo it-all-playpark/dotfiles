@@ -41,6 +41,7 @@
     "DISABLE_AUTOUPDATER": "1",
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NODE_USE_ENV_PROXY": "1",
+    "UV_CACHE_DIR": "/private/tmp/claude/uv-cache",
     "WATCHPACK_POLLING": "true"
   },
   "extraKnownMarketplaces": {
@@ -595,7 +596,8 @@
         "~/ghq/**/.claude/scheduled_tasks.lock",
         "~/.config/gws",
         "~/.config/gcloud",
-        "~/.config/neon"
+        "~/.config/neon",
+        "/private/tmp/claude"
       ],
       "denyRead": [
         "~/.aws/**",
