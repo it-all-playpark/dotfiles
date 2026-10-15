@@ -42,9 +42,10 @@ git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
 
 REPO="$TMPROOT/repo"
 git init -q "$REPO"
-mkdir -p "$REPO/.githooks" "$REPO/.husky"
+mkdir -p "$REPO/.githooks" "$REPO/.husky" "$REPO/.claude/skills/demo"
 echo readme >"$REPO/README.md"
 echo notes >"$REPO/notes.txt"
+echo skill >"$REPO/.claude/skills/demo/SKILL.md"
 echo hook >"$REPO/.githooks/pre-commit"
 echo hook >"$REPO/.husky/pre-push"
 git -C "$REPO" add -A
@@ -60,7 +61,8 @@ LOCKED="$TMPROOT/locked"
 mkdir "$LOCKED"
 /bin/chmod +a "everyone deny add_subdirectory,directory_inherit,only_inherit" "$LOCKED"
 
-UNWRITABLE='.githooks/pre-commit
+UNWRITABLE='.claude/skills/demo/SKILL.md
+.githooks/pre-commit
 .husky/pre-push'
 
 run_wt_add() {
@@ -81,10 +83,11 @@ check_partial() {
     [ -f "$wt/$f" ] || missing+=" $f"
   done
   status="$(git -C "$wt" status --short 2>&1)"
-  flags="$(git -C "$wt" ls-files -v -- .githooks .husky 2>&1)"
+  flags="$(git -C "$wt" ls-files -v -- .claude/skills .githooks .husky 2>&1)"
   head="$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>&1)"
   if [ "$RC" -eq 0 ] && [ "$OUT" = "$UNWRITABLE" ] && [ -z "$status" ] &&
-    [ "$flags" = "S .githooks/pre-commit
+    [ "$flags" = "S .claude/skills/demo/SKILL.md
+S .githooks/pre-commit
 S .husky/pre-push" ] && [ -z "$missing" ] && [ "$head" = "$branch" ]; then
     pass "$name"
   else
@@ -143,7 +146,7 @@ run_wt_add "$REPO" "$TMPROOT/wt-full" feature/full
 status="$(git -C "$TMPROOT/wt-full" status --short 2>&1)"
 flags="$(git -C "$TMPROOT/wt-full" ls-files -v 2>&1 | grep -v '^H ' || true)"
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ] && [ -z "$status" ] && [ -z "$flags" ] &&
-  [ -f "$TMPROOT/wt-full/.githooks/pre-commit" ]; then
+  [ -f "$TMPROOT/wt-full/.githooks/pre-commit" ] && [ -f "$TMPROOT/wt-full/.claude/skills/demo/SKILL.md" ]; then
   pass "06_full_checkout_lists_nothing"
 else
   fail "06_full_checkout_lists_nothing" "rc=$RC out=[$OUT] status=[$status] flags=[$flags] err=$ERR"
