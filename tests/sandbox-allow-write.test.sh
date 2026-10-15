@@ -202,6 +202,41 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# skills_deny_covers_main_checkouts_not_worktrees
+# ---------------------------------------------------------------------------
+echo "- skills_deny_covers_main_checkouts_not_worktrees"
+# denyWrite の glob は allowWrite と違い配下にも効く（2026-10-16 実測: 作業中でない repo の
+# 既存 .claude/skills へのファイル作成が EPERM）。メイン checkout の .claude/skills は塞ぎ、
+# <repo>/.claude/worktrees/<name>/.claude/skills は塞がない。塞ぐと wt-add が取り出せず、
+# worktree の pre-push がそこのスクリプトを読むテストで落ちる。
+DENY_WRITE_JSON="$(jq -c '.sandbox.filesystem.denyWrite' "${SETTINGS}")"
+write_denied() {
+  jq -e --arg p "$1" --arg home "${HOME}" '
+    def glob_to_regex:
+      "^" + (
+        gsub("(?<c>[.^$+{}()|\\\\])"; "\\\(.c)")
+        | gsub("\\*\\*/"; "\u0001")
+        | gsub("\\*\\*"; "\u0002")
+        | gsub("\\*"; "[^/]*")
+        | gsub("\\?"; "[^/]")
+        | gsub("\u0001"; "(.*/)?")
+        | gsub("\u0002"; ".*")
+      ) + "(/.*)?$";
+    def expand_home: if startswith("~/") then $home + .[1:] else . end;
+    map(expand_home) | any(. as $e | $p | test($e | glob_to_regex))
+  ' <<<"${DENY_WRITE_JSON}" >/dev/null
+}
+MAIN_SKILL="${HOME}/ghq/github.com/playpark-llc/corporate-site/.claude/skills/x/SKILL.md"
+WT_SKILL="${HOME}/ghq/github.com/playpark-llc/corporate-site/.claude/worktrees/w/.claude/skills/x/SKILL.md"
+if ! write_denied "${MAIN_SKILL}"; then
+  fail "skills_deny_covers_main_checkouts_not_worktrees" "main checkout skills not denied: ${MAIN_SKILL}"
+elif write_denied "${WT_SKILL}"; then
+  fail "skills_deny_covers_main_checkouts_not_worktrees" "worktree skills denied: ${WT_SKILL}"
+else
+  pass "skills_deny_covers_main_checkouts_not_worktrees"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""

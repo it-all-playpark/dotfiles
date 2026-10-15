@@ -54,7 +54,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - `~/.claude/skills` を repo への symlink にしない（skill は playpark marketplace の plugin で読み込む）。Claude Code の組み込み保護は `~/.claude/skills` の symlink 先にも掛かり、repo ルートを指すと `.git` ごと書けなくなって commit・worktree が sandbox 内で動かない
 - Bash から書けない場所。編集は Edit / Write ツールで行う:
   - sandbox 外で実行されるので書き換えが脱出口になる: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.husky`・`.githooks`（dotfiles の 2 つは worktree 側なら Bash でも書ける）
-  - Claude Code が読み込む指示なので、書き換えると次の session（無人の定期タスクを含む）の振る舞いが変わる: 全 repo の `.claude/skills`。作業中の repo とその上位の `.claude/skills`・`.claude/hooks`・`.claude/agents`・`.claude/commands` は Claude Code の組み込み保護で、設定では外せない（worktree でも同じ）。denyWrite の `~/ghq/**/.claude/skills` は作業中でない repo まで同じ保護を広げる
+  - Claude Code が読み込む指示なので、書き換えると次の session（無人の定期タスクを含む）の振る舞いが変わる: 全 repo の `.claude/skills`。作業中の repo とその上位の `.claude/skills`・`.claude/hooks`・`.claude/agents`・`.claude/commands` は Claude Code の組み込み保護で、設定では外せない（worktree でも同じ）。denyWrite の `~/ghq/*/*/*/.claude/skills` は作業中でない repo のメイン checkout まで同じ保護を広げる（`<repo>/.claude/worktrees/*` は含めない。含めると wt-add が取り出せず、worktree の pre-push がそこのスクリプトを読むテストで落ちる）
 - 起動元 repo の `.git/config`（worktree も共有）は Claude Code の組み込み保護で書けない（設定で外せない）。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
 - `.githooks` / `.husky` / `.claude/skills`（denyWrite）や組み込み保護の対象ファイル（`.ripgreprc` 等）を追跡する repo（dotfiles など）の worktree は、`git worktree add` ではなく `wt-add <repo> <path> <branch> [<start>]`（`~/.claude/bin`）で作る。取り出せないパスに skip-worktree を付け、付けたパスを stdout に出す。既存の worktree でブランチを切り替えて取り出せないパスが増えるときも、`git switch` ではなく新しく wt-add で作る
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
@@ -126,6 +126,10 @@ sandbox に塞がれたら:
   （組み込み保護は作業中の repo とその上位にしか掛からない）。
 - 2026-10-16 qiita-publish / zenn-publish の除外（4 行）を撤去: corporate-site の .claude/skills へ移って plugin の bin/ から消え、
   PATH 上に実体が無かった。実体の無い bare 名の除外は、PATH に同名を置ければ sandbox 外で走る口になる。
+- 2026-10-16 denyWrite の `~/ghq/**/.claude/skills` を `~/ghq/*/*/*/.claude/skills` に絞る: `**` が
+  `<repo>/.claude/worktrees/<name>/.claude/skills` にも一致し、wt-add が取り出せず corporate-site の worktree から push すると
+  pre-push のテストが毎回落ちていた。denyWrite の glob は配下にも効く（作業中でない repo の既存 .claude/skills へのファイル作成が
+  EPERM になるのを実測）。worktree は作業中なら組み込み保護が掛かる。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。
