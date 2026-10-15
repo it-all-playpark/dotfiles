@@ -169,7 +169,7 @@ run_wrapper --bg "do it"
 if [[ $RC -eq 0 ]] &&
   contains "$OUT" "HTTPS_PROXY=http://tok_123:default@127.0.0.1:$OPEN_PORT" &&
   contains "$OUT" "HTTP_PROXY=http://tok_123:default@127.0.0.1:$OPEN_PORT" &&
-  contains "$OUT" "NO_PROXY=localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com" &&
+  contains "$OUT" "NO_PROXY=localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com,zernio.com" &&
   contains "$OUT" "NODE_EXTRA_CA_CERTS=$CA_BUNDLE" &&
   contains "$OUT" "SSL_CERT_FILE=$CA_BUNDLE" &&
   contains "$OUT" "GIT_SSL_CAINFO=$CA_BUNDLE" &&
