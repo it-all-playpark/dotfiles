@@ -598,7 +598,7 @@
       "denyWrite": [
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/bin",
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks",
-        "~/ghq/**/.claude/skills",
+        "~/ghq/*/*/*/.claude/skills",
         "~/ghq/**/.githooks",
         "~/ghq/**/.husky"
       ]
