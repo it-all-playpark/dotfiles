@@ -521,6 +521,7 @@
       "Bash(security dump-keychain *)",
       "Read(./.env)",
       "Read(./.env.*)",
+      "Read(!.env.*.example)",
       "Read(./secrets/**)",
       "Read(./.ssh/**)",
       "Read(./.gnupg/**)",
