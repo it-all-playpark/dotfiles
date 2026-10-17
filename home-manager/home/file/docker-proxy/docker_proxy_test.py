@@ -257,6 +257,23 @@ class StreamingTest(ProxyTestCase):
             with self.subTest(query=query):
                 self.assert_relayed(request("GET", target), target)
 
+    def test_top_with_ps_args_outside_the_allowlist_is_403(self):
+        for query in (
+            "ps_args=auxe",
+            "ps_args=-ef%20e",
+            "ps_args=-efe",
+            "ps_args=aux&ps_args=auxe",
+            "ps_args=-o%20pid,command",
+        ):
+            with self.subTest(query=query):
+                self.assert_rejected(request("GET", f"/containers/web/top?{query}"))
+
+    def test_top_with_allowed_ps_args_is_relayed(self):
+        for query in ("", "?ps_args=-ef", "?ps_args=aux", "?ps_args=-ef&ps_args=aux"):
+            target = f"/v1.47/containers/web/top{query}"
+            with self.subTest(query=query):
+                self.assert_relayed(request("GET", target), target)
+
     def test_relayed_body_is_passed_through(self):
         payload = b"\x01\x00\x00\x00\x00\x00\x00\x05hello"
         self.upstream.response = (

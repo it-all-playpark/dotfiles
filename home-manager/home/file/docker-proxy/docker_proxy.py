@@ -69,6 +69,9 @@ HOP_BY_HOP = {
 }
 # docker の httputils.BoolValue が偽と読む値
 FALSY = {"", "0", "no", "false", "none"}
+# container_top の ps_args は dockerd が host 側の ps にそのまま渡す。
+# e 修飾子（auxe など）でプロセスの環境変数が出るため、決まった値だけ通す
+TOP_PS_ARGS = {"", "-ef", "aux"}
 
 
 def log(message):
@@ -149,6 +152,10 @@ def check_request(head):
         streams = [v for k, v in params if k == "stream"]
         if not streams or any(is_true(v) for v in streams):
             raise Rejected(403, "stats must be requested with stream=0")
+    if route == "container_top" and any(
+        v not in TOP_PS_ARGS for k, v in params if k == "ps_args"
+    ):
+        raise Rejected(403, "top accepts only ps_args=-ef or ps_args=aux")
     return method, target, route, headers
 
 
