@@ -54,12 +54,12 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - `~/.claude/skills` を repo への symlink にしない（skill は playpark marketplace の plugin で読み込む）。Claude Code の組み込み保護は `~/.claude/skills` の symlink 先にも掛かり、repo ルートを指すと `.git` ごと書けなくなって commit・worktree が sandbox 内で動かない
 - Bash から書けない場所。編集は Edit / Write ツールで行う:
   - sandbox 外で実行されるので書き換えが脱出口になる: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.husky`・`.githooks`（dotfiles の 2 つは worktree 側なら Bash でも書ける）
-  - Claude Code が読み込む指示なので、書き換えると次の session（無人の定期タスクを含む）の振る舞いが変わる: 全 repo の `.claude/skills`。作業中の repo とその上位の `.claude/skills`・`.claude/hooks`・`.claude/agents`・`.claude/commands` は Claude Code の組み込み保護で、設定では外せない（worktree でも同じ）。denyWrite の `~/ghq/*/*/*/.claude/skills` は作業中でない repo のメイン checkout まで同じ保護を広げる（`<repo>/.claude/worktrees/*` は含めない。含めると wt-add が取り出せず、worktree の pre-push がそこのスクリプトを読むテストで落ちる）
+  - Claude Code が読み込む指示なので、書き換えると次の session（無人の定期タスクを含む）の振る舞いが変わる: 全 repo の `.claude/skills`。作業中の repo とその上位の `.claude/skills`・`.claude/hooks`・`.claude/agents`・`.claude/commands` は Claude Code の組み込み保護で、設定では外せない（worktree でも同じ）。denyWrite の `~/ghq/*/*/*/.claude/skills` は作業中でない repo のメイン checkout まで同じ保護を広げる（`<repo>/.claude/worktrees/*` は含めない）
 - 起動元 repo の `.git/config`（worktree も共有）は Claude Code の組み込み保護で書けない（設定で外せない）。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
-- `.githooks` / `.husky`（denyWrite）や組み込み保護の対象ファイル（`.ripgreprc` 等）を追跡する repo（dotfiles・corporate-site など）の worktree は、`git worktree add` ではなく `wt-add <repo> <path> <branch> [<start>]`（`~/.claude/bin`）で作る。取り出せないパスに skip-worktree を付け、付けたパスを stdout に出す。既存の worktree でブランチを切り替えて取り出せないパスが増えるときも、`git switch` ではなく新しく wt-add で作る
+- `.githooks` / `.husky`（denyWrite）や組み込み保護の対象ファイル（`.ripgreprc` 等）を追跡する repo の worktree は、`git worktree add` ではなく `wt-add <repo> <path> <branch> [<start>]`（`~/.claude/bin`）で作る。取り出せないパスに skip-worktree を付け、付けたパスを stdout に出す。既存の worktree でブランチを切り替えて取り出せないパスが増えるときも、`git switch` ではなく新しく wt-add で作る
 - `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
-- `&` で起動したプロセスは名前で止められない（`pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。取り残したら `/usr/bin/pgrep -l <名前>` で PID を確かめ、`! kill <PID>` を示して人間に止めてもらう（下の「プロセス調査」）（2026-10-08 に負荷用の `yes` 16 本が 8 時間残り、Mac が詰まった）
+- `&` で起動したプロセスは名前で止められない（`pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。取り残したら `/usr/bin/pgrep -l <名前>` で PID を確かめ、`! kill <PID>` を示して人間に止めてもらう（下の「プロセス調査」）
 
 worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガードが「git に届かないと証明できない」コマンドを拒否する（設定では外せない）。拒否されない形で書く:
 - cwd はもう自分の worktree。`cd <worktree> &&` や `git -C` を付けず相対パスで叩く。git は素の形で 1 呼び出し 1 コマンド（`&&` 連結・`$(git …)` も拒否）
@@ -79,7 +79,7 @@ sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
 - `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin の `bin/` の CLI）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
 - uv を使うものを `excludedCommands` に足すときは、その起動で `UV_CACHE_DIR` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/uv-cache` を sandbox 外で読ませることになる）
-- plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る（2026-10-14 に plugin cache の glob で実測）
+- plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る
 - sandbox を広げる変更（`allowMachLookup`・`allowUnixSockets`・`allowedDomains`・`excludedCommands` 等）は、広げた口の悪用を防ぐ手当てまで dotfiles（`nix run .#update`）で完結するものだけにする。手当てに dotfiles の外（システム拡張・GUI での許可・MDM）が要るものは入れず、repo 側か手順で直す。設定が分散すると、片方だけ外れても気付けない
 - auto mode classifier が settings / RULES の commit を Self-Modification として止めたら回避しない。worktree パスと実行コマンド（commit → push → PR）を渡して止まる
 - Unix ソケットへの接続は `filesystem.allowWrite` では開かない。`sandbox.network.allowUnixSockets` にパスを足す（`allowAllUnixSockets` は使わない）
@@ -161,6 +161,7 @@ sandbox に塞がれたら:
   特定・停止できなかった。どれも SIP 保護下で書き換え不可。PATH 解決で別物に化けないよう絶対パスだけで登録する。
   見るだけに留め、kill / pkill は登録しない: sandbox 外の kill は持ち主の任意プロセスに signal を送れ（`kill -9 -1` で全プロセス、
   `pkill -f node` で Claude 本体・他セッション）、歯止めが auto mode の判定だけになる。取り残し対策は寿命ルール（#268）で先回りする。
+  寿命ルールのきっかけ: 2026-10-08 に負荷用の `yes` 16 本が 8 時間残り、Mac が詰まった。
 - 2026-10-09 /bin/ps を excludedCommands から撤去（issue #274）: macOS の ps は `e` / `-E` で他プロセスの環境変数を出し、sandbox 外で
   wrapper が Claude 本体に渡す HTTPS_PROXY（agent-vault の proxy token）が読めた。excludedCommands は前方一致の glob なので option を
   絞っても後ろに -E を足せ、permissions.deny で BSD 形式の組み合わせを網羅するのも fragile なので除外そのものを外した。
