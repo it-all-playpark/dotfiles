@@ -595,6 +595,7 @@
         "~/.config/gh/**",
         "~/.config/gh-*/**",
         "~/.agent-vault/**",
+        "~/.orbstack/**",
         "/Library/Application Support/ClaudeCode/managed-settings.d/**"
       ],
       "denyWrite": [

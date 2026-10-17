@@ -480,7 +480,9 @@ class WiringTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         with open(os.path.join(REPO_ROOT, "claude-code", "settings.json")) as f:
-            cls.sockets = json.load(f)["sandbox"]["network"]["allowUnixSockets"]
+            sandbox = json.load(f)["sandbox"]
+        cls.sockets = sandbox["network"]["allowUnixSockets"]
+        cls.deny_read = sandbox["filesystem"]["denyRead"]
         programs = os.path.join(REPO_ROOT, "home-manager", "programs")
         with open(os.path.join(programs, "docker-proxy.nix")) as f:
             cls.nix = f.read()
@@ -498,6 +500,11 @@ class WiringTest(unittest.TestCase):
                 entry,
             )
             self.assertNotIn("orbstack", entry)
+
+    def test_orbstack_state_dir_is_not_readable_from_the_sandbox(self):
+        # ~/.orbstack/ssh/id_ed25519 は OrbStack の ssh（127.0.0.1:32222。sandbox から TCP で届く）の鍵。
+        # その先の Linux machine は Mac を /mnt/mac に mount しているので、読めれば sandbox の外に出る口になる
+        self.assertIn("~/.orbstack/**", self.deny_read)
 
     def test_launchd_agent_and_docker_sb_use_the_proxy_socket(self):
         self.assertIn("./docker-proxy.nix", self.imports)
