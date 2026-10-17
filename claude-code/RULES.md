@@ -71,7 +71,8 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 - Jev: `~/.local/state/jev-broker/jev.sock` 経由。sandbox 内では Keychain が exit 36 で読めないのが正常なので、ロック解除を試さない
 - Postgres: sandbox 内で `initdb` は使わず、`pg-broker` に頼む。sandbox-docker VM（`docker-vm`）に digest 固定の postgres コンテナを起動する。`pg-broker create` が返す `database_url`（`127.0.0.1:5500〜5599`。`app` は superuser だが動くのは VM の中だけ、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`
 - プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。`ps` は使わない（環境変数を出せるので hook が deny する）。一覧・CPU・メモリは `/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time`、引数まで含むコマンドラインは `/usr/bin/pgrep -lf <pattern>`。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
-- pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
+- pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）
+- E2E（Playwright + DB）は sandbox 内で回せる。`pg-broker create` の `database_url` を repo の外部 DB 用の変数（shift-bud は `E2E_EXTERNAL_DATABASE_URL`）に渡して `pnpm test:e2e:local` を実行し、終わったら `pg-broker delete <id>`（2026-10-17 に shift-bud の smoke 10 件が通った）。新しい worktree の `pnpm install` は husky の `.husky/_` と prisma の `~/.cache/prisma` に書けず落ちるので、`HUSKY=0 XDG_CACHE_HOME="$TMPDIR/<一意名>"` を付ける
 
 sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
