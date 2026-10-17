@@ -247,6 +247,7 @@ class PgBrokerTest(unittest.TestCase):
         self.assertEqual((code, out), (1, ""))
         self.assertIn("not ready", err)
         self.assertEqual(self.state()["containers"], [])
+        self.assertEqual([c[:3] for c in self.calls("rm")], [["rm", "-f", "-v"]])
 
     def test_delete_removes_the_labeled_container(self):
         self.write_state(
@@ -258,7 +259,7 @@ class PgBrokerTest(unittest.TestCase):
         code, out, err = self.run_cli("delete", LABELED[:12])
         self.assertEqual((code, err), (0, ""))
         self.assertEqual(json.loads(out), {"id": LABELED[:12], "deleted": True})
-        self.assertEqual(self.calls("rm"), [["rm", "-f", LABELED]])
+        self.assertEqual(self.calls("rm"), [["rm", "-f", "-v", LABELED]])
         self.assertEqual([c["id"] for c in self.state()["containers"]], [UNLABELED])
 
     def test_delete_refuses_unlabeled_containers(self):
