@@ -1,0 +1,95 @@
+# sandbox-docker: sandbox 内から docker-vm で使う rootless docker の VM（パッチ版 Lima の limactl で作る）。
+# images の location は home-manager/programs/sandbox-docker.nix が nix の fetchurl（hash 固定）の
+# store パスに置き換える（replaceVars）。
+#
+# Lima の docker template（templates/docker.yaml）から、Mac に届く口を外して書き直したもの:
+#   - base に template:_default/mounts（ホームディレクトリを mount）と template:docker を使わない。
+#     mount は /private/tmp/claude だけ。repo のファイルは docker build の context や docker cp で渡す
+#   - host.docker.internal（hostResolver.hosts と /etc/hosts の書き換え）を足さない
+#   - port forward は TCP 1024〜9999 だけ。Lima が末尾に足す全ポート転送の手前で残りを ignore する
+
+minimumLimaVersion: 2.0.0
+
+vmType: vz
+
+images:
+- location: "@image@"
+  arch: "aarch64"
+
+# 26.04 の初回起動で NIC の rename が失敗して 120 秒待たされるのを避ける（templates/_images/ubuntu-lts.yaml と同じ）
+param:
+  internal_netplanOptional: "true"
+  containerdSnapshotter: true
+
+mounts:
+- location: "/private/tmp/claude"
+  writable: true
+
+# Mac の proxy 環境変数（sandbox の proxy 等）を VM に持ち込まない
+propagateProxyEnv: false
+
+# containerd is managed by Docker, not by Lima, so the values are set to false here.
+containerd:
+  system: false
+  user: false
+
+# ここから probes までは templates/docker.yaml と同じ手順（rootless docker）。
+# 先頭の host.docker.internal を /etc/hosts に足す provision だけ外す（tests/sandbox-docker.test.sh で突き合わせる）
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    command -v docker >/dev/null 2>&1 && exit 0
+    export DEBIAN_FRONTEND=noninteractive
+    curl -fsSL https://get.docker.com | sh
+    # NOTE: you may remove the lines below, if you prefer to use rootful docker, not rootless
+    systemctl disable --now docker.service docker.socket containerd.service containerd.socket || true
+    systemctl mask docker.service docker.socket containerd.service containerd.socket || true
+    apt-get install -y uidmap dbus-user-session
+- mode: yq
+  path: "{{.Home}}/.config/docker/daemon.json"
+  expression: |
+    .features.cdi = true |
+    .features.containerd-snapshotter = {{.Param.containerdSnapshotter}}
+  owner: "{{.User}}"
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    systemctl --user start dbus
+    dockerd-rootless-setuptool.sh install
+    docker context use rootless
+probes:
+- script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! timeout 30s bash -c "until command -v docker >/dev/null 2>&1; do sleep 3; done"; then
+      echo >&2 "docker is not installed yet"
+      exit 1
+    fi
+    if ! timeout 30s bash -c "until pgrep rootlesskit; do sleep 3; done"; then
+      echo >&2 "rootlesskit (used by rootless docker) is not running"
+      exit 1
+    fi
+  hint: See "/var/log/cloud-init-output.log" in the guest
+
+# 上から順に最初に一致した規則が効く。どれにも一致しないものは Lima が末尾に足す
+# 「127.0.0.1 の全ポートを Mac の 127.0.0.1 に転送」に落ちるので、最後に全ポートの ignore を置く
+portForwards:
+- guestSocket: "/run/user/{{.UID}}/docker.sock"
+  hostSocket: "{{.Dir}}/sock/docker.sock"
+# 8384 は Mac の Syncthing の Web UI（home-manager/home/default.nix）が 127.0.0.1 で待ち受けるので転送しない
+- guestIP: "0.0.0.0"
+  guestIPMustBeZero: false
+  guestPort: 8384
+  proto: any
+  ignore: true
+- guestPortRange: [1024, 9999]
+  proto: tcp
+  hostIP: "127.0.0.1"
+- guestIP: "0.0.0.0"
+  guestIPMustBeZero: false
+  guestPortRange: [1, 65535]
+  proto: any
+  ignore: true

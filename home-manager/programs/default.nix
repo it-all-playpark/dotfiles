@@ -15,5 +15,6 @@
     ./docker-proxy.nix
     ./agent-vault.nix
     ./lima-sandbox.nix
+    ./sandbox-docker.nix
   ];
 }

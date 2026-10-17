@@ -494,9 +494,12 @@ class WiringTest(unittest.TestCase):
         self.assertEqual(docker_proxy.DEFAULT_SOCKET, "~" + self.SOCKET)
 
     def test_upstream_docker_socket_is_not_reachable_from_the_sandbox(self):
+        # 通してよい docker.sock は、この proxy と VM sandbox-docker の rootless docker
+        # （tests/sandbox-docker.test.sh）だけ。OrbStack の socket は Mac の root 相当
+        allowed = ("~" + self.SOCKET, "~/.lima/sandbox-docker/sock/docker.sock")
         for entry in self.sockets:
             self.assertFalse(
-                entry.endswith("docker.sock") and not entry.endswith(self.SOCKET),
+                entry.endswith("docker.sock") and entry not in allowed,
                 entry,
             )
             self.assertNotIn("orbstack", entry)
