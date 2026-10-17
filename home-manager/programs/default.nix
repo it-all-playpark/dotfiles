@@ -16,5 +16,6 @@
     ./agent-vault.nix
     ./lima-sandbox.nix
     ./sandbox-docker.nix
+    ./vm-egress-proxy.nix
   ];
 }

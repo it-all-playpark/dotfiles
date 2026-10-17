@@ -7,7 +7,8 @@
 let
   home = config.home.homeDirectory;
   socket = "${home}/.lima/sandbox-docker/sock/docker.sock";
-  # VM から Mac・LAN に届かないパッチ版 Lima（lib/lima-sandbox 冒頭参照）。素の pkgs.lima は使わない
+  # VM からの外向き通信を vm-egress-proxy（vm-egress-proxy.nix）だけに絞るパッチ版 Lima
+  # （lib/lima-sandbox 冒頭参照）。素の pkgs.lima は使わない
   limactl = "${pkgs.callPackage ../../lib/lima-sandbox { }}/bin/limactl";
   # Ubuntu 26.04 の cloud image。Lima の templates/_images/ubuntu-lts.yaml の aarch64 と同じ release・digest
   image = pkgs.fetchurl {

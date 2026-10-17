@@ -1,0 +1,12 @@
+# VM sandbox-docker の外向き通信にだけ足す許可先。vm-egress-proxy の許可リストは、claude-code/settings.json の
+# sandbox.network.allowedDomains とこのファイルの和を nix の評価時にまとめたもの（allowlist.nix）。
+# - settings.json にあるドメインはここに書かない（同じドメインを 2 か所に書かない）
+# - 最小限にし、1 行ずつ理由を書く。書式は allowedDomains と同じ（*.example.com はサブドメインだけに一致）
+# - 足りないホストは ~/.local/state/vm-egress-proxy.err.log の denied の行で確かめる
+get.docker.com # lima.yaml の provision が curl で取る docker の install スクリプト
+download.docker.com # get.docker.com が足す docker の apt リポジトリと GPG 鍵
+ports.ubuntu.com # VM（Ubuntu arm64）と arm64 の Ubuntu イメージの apt のミラー
+registry-1.docker.io # Docker Hub のレジストリ API（トークン発行の auth.docker.io は settings.json にある）
+production.cloudflare.docker.com # Docker Hub の blob の配信元
+docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com # Docker Hub の blob の配信元（R2）。*.r2.cloudflarestorage.com は他人の bucket にも出られるので完全一致
+dl-cdn.alpinelinux.org # alpine のイメージの apk のミラー

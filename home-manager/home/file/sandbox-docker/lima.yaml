@@ -7,6 +7,10 @@
 #     mount は /private/tmp/claude だけ。repo のファイルは docker build の context や docker cp で渡す
 #   - host.docker.internal（hostResolver.hosts と /etc/hosts の書き換え）を足さない
 #   - port forward は TCP 1024〜9999 だけ。Lima が末尾に足す全ポート転送の手前で残りを ignore する
+#   - VM からの外向き通信は、ホスト側の許可リスト付きプロキシ（vm-egress-proxy。VM からは
+#     param.egressProxy）だけを通る。パッチ版 Lima の forwarder がほかの宛先をすべて拒否し、VM の DNS は
+#     外の名前を引かない（lib/lima-sandbox 冒頭参照）。env と provision の先頭 3 つで、provision・apt・
+#     rootless dockerd（と中の buildkit）・VM 内の docker CLI が作るコンテナにプロキシを設定する
 
 minimumLimaVersion: 2.0.0
 
@@ -20,6 +24,10 @@ images:
 param:
   internal_netplanOptional: "true"
   containerdSnapshotter: true
+  # VM から見た vm-egress-proxy。usernet のゲートウェイの 3128 番を、パッチ版 Lima の forwarder が
+  # ホストの Unix ソケットに繋ぐ（lib/lima-sandbox/deny.go の proxyAddress と揃える）
+  egressProxy: "http://192.168.5.2:3128"
+  egressNoProxy: "localhost,127.0.0.1,::1"
 
 mounts:
 - location: "/private/tmp/claude"
@@ -28,14 +36,48 @@ mounts:
 # Mac の proxy 環境変数（sandbox の proxy 等）を VM に持ち込まない
 propagateProxyEnv: false
 
+# Lima は env を provision の実行環境と VM の /etc/environment に入れる（get.docker.com の curl・
+# Lima の boot スクリプトの apt・ログインシェル）。env には param を展開しないので param と同じ値を書く
+# （tests/sandbox-docker.test.sh で突き合わせる）
+env:
+  http_proxy: "http://192.168.5.2:3128"
+  https_proxy: "http://192.168.5.2:3128"
+  HTTP_PROXY: "http://192.168.5.2:3128"
+  HTTPS_PROXY: "http://192.168.5.2:3128"
+  no_proxy: "localhost,127.0.0.1,::1"
+  NO_PROXY: "localhost,127.0.0.1,::1"
+
 # containerd is managed by Docker, not by Lima, so the values are set to false here.
 containerd:
   system: false
   user: false
 
+provision:
+# 先頭 3 つは vm-egress-proxy の設定（Lima は mode ごとに data → yq → system → user の順で走らせるので、
+# system の get.docker.com より先に入る）。apt はファイルでも指定する（env を読まない systemd の apt-daily 等）
+- mode: data
+  path: /etc/apt/apt.conf.d/95vm-egress-proxy
+  content: |
+    Acquire::http::Proxy "{{.Param.egressProxy}}";
+    Acquire::https::Proxy "{{.Param.egressProxy}}";
+# rootless dockerd（image の pull と、dockerd に組み込みの buildkit が取りに行く base image）
+- mode: yq
+  path: "{{.Home}}/.config/docker/daemon.json"
+  expression: |
+    .proxies."http-proxy" = "{{.Param.egressProxy}}" |
+    .proxies."https-proxy" = "{{.Param.egressProxy}}" |
+    .proxies."no-proxy" = "{{.Param.egressNoProxy}}"
+  owner: "{{.User}}"
+# VM 内の docker CLI が作るコンテナと build の RUN に渡す既定（docker CLI が config.json の proxies から入れる）
+- mode: yq
+  path: "{{.Home}}/.docker/config.json"
+  expression: |
+    .proxies.default.httpProxy = "{{.Param.egressProxy}}" |
+    .proxies.default.httpsProxy = "{{.Param.egressProxy}}" |
+    .proxies.default.noProxy = "{{.Param.egressNoProxy}}"
+  owner: "{{.User}}"
 # ここから probes までは templates/docker.yaml と同じ手順（rootless docker）。
 # 先頭の host.docker.internal を /etc/hosts に足す provision だけ外す（tests/sandbox-docker.test.sh で突き合わせる）
-provision:
 - mode: system
   script: |
     #!/bin/bash

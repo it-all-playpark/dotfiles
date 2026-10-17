@@ -5,7 +5,7 @@
 # Run from anywhere: bash tests/sandbox-docker.test.sh
 # Requires: jq, yq（mikefarah/yq）。nix（daemon に届くときだけ。届かなければ tier-2 を skip）
 #
-# tier-1: lima.yaml の定義、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）
+# tier-1: lima.yaml の定義と vm-egress-proxy の設定、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）
 # tier-2: パッチ版 limactl の template copy --fill で展開した mounts / portForwards、
 #         Lima の docker template との手順の突き合わせ、home-manager の評価結果（launchd agent・docker-vm・image）
 
@@ -81,6 +81,50 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# lima_yaml_egress_proxy: provision の実行環境・apt・rootless dockerd（と中の buildkit）・VM 内の docker CLI が
+# 作るコンテナの既定（~/.docker/config.json の proxies）が vm-egress-proxy を使う。param.egressProxy は
+# lib/lima-sandbox/deny.go の proxyAddress（forwarder が通す唯一の宛先）と同じ。env は Lima が param を
+# 展開しないので同じ値を直に書く。provision は Lima と同じく param を埋め、同じ path の yq を上から順に
+# null から評価した結果を見る
+# -----------------------------------------------------------------------------
+echo "- lima_yaml_egress_proxy"
+proxy_address="$(sed -n 's/^const proxyAddress = "\(.*\)"$/\1/p' "${REPO_ROOT}/lib/lima-sandbox/deny.go")"
+jq -r '.param | to_entries[] | "s|{{.Param.\(.key)}}|\(.value)|g"' "${TMPROOT}/lima.json" >"${TMPROOT}/param.sed"
+yq_result() {
+  echo 'null' >"${TMPROOT}/yq.json"
+  jq -c --arg p "$1" '.provision[] | select(.mode == "yq" and .path == $p) | .expression' "${TMPROOT}/lima.json" |
+    while IFS= read -r expr; do
+      expr="$(jq -r . <<<"${expr}" | sed -f "${TMPROOT}/param.sed")"
+      yq -p=json -o=json "${expr}" "${TMPROOT}/yq.json" >"${TMPROOT}/yq.next" && mv "${TMPROOT}/yq.next" "${TMPROOT}/yq.json"
+    done
+  cat "${TMPROOT}/yq.json"
+}
+apt_conf="$(jq -r '.provision[] | select(.mode == "data" and .path == "/etc/apt/apt.conf.d/95vm-egress-proxy") | .content' \
+  "${TMPROOT}/lima.json" | sed -f "${TMPROOT}/param.sed")"
+got="$(jq -c --argjson daemon "$(yq_result '{{.Home}}/.config/docker/daemon.json')" \
+  --argjson cli "$(yq_result '{{.Home}}/.docker/config.json')" --arg apt "${apt_conf}" '{
+  proxy: .param.egressProxy,
+  noProxy: .param.egressNoProxy,
+  env: .env,
+  apt: $apt,
+  dockerd: $daemon.proxies,
+  cli: $cli.proxies
+}' "${TMPROOT}/lima.json")"
+want="$(jq -cn --arg p "http://${proxy_address}" --arg n "localhost,127.0.0.1,::1" '{
+  proxy: $p,
+  noProxy: $n,
+  env: {http_proxy: $p, https_proxy: $p, HTTP_PROXY: $p, HTTPS_PROXY: $p, no_proxy: $n, NO_PROXY: $n},
+  apt: "Acquire::http::Proxy \"\($p)\";\nAcquire::https::Proxy \"\($p)\";",
+  dockerd: {"http-proxy": $p, "https-proxy": $p, "no-proxy": $n},
+  cli: {default: {httpProxy: $p, httpsProxy: $p, noProxy: $n}}
+}')"
+if [ -n "${proxy_address}" ] && [ "${got}" = "${want}" ]; then
+  pass "lima_yaml_egress_proxy"
+else
+  fail "lima_yaml_egress_proxy" "got=${got} want=${want}"
+fi
+
+# -----------------------------------------------------------------------------
 # settings_allow_unix_sockets: ~/.lima 配下で sandbox に通す socket は VM の docker.sock だけ
 # （ha.sock・ssh.sock・default_*.sock は通さない。OrbStack の socket は docker_proxy_test.py の WiringTest）
 # -----------------------------------------------------------------------------
@@ -108,13 +152,17 @@ fi
 
 # -----------------------------------------------------------------------------
 # rules_docker_vm: RULES.md の「使えるもの」に docker-vm の使い方（VM の rootless docker・
-# /private/tmp/claude だけの mount と build context / docker cp・Docker Hub 以外は先に docker-vm pull）がある
+# /private/tmp/claude だけの mount と build context / docker cp・Docker Hub 以外は先に docker-vm pull・
+# VM の外向き通信は許可リスト（allowedDomains と vm-domains.txt）で絞られ、足りないホストはプロキシの
+# 拒否ログで確かめてどちらかに足す）がある
 # -----------------------------------------------------------------------------
 echo "- rules_docker_vm"
 rules_line="$(awk '/^使えるもの:/ { f = 1; next } f && /^$/ { exit } f && /^- docker-vm:/' "${REPO_ROOT}/claude-code/RULES.md")"
 missing=()
 # shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
-for want in "rootless docker" '`/private/tmp/claude` だけ' "build context" '`docker cp`' "ghcr.io" '`docker-vm pull`'; do
+for want in "rootless docker" '`/private/tmp/claude` だけ' "build context" '`docker cp`' "ghcr.io" '`docker-vm pull`' \
+  "外向き通信は許可リスト" '`allowedDomains`' '`vm-domains.txt`' '`~/.local/state/vm-egress-proxy.err.log`' '`denied`' \
+  '`HTTPS_PROXY`'; do
   case "${rules_line}" in
   *"${want}"*) ;;
   *) missing+=("${want}") ;;
@@ -180,7 +228,7 @@ else
   system=""
 fi
 
-tier2=(filled_mounts_only_tmp_claude filled_port_forwards provision_matches_docker_template
+tier2=(filled_mounts_only_tmp_claude filled_port_forwards filled_egress_proxy provision_matches_docker_template
   launchd_agent_uses_patched_limactl image_is_fixed_output docker_vm_in_home_packages docker_vm_keeps_buildx_config)
 if [ "${system}" != "aarch64-darwin" ]; then
   for t in "${tier2[@]}"; do
@@ -269,16 +317,41 @@ else
   fi
 
   # ---------------------------------------------------------------------------
+  # filled_egress_proxy: Lima が展開した後の provision（apt の data・daemon.json・config.json の yq）に
+  # param.egressProxy が埋まり、env が VM に渡る（param を展開しない欄に書いていないこと）
+  # ---------------------------------------------------------------------------
+  echo "- filled_egress_proxy"
+  proxy="$(jq -r '.param.egressProxy' "${TMPROOT}/lima.json")"
+  # {{.Home}} は VM の中のホーム（.user.home）に展開されるので ~ に戻して比べる
+  got="$(jq -c --arg p "${proxy}" '(.user.home // "") as $h | {
+    env: ((.env // {}) | [.http_proxy, .https_proxy, .HTTP_PROXY, .HTTPS_PROXY] | unique),
+    provisions: [(.provision // [])[] | select((.content // .expression // "") | contains($p))
+      | .path | if $h != "" and startswith($h + "/") then "~" + ltrimstr($h) else . end],
+    unfilled: [(.provision // [])[] | select(tojson | contains("{{.Param.egress"))] | length
+  }' "${TMPROOT}/filled.json" 2>&1 || true)"
+  want="$(jq -cn --arg p "${proxy}" '{
+    env: [$p],
+    provisions: ["/etc/apt/apt.conf.d/95vm-egress-proxy", "~/.config/docker/daemon.json", "~/.docker/config.json"],
+    unfilled: 0
+  }')"
+  if [ "${got}" = "${want}" ]; then
+    pass "filled_egress_proxy"
+  else
+    fail "filled_egress_proxy" "got=${got} want=${want}"
+  fi
+
+  # ---------------------------------------------------------------------------
   # provision_matches_docker_template: rootless docker の入れ方は Lima の docker template と同じ。
-  # 外すのは先頭の provision（/etc/hosts に host.docker.internal を足す）だけ
+  # 外すのは先頭の provision（/etc/hosts に host.docker.internal を足す）だけ。
+  # 足すのは vm-egress-proxy の設定（param.egressProxy を使うもの。lima_yaml_egress_proxy で見る）だけ
   # ---------------------------------------------------------------------------
   echo "- provision_matches_docker_template"
   upstream="${lima}/share/lima/templates/docker.yaml"
   if [ -n "${lima}" ] && [ -f "${upstream}" ]; then
     yq -o=json '{"provision": .provision[1:], "probes": .probes, "containerd": .containerd,
       "containerdSnapshotter": .param.containerdSnapshotter}' "${upstream}" >"${TMPROOT}/upstream.json"
-    yq -o=json '{"provision": .provision, "probes": .probes, "containerd": .containerd,
-      "containerdSnapshotter": .param.containerdSnapshotter}' "${LIMA_YAML}" >"${TMPROOT}/ours.json"
+    jq '{"provision": [.provision[] | select(tojson | test("egressProxy") | not)], "probes": .probes,
+      "containerd": .containerd, "containerdSnapshotter": .param.containerdSnapshotter}' "${TMPROOT}/lima.json" >"${TMPROOT}/ours.json"
     if jq -e --slurpfile u "${TMPROOT}/upstream.json" '. == $u[0]' "${TMPROOT}/ours.json" >/dev/null &&
       jq -e '.provision[0].script | test("get.docker.com")' "${TMPROOT}/ours.json" >/dev/null; then
       pass "provision_matches_docker_template"
