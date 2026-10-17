@@ -5,7 +5,7 @@
 # Run from anywhere: bash tests/sandbox-docker.test.sh
 # Requires: jq, yq（mikefarah/yq）。nix（daemon に届くときだけ。届かなければ tier-2 を skip）
 #
-# tier-1: lima.yaml の定義、claude-code/settings.json の allowUnixSockets、start.sh（偽の limactl で動かす）
+# tier-1: lima.yaml の定義、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）
 # tier-2: パッチ版 limactl の template copy --fill で展開した mounts / portForwards、
 #         Lima の docker template との手順の突き合わせ、home-manager の評価結果（launchd agent・docker-vm・image）
 
@@ -94,6 +94,39 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# settings_allowed_domains_docker: docker build（buildkit）がクライアントに任せる Docker Hub のトークン発行先
+# auth.docker.io を許可する。ほかのレジストリ（ghcr.io 等）はトークン発行と push が同じドメインで
+# 持ち出し経路になるので足さない
+# -----------------------------------------------------------------------------
+echo "- settings_allowed_domains_docker"
+got="$(jq -c '[.sandbox.network.allowedDomains[] | select(test("docker|ghcr|quay|gcr\\.io|azurecr"))]' "${SETTINGS}")"
+if [ "${got}" = '["auth.docker.io"]' ]; then
+  pass "settings_allowed_domains_docker"
+else
+  fail "settings_allowed_domains_docker" "got=${got} want=[\"auth.docker.io\"]"
+fi
+
+# -----------------------------------------------------------------------------
+# rules_docker_vm: RULES.md の「使えるもの」に docker-vm の使い方（VM の rootless docker・
+# /private/tmp/claude だけの mount と build context / docker cp・Docker Hub 以外は先に docker-vm pull）がある
+# -----------------------------------------------------------------------------
+echo "- rules_docker_vm"
+rules_line="$(awk '/^使えるもの:/ { f = 1; next } f && /^$/ { exit } f && /^- docker-vm:/' "${REPO_ROOT}/claude-code/RULES.md")"
+missing=()
+# shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
+for want in "rootless docker" '`/private/tmp/claude` だけ' "build context" '`docker cp`' "ghcr.io" '`docker-vm pull`'; do
+  case "${rules_line}" in
+  *"${want}"*) ;;
+  *) missing+=("${want}") ;;
+  esac
+done
+if [ -n "${rules_line}" ] && [ "${#missing[@]}" -eq 0 ]; then
+  pass "rules_docker_vm"
+else
+  fail "rules_docker_vm" "line=${rules_line:-<none>} missing=${missing[*]:-}"
+fi
+
+# -----------------------------------------------------------------------------
 # start_*: launchd agent が走らせる start.sh。VM が無ければ作って起動し、あれば起動だけする。
 # 偽の limactl が受けた引数を記録し、list --quiet には FAKE_LIST を返す
 # -----------------------------------------------------------------------------
@@ -148,7 +181,7 @@ else
 fi
 
 tier2=(filled_mounts_only_tmp_claude filled_port_forwards provision_matches_docker_template
-  launchd_agent_uses_patched_limactl image_is_fixed_output docker_vm_in_home_packages)
+  launchd_agent_uses_patched_limactl image_is_fixed_output docker_vm_in_home_packages docker_vm_keeps_buildx_config)
 if [ "${system}" != "aarch64-darwin" ]; then
   for t in "${tier2[@]}"; do
     skip "${t}" "nix daemon unreachable or not aarch64-darwin"
@@ -307,19 +340,44 @@ else
   fi
 
   # ---------------------------------------------------------------------------
-  # docker_vm_in_home_packages: home.packages の docker-vm は VM の docker.sock に向いた docker
+  # docker_vm_in_home_packages: home.packages の docker-vm は VM の docker.sock に向いた docker で、
+  # BUILDX_CONFIG が無ければ sandbox から書ける /private/tmp/claude 配下を入れる
+  # （~/.docker/buildx は sandbox 内から書けず build が始まる前に落ちる）。
+  # docker-vm を偽の docker（受けた BUILDX_CONFIG と引数を出す）を PATH の先頭に置いて走らせる
   # ---------------------------------------------------------------------------
   echo "- docker_vm_in_home_packages"
   home="$(nix eval --raw --impure --expr "${hm_expr} hm.config.home.homeDirectory" 2>>"${TMPROOT}/nix.err" || true)"
   out="$(nix build --no-link --print-out-paths --impure --expr "${hm_expr}
     builtins.head (builtins.filter (p: (p.name or \"\") == \"docker-vm\") hm.config.home.packages)
   " 2>>"${TMPROOT}/nix.err" || true)"
-  # shellcheck disable=SC2016 # 意図的: wrapper のソース上の "$@" を文字列として探す
-  line='exec docker --host unix://'"${home}"'/.lima/sandbox-docker/sock/docker.sock "$@"'
-  if [ -n "${home}" ] && [ -n "${out}" ] && grep -qxF -- "${line}" "${out}/bin/docker-vm"; then
+  mkdir -p "${TMPROOT}/fakebin"
+  cat >"${TMPROOT}/fakebin/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "BUILDX_CONFIG=${BUILDX_CONFIG-<unset>}"
+echo "$*"
+EOF
+  chmod +x "${TMPROOT}/fakebin/docker"
+  run_docker_vm() {
+    [ -n "${out}" ] && PATH="${TMPROOT}/fakebin:${PATH}" "$@" "${out}/bin/docker-vm" build -t x . 2>&1
+  }
+  got="$(run_docker_vm env -u BUILDX_CONFIG || true)"
+  want="BUILDX_CONFIG=/private/tmp/claude/docker-vm-buildx
+--host unix://${home}/.lima/sandbox-docker/sock/docker.sock build -t x ."
+  if [ -n "${home}" ] && [ "${got}" = "${want}" ]; then
     pass "docker_vm_in_home_packages"
   else
-    fail "docker_vm_in_home_packages" "out=${out:-<none>} want=${line} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+    fail "docker_vm_in_home_packages" "out=${out:-<none>} got=${got} want=${want} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+  fi
+
+  # ---------------------------------------------------------------------------
+  # docker_vm_keeps_buildx_config: 呼び出し側が BUILDX_CONFIG を決めていれば docker-vm は上書きしない
+  # ---------------------------------------------------------------------------
+  echo "- docker_vm_keeps_buildx_config"
+  got="$(run_docker_vm env BUILDX_CONFIG="${TMPROOT}/my-buildx" || true)"
+  if [ "${got%%$'\n'*}" = "BUILDX_CONFIG=${TMPROOT}/my-buildx" ]; then
+    pass "docker_vm_keeps_buildx_config"
+  else
+    fail "docker_vm_keeps_buildx_config" "out=${out:-<none>} got=${got}"
   fi
 fi
 

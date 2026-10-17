@@ -635,6 +635,7 @@
         "pypi.org",
         "files.pythonhosted.org",
         "nodejs.org",
+        "auth.docker.io",
         "static.rust-lang.org",
         "sh.rustup.rs",
         "proxy.golang.org",
