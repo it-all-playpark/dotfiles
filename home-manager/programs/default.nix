@@ -14,5 +14,6 @@
     ./pg-broker.nix
     ./docker-proxy.nix
     ./agent-vault.nix
+    ./lima-sandbox.nix
   ];
 }
