@@ -612,6 +612,7 @@
         "~/.local/state/jev-broker/jev.sock",
         "~/.local/state/pg-broker/broker.sock",
         "~/.local/state/pg-broker/sock",
+        "~/.local/state/docker-proxy/docker.sock",
         "/private/tmp/claude/agent-browser",
         "/private/tmp/claude-501/sock",
         "/private/tmp/claude-502"

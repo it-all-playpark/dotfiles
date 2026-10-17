@@ -12,6 +12,7 @@
     ./uc-handoff.nix
     ./jev-broker.nix
     ./pg-broker.nix
+    ./docker-proxy.nix
     ./agent-vault.nix
   ];
 }
