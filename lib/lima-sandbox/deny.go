@@ -1,61 +1,60 @@
 package forwarder
 
 import (
+	"errors"
+	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 
-	"gvisor.dev/gvisor/pkg/tcpip"
+	log "github.com/sirupsen/logrus"
 )
 
-// VM から host のプロセス経由で出ていく接続（tcp.go / udp.go の net.Dial）のうち、
-// Mac 自身と LAN に向かうものを拒否する。インターネットだけを通す。
-// lib/lima-sandbox/default.nix が build 中の vendor にこのファイルを置き、NAT 変換の直後で呼ぶ。
-var deniedNets = func() []*net.IPNet {
-	var nets []*net.IPNet
-	for _, c := range []string{
-		"0.0.0.0/8",      // this network
-		"10.0.0.0/8",     // RFC1918
-		"100.64.0.0/10",  // CGNAT（Tailscale 等）
-		"127.0.0.0/8",    // loopback
-		"169.254.0.0/16", // link-local
-		"172.16.0.0/12",  // RFC1918
-		"192.0.0.0/24",   // IETF protocol assignments
-		"192.168.0.0/16", // RFC1918
-		"198.18.0.0/15",  // benchmarking（OrbStack の VM ネットワーク）
-		"224.0.0.0/4",    // multicast
-		"240.0.0.0/4",    // reserved + broadcast
-	} {
-		_, n, err := net.ParseCIDR(c)
-		if err != nil {
-			panic(err)
-		}
-		nets = append(nets, n)
-	}
-	return nets
-}()
+// VM から host のプロセス経由で出ていく接続（tcp.go / udp.go の net.Dial）を、ホスト側の許可リスト付き
+// プロキシ（home-manager/programs/vm-egress-proxy.nix）への経路を除いてすべて拒否する。
+// インターネット・Mac 自身（localhost・Mac の IP）・LAN・IPv6 のどれにも host から net.Dial しない。
+// lib/lima-sandbox/default.nix が build 中の vendor にこのファイルを置き、tcp.go の net.Dial を
+// dialTCP に差し替え、udp.go の NAT 変換の直後で deniedUDP を呼ぶ。
 
-// host のインターフェースの IP（グローバル IP を直に持つ回線でも Mac 自身に届かせない）。
-// DHCP で変わるので接続のたびに読む。テストは差し替える
-var interfaceAddrs = net.InterfaceAddrs
+// VM から見たプロキシの宛先。usernet のゲートウェイ（192.168.5.2。NAT の行を消したので host には
+// 届かない）の 3128 番だけを、host の Unix ソケットに繋ぐ。
+// home-manager/home/file/sandbox-docker/lima.yaml の param.egressProxy と揃える
+const proxyAddress = "192.168.5.2:3128"
 
-func denied(a tcpip.Address) bool {
-	// IPv6（IPv4-mapped を含む 16 byte のアドレス）は全部拒否する
-	if a.Len() != 4 {
-		return true
-	}
-	ip := net.IP(a.AsSlice())
-	for _, n := range deniedNets {
-		if n.Contains(ip) {
-			return true
-		}
-	}
-	addrs, err := interfaceAddrs()
+// プロキシが待ち受ける Unix ソケット。vm-egress-proxy.nix の socket と揃える。
+// sandbox の allowUnixSockets に無いので、Claude Code の sandbox からは直接繋がらない。テストは差し替える
+var proxySocket = func() (string, error) {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return true
+		return "", err
 	}
-	for _, addr := range addrs {
-		if n, ok := addr.(*net.IPNet); ok && n.IP.Equal(ip) {
-			return true
-		}
+	return filepath.Join(home, ".local/state/vm-egress-proxy/proxy.sock"), nil
+}
+
+var errDenied = errors.New("lima-sandbox: only the egress proxy is reachable from the VM")
+
+// tcp.go の net.Dial("tcp", address) の代わり。address は tcp.go が組み立てる host:port
+// （IPv6 は IPv4-mapped も含めて [addr]:port）で、プロキシの宛先と文字列で完全に一致するものだけ通す。
+// 拒否すると tcp.go が RST を返すので、VM 側では接続の拒否として見える
+func dialTCP(network, address string) (net.Conn, error) {
+	if network != "tcp" || address != proxyAddress {
+		log.Warnf("lima-sandbox: denied %s to %s (only tcp %s is reachable)", network, address, proxyAddress)
+		return nil, fmt.Errorf("%w: %s %s", errDenied, network, address)
 	}
-	return false
+	path, err := proxySocket()
+	if err != nil {
+		return nil, err
+	}
+	conn, err := net.Dial("unix", path)
+	if err != nil {
+		log.Warnf("lima-sandbox: egress proxy %s is unreachable: %v", path, err)
+	}
+	return conn, err
+}
+
+// udp.go から呼ぶ。UDP はプロキシを通らないので全部拒否する（VM の DNS は gvproxy の netstack 内で
+// 答えるので forwarder を通らない）
+func deniedUDP(address string) bool {
+	log.Warnf("lima-sandbox: denied udp to %s", address)
+	return true
 }

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # tests/lima-sandbox.test.sh
-# lib/lima-sandbox（VM から Mac・LAN に届かないパッチ版 Lima）を build して確かめる。
+# lib/lima-sandbox（VM の外向き通信を vm-egress-proxy だけに絞るパッチ版 Lima）を build して確かめる。
 # Run from anywhere: bash tests/lima-sandbox.test.sh
 # Requires: nix（daemon に届くときだけ。届かなければ skip）
 #
-# denied() の判定表（deny_test.go）は build の checkPhase で走り、外れたら build が落ちる。
-# ここでは build した limactl の実体（wrapper の先）に deny.go が入っていることと、
-# version が nixpkgs の lima と同じこと（自前の src にしていない）、home.packages に素の lima でなく
-# パッチ版が入ることを見る
+# forwarder の判定（deny_test.go）と DNS（dns_deny_test.go）のテストは build の checkPhase で走り、
+# 外れたら build が落ちる。ここでは build した limactl の実体（wrapper の先）に deny.go・dns_deny.go が
+# 入っていることと、version が nixpkgs の lima と同じこと（自前の src にしていない）、home.packages に
+# 素の lima でなくパッチ版が入ることを見る
 
 set -euo pipefail
 
@@ -50,7 +50,7 @@ else
 fi
 
 if [ "${system}" != "aarch64-darwin" ]; then
-  skip "binary_contains_deny_cidrs" "nix daemon unreachable or not aarch64-darwin"
+  skip "binary_contains_egress_patch" "nix daemon unreachable or not aarch64-darwin"
   skip "version_matches_nixpkgs_lima" "nix daemon unreachable or not aarch64-darwin"
   skip "home_packages_use_patched_lima" "nix daemon unreachable or not aarch64-darwin"
 else
@@ -66,21 +66,22 @@ else
   fi
 
   # -------------------------------------------------------------------------
-  # binary_contains_deny_cidrs: deny.go の CIDR がすべて limactl の実体に入っている
-  # （素の lima には 169.254.0.0/16 以外が無い。forwarder に deny.go が入らなければ落ちる）
+  # binary_contains_egress_patch: deny.go のプロキシの宛先・ソケットのパス・拒否のログと、
+  # dns_deny.go の関数が limactl の実体に入っている（vendor に置き損ねる・置換が外れると落ちる）
   # -------------------------------------------------------------------------
-  echo "- binary_contains_deny_cidrs"
-  grep -oE '"[0-9.]+/[0-9]+"' "${DENY_GO}" | tr -d '"' >"${TMPROOT}/cidrs"
+  echo "- binary_contains_egress_patch"
+  proxy_address="$(sed -n 's/^const proxyAddress = "\(.*\)"$/\1/p' "${DENY_GO}")"
   missing=""
   if [ -n "${wrapped}" ] && [ -f "${wrapped}" ]; then
-    while IFS= read -r cidr; do
-      grep -qaF -- "${cidr}" "${wrapped}" || missing="${missing} ${cidr}"
-    done <"${TMPROOT}/cidrs"
+    for s in "${proxy_address}" ".local/state/vm-egress-proxy/proxy.sock" "lima-sandbox: denied %s to %s" \
+      "lima-sandbox: denied udp to %s" "dns.(*dnsHandler).refuseUpstream"; do
+      grep -qaF -- "${s}" "${wrapped}" || missing="${missing} ${s}"
+    done
   fi
-  if [ -n "${wrapped}" ] && [ -f "${wrapped}" ] && [ "$(wc -l <"${TMPROOT}/cidrs")" -ge 11 ] && [ -z "${missing}" ]; then
-    pass "binary_contains_deny_cidrs"
+  if [ -n "${wrapped}" ] && [ -f "${wrapped}" ] && [ -n "${proxy_address}" ] && [ -z "${missing}" ]; then
+    pass "binary_contains_egress_patch"
   else
-    fail "binary_contains_deny_cidrs" "wrapped=${wrapped:-<none>} missing:${missing} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+    fail "binary_contains_egress_patch" "wrapped=${wrapped:-<none>} missing:${missing} err=$(tail -n 3 "${TMPROOT}/nix.err")"
   fi
 
   # -------------------------------------------------------------------------
