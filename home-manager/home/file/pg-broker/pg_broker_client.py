@@ -187,7 +187,7 @@ def create(version):
     try:
         wait_ready(out, port)
     except PgBrokerError:
-        docker("rm", "-f", out, check=False)
+        docker("rm", "-f", "-v", out, check=False)
         raise
     return {
         "id": out[:12],
@@ -202,7 +202,8 @@ def delete(instance_id):
     matches = [full for full in labeled_ids() if full.startswith(instance_id)]
     if len(matches) != 1:
         raise PgBrokerError(f"no pg-broker instance {instance_id!r}")
-    docker("rm", "-f", matches[0])
+    # -v: postgres image が VOLUME で作る匿名 volume も消す（--rm と違い rm -f だけでは VM に残る）
+    docker("rm", "-f", "-v", matches[0])
     return {"id": instance_id, "deleted": True}
 
 
