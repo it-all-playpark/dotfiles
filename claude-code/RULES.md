@@ -69,7 +69,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 使えるもの:
 - nix（daemon socket 許可済み）: nix を書いたら apply 前に `nix build` / `nix flake check` で自分で確かめる。ただし daemon は sandbox 外なので、nix 経由の取得は `allowedDomains` の制限を受けない。未知の flake や URL は通常の外部アクセスと同じ慎重さで扱う
 - Jev: `~/.local/state/jev-broker/jev.sock` 経由。sandbox 内では Keychain が exit 36 で読めないのが正常なので、ロック解除を試さない
-- Postgres: sandbox 内で `initdb` / docker は使わず、pg-broker に頼む。`pg-broker create` が返す `database_url`（非 superuser の `app`、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`。curl は deny なので使わない
+- Postgres: sandbox 内で `initdb` は使わず、`pg-broker` に頼む。sandbox-docker VM（`docker-vm`）に digest 固定の postgres コンテナを起動する。`pg-broker create` が返す `database_url`（`127.0.0.1:5500〜5599`。`app` は superuser だが動くのは VM の中だけ、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`
 - プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。`ps` は使わない（環境変数を出せるので hook が deny する）。一覧・CPU・メモリは `/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time`、引数まで含むコマンドラインは `/usr/bin/pgrep -lf <pattern>`。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
 - pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）。E2E（Playwright + DB コンテナ）は人間か CI が回す
 
@@ -95,6 +95,8 @@ sandbox に塞がれたら:
   `~/.local/state/pg-broker/sock` を 1 行で足した。代償: ソケットに届くプロセスは使い捨て DB を 4 つまで作れる。
   依頼口は専用コマンド `pg-broker`（pg_broker_client.py、nix store に置く）。permissions.deny の `Bash(curl *)` は allow より強く、
   broker.sock 宛てだけを許す書き方が無いため。curl の deny は外さない。
+  2026-10-17（issue #338）: sandbox-docker VM（#336）の postgres コンテナに置き換え、LaunchAgent と allowUnixSockets の
+  pg-broker の 2 行を撤去。superuser の COPY TO PROGRAM も VM の中で実行される（実測）。コマンドと create / delete の契約は同じ。
 - pnpm: pnpm 12 は store の operation lock を TMPDIR を無視して /tmp/pnpm-store-operation-locks-<uid>/ に作る。
   allowWrite に `/private/tmp/pnpm-store-operation-locks-*` と `…-*/*` の両方が要る。glob を含むエントリはそのパス自体にしか
   一致せず、`-*` だけだと既存の all-stores.lock を開き直す 2 回目以降が落ちる。`-*/**` は末尾 `/**` が剥がされて `-*` と同じ。

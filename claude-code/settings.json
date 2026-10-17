@@ -611,8 +611,6 @@
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
         "~/.local/state/jev-broker/jev.sock",
-        "~/.local/state/pg-broker/broker.sock",
-        "~/.local/state/pg-broker/sock",
         "~/.local/state/docker-proxy/docker.sock",
         "~/.lima/sandbox-docker/sock/docker.sock",
         "/private/tmp/claude/agent-browser",
