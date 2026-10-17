@@ -19,9 +19,12 @@ in
 lib.mkIf pkgs.stdenv.isDarwin {
   # sandbox 内から書き込み系も含めて使う docker。VM sandbox-docker の rootless docker に繋ぐ。
   # VM に mount しているのは /private/tmp/claude だけなので、repo のファイルは docker build の context や
-  # docker cp で渡す（lima.yaml 冒頭参照）。OrbStack 側の読み取り専用は docker-sb（docker-proxy.nix）
+  # docker cp で渡す（lima.yaml 冒頭参照）。OrbStack 側の読み取り専用は docker-sb（docker-proxy.nix）。
+  # buildx は ~/.docker/buildx に状態を書くが sandbox 内からは書けないので、呼び出し側が BUILDX_CONFIG を
+  # 決めていなければ sandbox の内外どちらからも書ける /private/tmp/claude 配下に向ける
   home.packages = [
     (pkgs.writeShellScriptBin "docker-vm" ''
+      export BUILDX_CONFIG="''${BUILDX_CONFIG:-/private/tmp/claude/docker-vm-buildx}"
       exec docker --host unix://${socket} "$@"
     '')
   ];
