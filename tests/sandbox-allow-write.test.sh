@@ -157,6 +157,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gh_cache_writable
+# issue #352: gh run view --log / --log-failed はログの zip を ~/.cache/gh/run-log-*.zip に
+# キャッシュし、書けないと `creating cache entry: … operation not permitted` で落ちる。
+# ~/.cache/gh から実行されるものは無いので開ける。~/.cache 全体には広げない。
+# ---------------------------------------------------------------------------
+echo "- gh_cache_writable"
+gh_cache_file="${HOME}/.cache/gh/run-log-123456789-1760000000.zip"
+if write_allowed "${gh_cache_file}" && ! write_allowed "${HOME}/.cache/other-tool/x"; then
+  pass "gh_cache_writable"
+else
+  fail "gh_cache_writable" "${gh_cache_file} must be writable and the rest of ~/.cache must not be"
+fi
+
+# ---------------------------------------------------------------------------
 # tmp_root_not_writable
 # ---------------------------------------------------------------------------
 echo "- tmp_root_not_writable"

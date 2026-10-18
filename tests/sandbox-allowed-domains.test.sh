@@ -9,6 +9,10 @@
 # sandbox.network.strictAllowlist: true により repo の .claude/settings.json の allowedDomains は
 # 無視され、sandbox が `host is not on the allow list` で拒否していた。
 # どれも読み取り用の公開 API / RSS なので完全一致のホスト名で足し、wildcard（*.）は増やさない。
+#
+# issue #352: gh run view --log / --log-failed はログ本体を GitHub の Actions ログ用ストレージ
+# productionresultssa<N>.blob.core.windows.net から取る（N は run ごとに変わり、観測は 1〜19）。
+# *.blob.core.windows.net は誰でもストレージを作れる外部の書き込み先になるので、0〜19 を完全一致で列挙する。
 
 set -euo pipefail
 
@@ -53,6 +57,23 @@ if [ "${#missing[@]}" -eq 0 ]; then
   pass "seed_harvest_hosts_exact"
 else
   fail "seed_harvest_hosts_exact" "missing=${missing[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# gh_actions_log_hosts_exact: productionresultssa0〜19.blob.core.windows.net の 20 ホストが完全一致のエントリで入っている
+# ---------------------------------------------------------------------------
+echo "- gh_actions_log_hosts_exact"
+missing=()
+for n in $(seq 0 19); do
+  host="productionresultssa${n}.blob.core.windows.net"
+  if ! jq -e --arg h "${host}" '.sandbox.network.allowedDomains | index($h) != null' "${SETTINGS}" >/dev/null; then
+    missing+=("${host}")
+  fi
+done
+if [ "${#missing[@]}" -eq 0 ]; then
+  pass "gh_actions_log_hosts_exact"
+else
+  fail "gh_actions_log_hosts_exact" "missing=${missing[*]}"
 fi
 
 # ---------------------------------------------------------------------------
