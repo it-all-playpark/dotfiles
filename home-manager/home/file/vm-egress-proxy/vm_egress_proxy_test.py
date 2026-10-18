@@ -6,6 +6,7 @@
 StubUpstream（socketpair のもう片側を受け、届いたバイト列を記録して決めた応答を返す）に差し替える。
 """
 
+import errno
 import io
 import json
 import os
@@ -96,8 +97,13 @@ class ProxyTestCase(unittest.TestCase):
         thread = threading.Thread(target=run)
         thread.start()
         client.sendall(raw)
-        # トンネルは client が書き終えたことを上流に伝えて閉じさせる
-        client.shutdown(socket.SHUT_WR)
+        # トンネルは client が書き終えたことを上流に伝えて閉じさせる。拒否（403）は Handler が先に
+        # 応答して閉じることがあり、そのとき macOS は ENOTCONN を返す（応答は読める）
+        try:
+            client.shutdown(socket.SHUT_WR)
+        except OSError as e:
+            if e.errno != errno.ENOTCONN:
+                raise
         response = read_all(client)
         client.close()
         thread.join(timeout=60)
