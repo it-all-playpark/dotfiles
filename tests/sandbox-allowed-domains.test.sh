@@ -4,10 +4,11 @@
 # Run from the repo root: bash tests/sandbox-allowed-domains.test.sh
 # Requires: jq
 #
-# issue #351: corporate-site の seed-harvest（harvest_topics.sh）が叩く hn.algolia.com と
-# suggestqueries.google.com を user scope に足す。project scope の allowedDomains がセッションで
-# 効かず、sandbox が `host is not on the allow list` で拒否していた。
-# どちらも読み取り用の公開 API なので完全一致のホスト名で足し、wildcard（*.）は増やさない。
+# issue #351: corporate-site の seed-harvest（harvest_topics.sh）が叩く hn.algolia.com・
+# suggestqueries.google.com・b.hatena.ne.jp を user scope に足す。user scope の
+# sandbox.network.strictAllowlist: true により repo の .claude/settings.json の allowedDomains は
+# 無視され、sandbox が `host is not on the allow list` で拒否していた。
+# どれも読み取り用の公開 API / RSS なので完全一致のホスト名で足し、wildcard（*.）は増やさない。
 
 set -euo pipefail
 
@@ -39,11 +40,11 @@ echo "=== sandbox.network.allowedDomains unit tests ==="
 echo ""
 
 # ---------------------------------------------------------------------------
-# seed_harvest_hosts_exact: hn.algolia.com / suggestqueries.google.com が完全一致のエントリで入っている
+# seed_harvest_hosts_exact: hn.algolia.com / suggestqueries.google.com / b.hatena.ne.jp が完全一致のエントリで入っている
 # ---------------------------------------------------------------------------
 echo "- seed_harvest_hosts_exact"
 missing=()
-for host in hn.algolia.com suggestqueries.google.com; do
+for host in hn.algolia.com suggestqueries.google.com b.hatena.ne.jp; do
   if ! jq -e --arg h "${host}" '.sandbox.network.allowedDomains | index($h) != null' "${SETTINGS}" >/dev/null; then
     missing+=("${host}")
   fi
