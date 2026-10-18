@@ -647,6 +647,8 @@
         "*.googleapis.com",
         "accounts.google.com",
         "trends.google.com",
+        "suggestqueries.google.com",
+        "hn.algolia.com",
         "fonts.gstatic.com",
         "qiita.com",
         "zenn.dev",
