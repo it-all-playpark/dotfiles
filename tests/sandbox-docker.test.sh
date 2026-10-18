@@ -428,12 +428,14 @@ else
 #!/usr/bin/env bash
 echo "BUILDX_CONFIG=${BUILDX_CONFIG-<unset>}"
 echo "$*"
+echo "DOCKER_CONFIG=${DOCKER_CONFIG-<unset>}"
 EOF
   chmod +x "${TMPROOT}/fakebin/docker"
   run_docker_vm() {
     [ -n "${out}" ] && PATH="${TMPROOT}/fakebin:${PATH}" "$@" "${out}/bin/docker-vm" build -t x . 2>&1
   }
-  got="$(run_docker_vm env -u BUILDX_CONFIG || true)"
+  got_full="$(run_docker_vm env -u BUILDX_CONFIG || true)"
+  got="$(head -n 2 <<<"${got_full}")"
   want="BUILDX_CONFIG=/private/tmp/claude/docker-vm-buildx
 --host unix://${home}/.lima/sandbox-docker/sock/docker.sock build -t x ."
   if [ -n "${home}" ] && [ "${got}" = "${want}" ]; then
@@ -451,6 +453,29 @@ EOF
     pass "docker_vm_keeps_buildx_config"
   else
     fail "docker_vm_keeps_buildx_config" "out=${out:-<none>} got=${got}"
+  fi
+
+  # ---------------------------------------------------------------------------
+  # docker_vm_container_proxy: docker-vm は Mac の docker CLI なので、コンテナと build の RUN に入るプロキシは
+  # docker-vm の DOCKER_CONFIG の proxies から決まる（VM 側の ~/.docker/config.json は読まれない）。
+  # 呼び出し側の DOCKER_CONFIG に関わらず、proxies.default が vm-egress-proxy（deny.go の proxyAddress）で、
+  # buildx を ~/.docker/cli-plugins から探す config に向ける
+  # ---------------------------------------------------------------------------
+  echo "- docker_vm_container_proxy"
+  got_full="$(run_docker_vm env DOCKER_CONFIG="${TMPROOT}/my-docker" || true)"
+  docker_config="$(sed -n 's/^DOCKER_CONFIG=//p' <<<"${got_full}")"
+  got=""
+  if [ -f "${docker_config}/config.json" ]; then
+    got="$(jq -c '{proxies, cliPluginsExtraDirs}' "${docker_config}/config.json")"
+  fi
+  want="$(jq -cn --arg p "http://${proxy_address}" --arg n "localhost,127.0.0.1,::1" --arg d "${home}/.docker/cli-plugins" '{
+    proxies: {default: {httpProxy: $p, httpsProxy: $p, noProxy: $n}},
+    cliPluginsExtraDirs: [$d]
+  }')"
+  if [ -n "${proxy_address}" ] && [ -n "${home}" ] && [ "${got}" = "${want}" ]; then
+    pass "docker_vm_container_proxy"
+  else
+    fail "docker_vm_container_proxy" "DOCKER_CONFIG=${docker_config:-<none>} got=${got:-<none>} want=${want}"
   fi
 fi
 

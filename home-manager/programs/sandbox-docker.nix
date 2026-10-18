@@ -16,16 +16,32 @@ let
     hash = "sha256-e88VnimtAAC/7ZxXh1kIw5Jo9e0SV/SVj6ap9fYO3VQ=";
   };
   limaYaml = pkgs.replaceVars ../home/file/sandbox-docker/lima.yaml { inherit image; };
+  # docker-vm の DOCKER_CONFIG。docker-vm は Mac の docker CLI なので、コンテナと build の RUN に入るプロキシは
+  # この config.json の proxies から決まる（VM 側の ~/.docker/config.json は読まれない）。値は lima.yaml の
+  # param.egressProxy / egressNoProxy と同じ（tests/sandbox-docker.test.sh で突き合わせる）。
+  # Mac の ~/.docker/config.json（OrbStack 用）は使わないので、buildx はそこの cli-plugins から探させる
+  dockerConfig = pkgs.writeTextDir "config.json" (
+    builtins.toJSON {
+      proxies.default = {
+        httpProxy = "http://192.168.5.2:3128";
+        httpsProxy = "http://192.168.5.2:3128";
+        noProxy = "localhost,127.0.0.1,::1";
+      };
+      cliPluginsExtraDirs = [ "${home}/.docker/cli-plugins" ];
+    }
+  );
 in
 lib.mkIf pkgs.stdenv.isDarwin {
   # sandbox 内から書き込み系も含めて使う docker。VM sandbox-docker の rootless docker に繋ぐ。
   # VM に mount しているのは /private/tmp/claude だけなので、repo のファイルは docker build の context や
   # docker cp で渡す（lima.yaml 冒頭参照）。OrbStack 側の読み取り専用は docker-sb（docker-proxy.nix）。
   # buildx は ~/.docker/buildx に状態を書くが sandbox 内からは書けないので、呼び出し側が BUILDX_CONFIG を
-  # 決めていなければ sandbox の内外どちらからも書ける /private/tmp/claude 配下に向ける
+  # 決めていなければ sandbox の内外どちらからも書ける /private/tmp/claude 配下に向ける。
+  # VM の外向き通信は vm-egress-proxy だけを通るので、DOCKER_CONFIG（dockerConfig）は常に差し替える
   home.packages = [
     (pkgs.writeShellScriptBin "docker-vm" ''
       export BUILDX_CONFIG="''${BUILDX_CONFIG:-/private/tmp/claude/docker-vm-buildx}"
+      export DOCKER_CONFIG="${dockerConfig}"
       exec docker --host unix://${socket} "$@"
     '')
   ];
