@@ -709,6 +709,10 @@
   },
   "skipAutoPermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
+  "statusLine": {
+    "command": "~/.claude/bin/health-statusline",
+    "type": "command"
+  },
   "tui": "fullscreen",
   "voiceEnabled": true,
   "worktree": {

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# health-statusline: dev-flow-health と sandbox-tune の最終実行と結果を Claude Code の statusLine に 1 行で出す
+#
+# Usage: settings.json の statusLine（type: command）から ~/.claude/bin/health-statusline で呼ぶ
+#
+# stdin の JSON（statusLine の入力）は読み捨てる。読むのは次のファイルだけで、何も書かない:
+#   - ~/.claude/logs/dev-flow-health.log・~/.claude/logs/dev-flow-health.watch-journal.log
+#     （1 行 1 JSON。最終行の report が report JSON のパスを指す）と、その report
+#   - ~/.claude/logs/sandbox-tune/runs.jsonl（1 行 1 JSON。成功行は ts と remaining、失敗行は ts と error）
+#
+# 出力（health・sbx の順に ` · ` で繋ぐ。出すものが無い部分は省き、両方無ければ空行）:
+#   health ✓ <経過> / health ⚠ new<N> regressed<M> <経過> / health ⚠ 止まっている? <経過>（26 時間を超えたら）
+#   sbx 残<N>(+d|-d|±0) <経過> / sbx 残<N> <経過>（比べる成功行が無いとき） / sbx ⚠ 失敗 <経過>
+# statusLine は頻繁に呼ばれるので jq 3 回で終える。どの入力が壊れていても exit 0。
+set -uo pipefail
+
+cat >/dev/null 2>&1
+
+LOGS="$HOME/.claude/logs"
+
+reports=()
+for log in "$LOGS/dev-flow-health.log" "$LOGS/dev-flow-health.watch-journal.log"; do
+  [ -f "$log" ] || continue
+  # 壊れた行・空行は読み飛ばし、最後の object の行の report を取る
+  report="$(jq -nrR '[inputs | try fromjson catch null | objects] | last | .report? | strings' "$log" 2>/dev/null)"
+  if [ -n "$report" ] && [ -f "$report" ]; then
+    reports+=("$(<"$report")")
+  fi
+done
+
+runs=""
+if [ -f "$LOGS/sandbox-tune/runs.jsonl" ]; then
+  runs="$(<"$LOGS/sandbox-tune/runs.jsonl")"
+fi
+
+# shellcheck disable=SC2016 # $runs / $ARGS は jq の変数
+jq -nr --arg runs "$runs" '
+  def epoch: try fromdateiso8601 catch null;
+  def ago:
+    ([now - ., 0] | max | floor) as $s
+    | if $s < 60 then "今"
+      elif $s < 3600 then "\($s / 60 | floor)m前"
+      elif $s < 86400 then "\($s / 3600 | floor)h前"
+      else "\($s / 86400 | floor)d前"
+      end;
+
+  # 部分ごとに [...] | first で、出すものが無ければ null にする
+  # 最終実行は generated_at が新しい方の report で決める
+  ([[$ARGS.positional[]
+    | try fromjson catch null | objects
+    | {at: (.generated_at | strings | epoch), new: ((.summary.new? | numbers) // 0), regressed: ((.summary.regressed? | numbers) // 0)}
+    | select(.at != null)
+  ] | select(length > 0)
+    | max_by(.at)
+    | (.at | ago) as $age
+    | ([if .new > 0 then "new\(.new)" else empty end, if .regressed > 0 then "regressed\(.regressed)" else empty end] | join(" ")) as $found
+    | if $found != "" then "health ⚠ \($found) \($age)"
+      elif now - .at > 26 * 3600 then "health ⚠ 止まっている? \($age)"
+      else "health ✓ \($age)"
+      end
+  ] | first) as $health
+
+  # 増減は直前の成功行と比べる
+  | ([[$runs | split("\n")[]
+      | try fromjson catch null | objects
+      | (.ts | strings | epoch) as $ts
+      | select($ts != null)
+      | if .error != null then {ts: $ts, error: true}
+        elif (.remaining | type) == "number" then {ts: $ts, remaining: .remaining}
+        else empty
+        end
+    ] | select(length > 0)
+      | last as $last
+      | ($last.ts | ago) as $age
+      | if $last.error then "sbx ⚠ 失敗 \($age)"
+        else (.[:-1] | map(select(.remaining != null)) | last) as $prev
+          | if $prev == null then "sbx 残\($last.remaining) \($age)"
+            else ($last.remaining - $prev.remaining) as $d
+              | "sbx 残\($last.remaining)(\(if $d > 0 then "+\($d)" elif $d < 0 then "-\(-$d)" else "±0" end)) \($age)"
+            end
+        end
+  ] | first) as $sbx
+
+  | [$health, $sbx] | map(strings) | join(" · ")
+' --args ${reports[@]+"${reports[@]}"} 2>/dev/null || echo
+
+exit 0
