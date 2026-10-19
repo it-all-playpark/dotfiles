@@ -58,6 +58,8 @@ _: {
     masApps = {
       # Mac App Storeからインストールするアプリケーションのリスト
       "1Password for Safari" = 1569813296;
+      # 接続側(viewer)。ホスト側の jump-desktop-connect は casks にある
+      "Jump Desktop" = 524141863;
       LINE = 539883307;
       Xcode = 497799835;
     };
