@@ -62,8 +62,13 @@ log_line() {
 DAILY=dev-flow-health.log
 WATCH=dev-flow-health.watch-journal.log
 
-# ok_run <秒前> <remaining> / error_run <秒前>: runs.jsonl に 1 行足す
+# ok_run <秒前> <recurring> / legacy_run <秒前> <remaining> / error_run <秒前>: runs.jsonl に 1 行足す
+# legacy_run は recurring を書く前の sandbox-tune の成功行（remaining だけ）
 ok_run() {
+  jq -nc --arg ts "$(ago "$1")" --argjson n "$2" \
+    '{report: "r.md", analysis: "r.json", remaining: 539, recurring: $n, ts: $ts}' >>"$LOGS/sandbox-tune/runs.jsonl"
+}
+legacy_run() {
   jq -nc --arg ts "$(ago "$1")" --argjson n "$2" '{report: "r.md", analysis: "r.json", remaining: $n, ts: $ts}' \
     >>"$LOGS/sandbox-tune/runs.jsonl"
 }
@@ -158,28 +163,40 @@ log_line "$DAILY" "$LOGS/dev-flow-health/missing.json"
 printf '{not json' >"$LOGS/dev-flow-health/broken.json"
 log_line "$WATCH" "$LOGS/dev-flow-health/broken.json"
 ok_run $((3 * H)) 5
-expect "14_unreadable_reports_omit_health" "sbx 残5 3h前"
+expect "14_unreadable_reports_omit_health" "sbx 再発5 3h前"
 
 # --- sbx -------------------------------------------------------------------
 setup_home sbx_up
 ok_run $((50 * H)) 3
 error_run $((26 * H))
 ok_run $((3 * H)) 5
-expect "15_sbx_increase_against_previous_success" "sbx 残5(+2) 3h前"
+expect "15_sbx_increase_against_previous_success" "sbx 再発5(+2) 3h前"
 
 setup_home sbx_down
 ok_run $((5 * H)) 4
 ok_run $((3 * H)) 1
-expect "16_sbx_decrease" "sbx 残1(-3) 3h前"
+expect "16_sbx_decrease" "sbx 再発1(-3) 3h前"
 
 setup_home sbx_same
 ok_run $((5 * H)) 4
 ok_run $((3 * H)) 4
-expect "17_sbx_unchanged" "sbx 残4(±0) 3h前"
+expect "17_sbx_unchanged" "sbx 再発4(±0) 3h前"
 
 setup_home sbx_first
 ok_run $((3 * H)) 5
-expect "18_sbx_without_previous_success" "sbx 残5 3h前"
+expect "18_sbx_without_previous_success" "sbx 再発5 3h前"
+
+# recurring を持たない古い成功行とは比べず、その前の recurring を持つ成功行と比べる
+setup_home sbx_previous_legacy
+legacy_run $((26 * H)) 539
+ok_run $((3 * H)) 106
+expect "18b_sbx_without_previous_recurring" "sbx 再発106 3h前"
+
+setup_home sbx_skip_legacy
+ok_run $((50 * H)) 110
+legacy_run $((26 * H)) 539
+ok_run $((3 * H)) 106
+expect "18c_sbx_compares_with_previous_recurring" "sbx 再発106(-4) 3h前"
 
 setup_home sbx_error
 ok_run $((26 * H)) 5
@@ -191,20 +208,33 @@ setup_home sbx_broken_lines
 ok_run $((5 * H)) 2
 printf '\n\n{"ts":"2026-\n' >>"$LOGS/sandbox-tune/runs.jsonl"
 ok_run $((3 * H)) 5
-printf '{"ts":"not a date","error":"x"}\n{"remaining":9}\n{"ts":"2026-' >>"$LOGS/sandbox-tune/runs.jsonl"
-expect "20_sbx_skips_broken_lines" "sbx 残5(+3) 3h前"
+printf '{"ts":"not a date","error":"x"}\n{"recurring":9}\n{"ts":"2026-' >>"$LOGS/sandbox-tune/runs.jsonl"
+expect "20_sbx_skips_broken_lines" "sbx 再発5(+3) 3h前"
 
 setup_home sbx_no_valid_line
 printf '\n{"ts":\n[1,2]\n' >"$LOGS/sandbox-tune/runs.jsonl"
 log_line "$DAILY" "$(report a $((2 * H)))"
 expect "21_sbx_omitted_without_valid_line" "health ✓ 2h前"
 
+# 最後の成功行に数値の recurring が無ければ（remaining だけの古い行を含む）sbx の部分は出さない
+setup_home sbx_last_legacy
+ok_run $((50 * H)) 110
+legacy_run $((3 * H)) 539
+log_line "$DAILY" "$(report a $((2 * H)))"
+expect "21b_sbx_omitted_when_last_success_is_legacy" "health ✓ 2h前"
+
+setup_home sbx_last_not_number
+ok_run $((50 * H)) 110
+jq -nc --arg ts "$(ago $((3 * H)))" '{report: "r.md", analysis: "r.json", recurring: "106", ts: $ts}' \
+  >>"$LOGS/sandbox-tune/runs.jsonl"
+expect "21c_sbx_omitted_when_recurring_not_number" ""
+
 # --- 1 行にまとめる ----------------------------------------------------------
 setup_home both
 log_line "$DAILY" "$(report a $((2 * H)))"
 ok_run $((26 * H)) 3
 ok_run $((3 * H)) 5
-expect "22_both_joined_health_first" "health ✓ 2h前 · sbx 残5(+2) 3h前"
+expect "22_both_joined_health_first" "health ✓ 2h前 · sbx 再発5(+2) 3h前"
 
 # ファイルが無ければ空行を出して exit 0。何も書かない
 setup_home no_files
