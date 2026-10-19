@@ -71,7 +71,7 @@ done
 cat >"$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO \
-  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT GIT_CONFIG_COUNT; do
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT HOST_EXEC_ENV GIT_CONFIG_COUNT; do
   printf '%s=%s\n' "$v" "${!v-<unset>}"
 done
 i=0
@@ -200,7 +200,7 @@ RUN_ENV=("HTTPS_PROXY=http://localhost:9999")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=http://localhost:9999" &&
   contains "$OUT" "HTTP_PROXY=<unset>" && contains "$OUT" "SSL_CERT_FILE=<unset>" &&
-  contains "$OUT" "CLAUDE_GH_VAULT=<unset>" && [[ -z $ERR ]]; then
+  contains "$OUT" "CLAUDE_GH_VAULT=<unset>" && contains "$OUT" "HOST_EXEC_ENV=<unset>" && [[ -z $ERR ]]; then
   pass "03_preset_https_proxy_is_kept"
 else
   fail "03_preset_https_proxy_is_kept" "rc=$RC out=$OUT err=$ERR"
@@ -212,7 +212,7 @@ fi
 RUN_ENV=("AGENT_VAULT_PROXY_TOKEN_FILE=$TMPROOT/missing-token")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" &&
-  contains "$OUT" "NODE_EXTRA_CA_CERTS=<unset>" && [[ -z $ERR ]]; then
+  contains "$OUT" "NODE_EXTRA_CA_CERTS=<unset>" && contains "$OUT" "HOST_EXEC_ENV=<unset>" && [[ -z $ERR ]]; then
   pass "04_no_token_file_passthrough"
 else
   fail "04_no_token_file_passthrough" "rc=$RC out=$OUT err=$ERR"
@@ -224,6 +224,7 @@ fi
 RUN_ENV=("AGENT_VAULT_PROXY_PORT=$CLOSED_PORT")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "CLAUDE_GH_VAULT=<unset>" &&
+  contains "$OUT" "HOST_EXEC_ENV=<unset>" &&
   contains "$OUT" $'GIT_CONFIG_COUNT=2\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n' &&
   contains "$ERR" "not listening on 127.0.0.1:$CLOSED_PORT" &&
   contains "$ERR" "cannot authenticate to GitHub"; then
@@ -237,7 +238,7 @@ fi
 # ---------------------------------------------------------------------------
 RUN_ENV=("AGENT_VAULT_CA_BUNDLE=$TMPROOT/missing-ca.pem")
 run_wrapper
-if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" &&
+if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "HOST_EXEC_ENV=<unset>" &&
   contains "$ERR" "CA bundle not found: $TMPROOT/missing-ca.pem" &&
   contains "$ERR" "cannot authenticate to GitHub"; then
   pass "06_missing_ca_bundle_passthrough_with_warning"
@@ -330,6 +331,75 @@ if [[ $RC -eq 0 ]] && contains "$OUT" "upstream=none" && contains "$OUT" "push=o
 else
   fail "10_session_git_writes_no_upstream_and_pushes_same_name" "rc=$RC out=$OUT err=$ERR"
 fi
+
+# ---------------------------------------------------------------------------
+# 11. agent-vault 経由のときは HOST_EXEC_ENV（host-exec が子プロセスの env に当てる JSON）を付ける。
+#     wrapper が付けた proxy・CA・CLAUDE_GH_VAULT を null（取り除く）にし、github.com の helper を空にした
+#     GIT_CONFIG_* の番だけを文字列（上書き）にする。proxy token は含めない
+# ---------------------------------------------------------------------------
+PY="$(command -v python3)"
+cat >"$TMPROOT/host-exec-env-shape.py" <<'EOF'
+import json, sys
+spec = json.loads(sys.argv[1])
+print("nulls=" + ",".join(sorted(k for k, v in spec.items() if v is None)))
+print("strings=" + json.dumps({k: v for k, v in spec.items() if v is not None}, sort_keys=True))
+EOF
+RUN_ENV=()
+run_wrapper
+host_exec_env="$(printf '%s\n' "$OUT" | sed -n 's/^HOST_EXEC_ENV=//p')"
+shape="$("$PY" -I "$TMPROOT/host-exec-env-shape.py" "$host_exec_env" 2>&1 || true)"
+if [[ $RC -eq 0 ]] &&
+  [[ $shape == $'nulls=CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,SSL_CERT_FILE\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
+  ! contains "$host_exec_env" "tok_123"; then
+  pass "11_vault_session_exports_host_exec_env_without_token"
+else
+  fail "11_vault_session_exports_host_exec_env_without_token" "rc=$RC host_exec_env=$host_exec_env shape=$shape"
+fi
+
+# ---------------------------------------------------------------------------
+# 12. host-exec が HOST_EXEC_ENV を当てた env の git は、wrapper を通さない env と同じ github.com の
+#     credential helper を使い、git config --list も通る。branch.autoSetupMerge / push.default は残る。
+#     Claude Code が先に GIT_CONFIG_* を積んでいる（safe.directory）ときも同じ
+# ---------------------------------------------------------------------------
+cat >"$TMPROOT/apply-host-exec-env.py" <<'EOF'
+import json, os, sys
+env = dict(os.environ)
+for k, v in json.loads(env["HOST_EXEC_ENV"]).items():
+    if v is None:
+        env.pop(k, None)
+    else:
+        env[k] = v
+os.execve(sys.argv[1], sys.argv[1:], env)
+EOF
+GIT_CWD="$TMPROOT/git-cwd"
+mkdir -p "$GIT_CWD"
+cat >"$TMPROOT/git-host-exec.sh" <<EOF
+cd "$GIT_CWD"
+host() { "$PY" -I "$TMPROOT/apply-host-exec-env.py" "$REAL_GIT" "\$@"; }
+host config --get-all credential.https://github.com.helper >"$TMPROOT/host-helpers"
+host config --list >"$TMPROOT/host-list" 2>&1
+echo "list_rc=\$?"
+EOF
+(cd "$GIT_CWD" && env -i HOME="$HOME_T" GIT_CONFIG_NOSYSTEM=1 "$REAL_GIT" config --get-all credential.https://github.com.helper) \
+  >"$TMPROOT/plain-helpers"
+for preset in none safe_directory; do
+  RUN_ENV=("FAKE_GIT_SCRIPT=$TMPROOT/git-host-exec.sh" "GIT_CONFIG_NOSYSTEM=1")
+  if [[ $preset == safe_directory ]]; then
+    RUN_ENV+=("GIT_CONFIG_COUNT=1" "GIT_CONFIG_KEY_0=safe.directory" "GIT_CONFIG_VALUE_0=/x")
+  fi
+  rm -f "$TMPROOT/host-helpers" "$TMPROOT/host-list"
+  run_wrapper
+  host_list="$(cat "$TMPROOT/host-list" 2>/dev/null || true)"
+  if [[ $RC -eq 0 ]] && contains "$OUT" "list_rc=0" &&
+    cmp -s "$TMPROOT/plain-helpers" "$TMPROOT/host-helpers" &&
+    contains "$host_list" "branch.autosetupmerge=false" &&
+    contains "$host_list" "push.default=current"; then
+    pass "12_host_exec_env_restores_plain_git_credential_helper ($preset)"
+  else
+    fail "12_host_exec_env_restores_plain_git_credential_helper ($preset)" \
+      "rc=$RC out=$OUT plain=[$(cat "$TMPROOT/plain-helpers")] host=[$(cat "$TMPROOT/host-helpers" 2>/dev/null)] list=[$host_list]"
+  fi
+done
 
 # --- Summary ---------------------------------------------------------------
 echo ""
