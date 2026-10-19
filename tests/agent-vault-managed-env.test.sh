@@ -79,7 +79,7 @@ chmod +x "${STUB_BIN}/chown" "${STUB_BIN}/mv"
 cat >"${FAKE_BIN}/claude" <<'EOF'
 #!/usr/bin/env bash
 for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO \
-  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT GIT_CONFIG_COUNT; do
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT HOST_EXEC_ENV GIT_CONFIG_COUNT; do
   if [ -n "${!v+x}" ]; then printf '%s=%s\n' "$v" "${!v}"; fi
 done
 i=0
@@ -152,7 +152,11 @@ ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" 
   GIT_CONFIG_COUNT: "3",
   GIT_CONFIG_KEY_0: "credential.https://github.com.helper", GIT_CONFIG_VALUE_0: "",
   GIT_CONFIG_KEY_1: "branch.autoSetupMerge", GIT_CONFIG_VALUE_1: "false",
-  GIT_CONFIG_KEY_2: "push.default", GIT_CONFIG_VALUE_2: "current"}')"
+  GIT_CONFIG_KEY_2: "push.default", GIT_CONFIG_VALUE_2: "current",
+  HOST_EXEC_ENV: ({HTTPS_PROXY: null, HTTP_PROXY: null, NO_PROXY: null,
+    NODE_EXTRA_CA_CERTS: null, SSL_CERT_FILE: null, GIT_SSL_CAINFO: null,
+    CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null, CLAUDE_GH_VAULT: null,
+    GIT_CONFIG_KEY_0: "branch.autoSetupMerge", GIT_CONFIG_VALUE_0: "false"} | tojson)}')"
 INACTIVE_ENV='{
   "GIT_CONFIG_COUNT": "2",
   "GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false",

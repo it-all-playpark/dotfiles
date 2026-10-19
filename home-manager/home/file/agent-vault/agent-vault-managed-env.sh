@@ -11,8 +11,9 @@
 # 判定と出力は wrapper と同じ:
 #   token ファイルが空でなく、CA bundle が空でなく、127.0.0.1:<port> が listen している → proxy・CA・
 #   CLAUDE_GH_VAULT と GIT_CONFIG_*（0: github.com の credential helper を空、1: branch.autoSetupMerge=false、
-#   2: push.default=current）。それ以外 → GIT_CONFIG_*（0: branch.autoSetupMerge=false、1: push.default=current）
-#   だけ。index は GIT_CONFIG_COUNT が無い状態で wrapper を起動したときと同じにする（wrapper 経由の CLI では
+#   2: push.default=current）、host-exec のコマンドからそれらを外す HOST_EXEC_ENV（0 番は branch.autoSetupMerge=false に
+#   差し替え）。それ以外 → GIT_CONFIG_*（0: branch.autoSetupMerge=false、1: push.default=current）だけ。
+#   index は GIT_CONFIG_COUNT が無い状態で wrapper を起動したときと同じにする（wrapper 経由の CLI では
 #   managed の値が同じ値で上書きするだけになる）。
 #   HTTPS_PROXY を固定で書くと、agent-vault が落ちている間は本体の通信（api.anthropic.com 等）も止まるので、
 #   毎回 port を確かめて書き換える（fail-open）。
@@ -84,7 +85,19 @@ if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>
     GIT_CONFIG_KEY_1: "branch.autoSetupMerge",
     GIT_CONFIG_VALUE_1: "false",
     GIT_CONFIG_KEY_2: "push.default",
-    GIT_CONFIG_VALUE_2: "current"
+    GIT_CONFIG_VALUE_2: "current",
+    HOST_EXEC_ENV: ({
+      HTTPS_PROXY: null,
+      HTTP_PROXY: null,
+      NO_PROXY: null,
+      NODE_EXTRA_CA_CERTS: null,
+      SSL_CERT_FILE: null,
+      GIT_SSL_CAINFO: null,
+      CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null,
+      CLAUDE_GH_VAULT: null,
+      GIT_CONFIG_KEY_0: "branch.autoSetupMerge",
+      GIT_CONFIG_VALUE_0: "false"
+    } | tojson)
   }}'
 else
   state="without agent-vault"
