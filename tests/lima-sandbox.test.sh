@@ -8,6 +8,9 @@
 # 外れたら build が落ちる。ここでは build した limactl の実体（wrapper の先）に deny.go・dns_deny.go が
 # 入っていることと、version が nixpkgs の lima と同じこと（自前の src にしていない）、home.packages に
 # 素の lima でなくパッチ版が入ることを見る
+#
+# LIMA_SANDBOX_SKIP_BUILD=1 のときは build を要する 2 つ（binary_contains_egress_patch・
+# version_matches_nixpkgs_lima）を skip し、評価だけの home_packages_use_patched_lima は走らせる
 
 set -euo pipefail
 
@@ -55,45 +58,52 @@ if [ "${system}" != "aarch64-darwin" ]; then
   skip "home_packages_use_patched_lima" "nix daemon unreachable or not aarch64-darwin"
 else
   pkgs_expr="import (builtins.getFlake \"${REPO_ROOT}\").inputs.nixpkgs { system = \"${system}\"; }"
-  out="$(nix build --no-link --print-out-paths --impure --expr "
-    let pkgs = ${pkgs_expr}; in pkgs.callPackage ${REPO_ROOT}/lib/lima-sandbox { }
-  " 2>"${TMPROOT}/nix.err" || true)"
-  # bin/limactl は makeWrapper の shell script。exec する先が go の binary
-  wrapped=""
-  if [ -n "${out}" ] && [ -f "${out}/bin/limactl" ]; then
-    # shellcheck disable=SC2016 # 意図的: wrapper のソース上の "$0" を文字列として拾う
-    wrapped="$(sed -n 's/^exec -a "\$0" "\([^"]*\)".*/\1/p' "${out}/bin/limactl")"
-  fi
-
-  # -------------------------------------------------------------------------
-  # binary_contains_egress_patch: deny.go のプロキシの宛先・ソケットのパス・拒否のログと、
-  # dns_deny.go の関数が limactl の実体に入っている（vendor に置き損ねる・置換が外れると落ちる）
-  # -------------------------------------------------------------------------
-  echo "- binary_contains_egress_patch"
-  proxy_address="$(sed -n 's/^const proxyAddress = "\(.*\)"$/\1/p' "${DENY_GO}")"
-  missing=""
-  if [ -n "${wrapped}" ] && [ -f "${wrapped}" ]; then
-    for s in "${proxy_address}" ".local/state/vm-egress-proxy/proxy.sock" "lima-sandbox: denied %s to %s" \
-      "lima-sandbox: denied udp to %s" "dns.(*dnsHandler).refuseUpstream"; do
-      grep -qaF -- "${s}" "${wrapped}" || missing="${missing} ${s}"
-    done
-  fi
-  if [ -n "${wrapped}" ] && [ -f "${wrapped}" ] && [ -n "${proxy_address}" ] && [ -z "${missing}" ]; then
-    pass "binary_contains_egress_patch"
+  # パッチ版は cache.nixos.org に無く、build はソースからで約 3 分かかる。CI は lib/lima-sandbox に関係する
+  # 変更が無い PR・push でこれを 1 にして、build を要する 2 つを飛ばす（.github/workflows/ci.yml）
+  if [ "${LIMA_SANDBOX_SKIP_BUILD:-}" = "1" ]; then
+    skip "binary_contains_egress_patch" "LIMA_SANDBOX_SKIP_BUILD=1"
+    skip "version_matches_nixpkgs_lima" "LIMA_SANDBOX_SKIP_BUILD=1"
   else
-    fail "binary_contains_egress_patch" "wrapped=${wrapped:-<none>} missing:${missing} err=$(tail -n 3 "${TMPROOT}/nix.err")"
-  fi
+    out="$(nix build --no-link --print-out-paths --impure --expr "
+      let pkgs = ${pkgs_expr}; in pkgs.callPackage ${REPO_ROOT}/lib/lima-sandbox { }
+    " 2>"${TMPROOT}/nix.err" || true)"
+    # bin/limactl は makeWrapper の shell script。exec する先が go の binary
+    wrapped=""
+    if [ -n "${out}" ] && [ -f "${out}/bin/limactl" ]; then
+      # shellcheck disable=SC2016 # 意図的: wrapper のソース上の "$0" を文字列として拾う
+      wrapped="$(sed -n 's/^exec -a "\$0" "\([^"]*\)".*/\1/p' "${out}/bin/limactl")"
+    fi
 
-  # -------------------------------------------------------------------------
-  # version_matches_nixpkgs_lima: limactl --version が nixpkgs の lima の version を返す
-  # -------------------------------------------------------------------------
-  echo "- version_matches_nixpkgs_lima"
-  expected="$(nix eval --impure --raw --expr "(${pkgs_expr}).lima.version" 2>>"${TMPROOT}/nix.err" || true)"
-  version="$([ -n "${out}" ] && HOME="${TMPROOT}" "${out}/bin/limactl" --version 2>/dev/null || true)"
-  if [ -n "${expected}" ] && [ "${version}" = "limactl version ${expected}" ]; then
-    pass "version_matches_nixpkgs_lima"
-  else
-    fail "version_matches_nixpkgs_lima" "version=${version:-<none>} expected=limactl version ${expected:-<none>}"
+    # -------------------------------------------------------------------------
+    # binary_contains_egress_patch: deny.go のプロキシの宛先・ソケットのパス・拒否のログと、
+    # dns_deny.go の関数が limactl の実体に入っている（vendor に置き損ねる・置換が外れると落ちる）
+    # -------------------------------------------------------------------------
+    echo "- binary_contains_egress_patch"
+    proxy_address="$(sed -n 's/^const proxyAddress = "\(.*\)"$/\1/p' "${DENY_GO}")"
+    missing=""
+    if [ -n "${wrapped}" ] && [ -f "${wrapped}" ]; then
+      for s in "${proxy_address}" ".local/state/vm-egress-proxy/proxy.sock" "lima-sandbox: denied %s to %s" \
+        "lima-sandbox: denied udp to %s" "dns.(*dnsHandler).refuseUpstream"; do
+        grep -qaF -- "${s}" "${wrapped}" || missing="${missing} ${s}"
+      done
+    fi
+    if [ -n "${wrapped}" ] && [ -f "${wrapped}" ] && [ -n "${proxy_address}" ] && [ -z "${missing}" ]; then
+      pass "binary_contains_egress_patch"
+    else
+      fail "binary_contains_egress_patch" "wrapped=${wrapped:-<none>} missing:${missing} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+    fi
+
+    # -------------------------------------------------------------------------
+    # version_matches_nixpkgs_lima: limactl --version が nixpkgs の lima の version を返す
+    # -------------------------------------------------------------------------
+    echo "- version_matches_nixpkgs_lima"
+    expected="$(nix eval --impure --raw --expr "(${pkgs_expr}).lima.version" 2>>"${TMPROOT}/nix.err" || true)"
+    version="$([ -n "${out}" ] && HOME="${TMPROOT}" "${out}/bin/limactl" --version 2>/dev/null || true)"
+    if [ -n "${expected}" ] && [ "${version}" = "limactl version ${expected}" ]; then
+      pass "version_matches_nixpkgs_lima"
+    else
+      fail "version_matches_nixpkgs_lima" "version=${version:-<none>} expected=limactl version ${expected:-<none>}"
+    fi
   fi
 
   # -------------------------------------------------------------------------
