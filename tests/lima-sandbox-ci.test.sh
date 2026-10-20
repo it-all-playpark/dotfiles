@@ -123,6 +123,23 @@ expect_decision push_lima_sandbox_dir_builds push lib/lima-sandbox/default.nix "
 expect_decision dispatch_builds workflow_dispatch README.md ""
 
 # -------------------------------------------------------------------------
+# pr_rename_out_of_lima_sandbox_builds: git mv で lib/lima-sandbox/ の外へ移すと、
+# rename 検出が新しいパスしか出さなくても build する
+# -------------------------------------------------------------------------
+echo "- pr_rename_out_of_lima_sandbox_builds"
+dir="${TMPROOT}/pr_rename_out"
+new_repo "${dir}"
+mkdir -p "${dir}/docs"
+git -C "${dir}" mv lib/lima-sandbox/default.nix docs/default.nix
+git -C "${dir}" -c user.name=t -c user.email=t@example.invalid commit -q -m rename
+got="$(decide "${dir}" pull_request)"
+if [ -z "${got}" ]; then
+  pass "pr_rename_out_of_lima_sandbox_builds"
+else
+  fail "pr_rename_out_of_lima_sandbox_builds" "skip_build=${got} log=$(tail -n 3 "${dir}.log")"
+fi
+
+# -------------------------------------------------------------------------
 # 差分を取れないときは build する側に倒す
 # -------------------------------------------------------------------------
 echo "- push_initial_builds"

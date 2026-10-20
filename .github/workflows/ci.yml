@@ -68,7 +68,7 @@ jobs:
               base="${BEFORE}"
             fi
           fi
-          if [ -n "${base}" ] && changed="$(git diff --name-only "${base}" HEAD)" &&
+          if [ -n "${base}" ] && changed="$(git diff --no-renames --name-only "${base}" HEAD)" &&
             ! grep -qE '^(lib/lima-sandbox/|flake\.nix$|flake\.lock$|tests/lima-sandbox\.test\.sh$)' <<<"${changed}"; then
             echo "skip_build=1" >>"${GITHUB_OUTPUT}"
             echo "lib/lima-sandbox に関係する変更が無いので、パッチ版 Lima を build しない（base=${base}）"
