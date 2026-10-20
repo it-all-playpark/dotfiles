@@ -216,13 +216,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# skills_deny_covers_main_checkouts_not_worktrees
+# repo_config_deny_covers_main_checkouts_not_worktrees
 # ---------------------------------------------------------------------------
-echo "- skills_deny_covers_main_checkouts_not_worktrees"
+echo "- repo_config_deny_covers_main_checkouts_not_worktrees"
 # denyWrite の glob は allowWrite と違い配下にも効く（2026-10-16 実測: 作業中でない repo の
-# 既存 .claude/skills へのファイル作成が EPERM）。メイン checkout の .claude/skills は塞ぎ、
-# <repo>/.claude/worktrees/<name>/.claude/skills は塞がない。塞ぐと wt-add が取り出せず、
-# worktree の pre-push がそこのスクリプトを読むテストで落ちる。
+# 既存 .claude/skills へのファイル作成が EPERM）。
+# issue #366: Claude Code の組み込み保護は起動元 repo しか塞がないので、~/ghq 深さ 3 の全 repo の
+# .git/hooks・.git/config・.claude/settings{,.local}.json・.claude/hooks も塞ぐ（後で sandbox 外の
+# git や Claude Code に実行されるもの）。<repo>/.claude/worktrees/<name>/ の追跡ファイルは塞がない。
+# 塞ぐと wt-add / dev-flow / bg job が worktree を取り出せず、worktree の pre-push がそこの
+# スクリプトを読むテストで落ちる。glob を `**` にすると worktree 側まで塞がれてこのケースが落ちる。
 DENY_WRITE_JSON="$(jq -c '.sandbox.filesystem.denyWrite' "${SETTINGS}")"
 write_denied() {
   jq -e --arg p "$1" --arg home "${HOME}" '
@@ -240,14 +243,101 @@ write_denied() {
     map(expand_home) | any(. as $e | $p | test($e | glob_to_regex))
   ' <<<"${DENY_WRITE_JSON}" >/dev/null
 }
-MAIN_SKILL="${HOME}/ghq/github.com/playpark-llc/corporate-site/.claude/skills/x/SKILL.md"
-WT_SKILL="${HOME}/ghq/github.com/playpark-llc/corporate-site/.claude/worktrees/w/.claude/skills/x/SKILL.md"
-if ! write_denied "${MAIN_SKILL}"; then
-  fail "skills_deny_covers_main_checkouts_not_worktrees" "main checkout skills not denied: ${MAIN_SKILL}"
-elif write_denied "${WT_SKILL}"; then
-  fail "skills_deny_covers_main_checkouts_not_worktrees" "worktree skills denied: ${WT_SKILL}"
+R="${HOME}/ghq/github.com/playpark-llc/corporate-site"
+WT="${R}/.claude/worktrees/w"
+expected_denied=(
+  "${R}/.claude/skills/x/SKILL.md"
+  "${R}/.git/hooks/pre-push"
+  "${R}/.git/config"
+  "${R}/.claude/settings.json"
+  "${R}/.claude/settings.local.json"
+  "${R}/.claude/hooks/x.sh"
+)
+not_denied=(
+  "${WT}/.claude/settings.json"
+  "${WT}/.claude/settings.local.json"
+  "${WT}/.claude/hooks/x.sh"
+  "${WT}/.claude/skills/x/SKILL.md"
+  # worktree の中で git init したテスト用 repo（.git/hooks・.git/config を `**` にすると塞がれる）
+  "${WT}/.devflow-tmp/fixture/.git/config"
+  "${WT}/.devflow-tmp/fixture/.git/hooks/pre-commit"
+  "${R}/.git/worktrees/w/HEAD"
+  "${R}/.git/refs/heads/x"
+  "${R}/.claude/scheduled_tasks.json"
+)
+missed=()
+for p in "${expected_denied[@]}"; do
+  write_denied "${p}" || missed+=("${p}")
+done
+over_denied=()
+for p in "${not_denied[@]}"; do
+  write_denied "${p}" && over_denied+=("${p}")
+done
+if [ "${#missed[@]}" -ne 0 ]; then
+  fail "repo_config_deny_covers_main_checkouts_not_worktrees" "Not denied: ${missed[*]}"
+elif [ "${#over_denied[@]}" -ne 0 ]; then
+  fail "repo_config_deny_covers_main_checkouts_not_worktrees" "Unexpectedly denied: ${over_denied[*]}"
 else
-  pass "skills_deny_covers_main_checkouts_not_worktrees"
+  pass "repo_config_deny_covers_main_checkouts_not_worktrees"
+fi
+
+# ---------------------------------------------------------------------------
+# permissions_deny_guards_repo_git_and_sns_sync
+# ---------------------------------------------------------------------------
+echo "- permissions_deny_guards_repo_git_and_sns_sync"
+# issue #366: Edit(path) の deny は Edit / Write ツールと Bash のリダイレクトにも効く。Write(path) は
+# Claude Code が参照しない（docs permissions「Read and Edit」）ので書かない。
+# zernio sync --execute（orphan delete で投稿を消す）は --execute が末尾に来るか global option が
+# 前に付くので、前方一致ではなく `*` を両側に置く。Bash ルールは `*` を `.*` にした全体一致で見る。
+DENY_JSON="$(jq -c '.permissions.deny' "${SETTINGS}")"
+bash_denied() {
+  jq -e --arg c "$1" '
+    map(
+      select(startswith("Bash(") and endswith(")"))
+      | .[5:-1]
+      | "^" + (gsub("(?<c>[.^$+?{}()|\\[\\]\\\\])"; "\\\(.c)") | gsub("\\*"; ".*")) + "$"
+    )
+    | any(. as $re | $c | test($re))
+  ' <<<"${DENY_JSON}" >/dev/null
+}
+required_rules=(
+  "Edit(~/ghq/*/*/*/.git/config)"
+  "Edit(~/ghq/*/*/*/.git/hooks/**)"
+  "Bash(zernio *--execute*)"
+)
+missing_rules=()
+for r in "${required_rules[@]}"; do
+  jq -e --arg r "${r}" 'index($r) != null' <<<"${DENY_JSON}" >/dev/null || missing_rules+=("${r}")
+done
+write_rules="$(jq -r '.[] | select(startswith("Write("))' <<<"${DENY_JSON}")"
+sync_execute=(
+  "zernio sync --execute"
+  "zernio sync --dir ./post/blog --from 2026-04-01 --execute"
+  "zernio -v sync --execute --verbose"
+)
+not_sync_execute=(
+  "zernio post --json f.json"
+  "zernio sync --dir x"
+  "zernio delete-post --id X"
+)
+unmatched=()
+for c in "${sync_execute[@]}"; do
+  bash_denied "${c}" || unmatched+=("${c}")
+done
+over_matched=()
+for c in "${not_sync_execute[@]}"; do
+  bash_denied "${c}" && over_matched+=("${c}")
+done
+if [ "${#missing_rules[@]}" -ne 0 ]; then
+  fail "permissions_deny_guards_repo_git_and_sns_sync" "Missing deny rules: ${missing_rules[*]}"
+elif [ -n "${write_rules}" ]; then
+  fail "permissions_deny_guards_repo_git_and_sns_sync" "Write( rules are ignored by Claude Code: ${write_rules//$'\n'/ }"
+elif [ "${#unmatched[@]}" -ne 0 ]; then
+  fail "permissions_deny_guards_repo_git_and_sns_sync" "Not denied: ${unmatched[*]}"
+elif [ "${#over_matched[@]}" -ne 0 ]; then
+  fail "permissions_deny_guards_repo_git_and_sns_sync" "Unexpectedly denied: ${over_matched[*]}"
+else
+  pass "permissions_deny_guards_repo_git_and_sns_sync"
 fi
 
 # ---------------------------------------------------------------------------
