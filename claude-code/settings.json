@@ -519,6 +519,9 @@
       "Bash(security find-generic-password *)",
       "Bash(security find-internet-password *)",
       "Bash(security dump-keychain *)",
+      "Bash(zernio *--execute*)",
+      "Edit(~/ghq/*/*/*/.git/config)",
+      "Edit(~/ghq/*/*/*/.git/hooks/**)",
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(!.env.*.example)",
@@ -604,7 +607,12 @@
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks",
         "~/ghq/*/*/*/.claude/skills",
         "~/ghq/**/.githooks",
-        "~/ghq/**/.husky"
+        "~/ghq/**/.husky",
+        "~/ghq/*/*/*/.git/hooks",
+        "~/ghq/*/*/*/.git/config",
+        "~/ghq/*/*/*/.claude/settings.json",
+        "~/ghq/*/*/*/.claude/settings.local.json",
+        "~/ghq/*/*/*/.claude/hooks"
       ]
     },
     "network": {

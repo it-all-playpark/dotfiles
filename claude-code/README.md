@@ -366,9 +366,10 @@ GIT_TERMINAL_PROMPT=0 git fetch --dry-run && gh api user --jq .login            
 git config --get-all branch.autoSetupMerge; git config --get push.default   # false / current（wrapper の env）
 git push origin                   # vault の Basic 認証で通る。upstream が無くても同名 branch へ（-u は付けない）
 git worktree add -b wt-check "$TMPDIR/wt-check" origin/main && git worktree remove "$TMPDIR/wt-check" && git branch -D wt-check   # upstream を書かずに通る
-git clone https://github.com/it-all-playpark/claude-plugins.git ~/ghq/github.com/it-all-playpark/clone-check   # ~/ghq 配下への clone が通る（確認後に rip で消す）
-# .githooks / .husky を持つ repo（dotfiles 自身など）は、settings.json の denyWrite（~/ghq/**/.githooks 等）で
-# checkout が落ちる（Clone succeeded, but checkout failed）。hook を書き換えて sandbox 外で走らせないための意図した挙動。
+git clone https://github.com/it-all-playpark/claude-plugins.git "$TMPDIR/clone-check"   # $TMPDIR への clone が通る（確認後に rip で消す）
+# ~/ghq/<host>/<org>/<repo> への clone は .git/config・.git/hooks を書けず EPERM になる（下の表）。host-exec の ghq get か人間が行う。
+# .githooks / .husky を持つ repo（dotfiles 自身など）は、~/ghq 配下に取り出すと settings.json の denyWrite（~/ghq/**/.githooks 等）で
+# checkout が落ちる。hook を書き換えて sandbox 外で走らせないための意図した挙動。
 # 組み込み保護の対象ファイル（home-manager/home/file/.ripgreprc 等）も同じく取り出せない。
 # こうした repo の worktree は bin/wt-add で作る（denyWrite は変えず、sandbox 内のまま。excludedCommands にも入れない）:
 wt-add ~/ghq/github.com/it-all-playpark/dotfiles "$TMPDIR/wt-check" wt-check origin/main   # 取り出せないパスに skip-worktree を付けて stdout に列挙
@@ -378,18 +379,41 @@ git -C "$TMPDIR/wt-check" status --short    # 空
 上の push / worktree / clone のどれかが sandbox に塞がれたら、RULES.md の Sandbox 節に代わりの手順を書くか、
 その操作だけ扱いを分ける（excludedCommands に戻さない。git を sandbox 外に出すと hook・設定経由の脱出口になる）。
 
-**起動元 repo の `.git/config` は sandbox 内から書けない**（2026-10-08、Claude Code 2.1.293 で実測）。Claude Code に
-組み込まれた sandbox-runtime が、起動ディレクトリの `.git` が実ディレクトリなら `<cwd>/.git/config` と
-`<cwd>/.git/hooks` を mandatory deny にする（sandbox 外で走る git に `core.fsmonitor` 等を仕込ませないため）。
-runtime には `allowGitConfig` があるが settings.json のスキーマに無く、外せない。worktree は起動元の
-`.git/config` を共有するので同じく書けない。別 repo（clone 先・skills-dev 等）の `.git/config` は書ける。
+### .git/config が書けないときの git 操作
+
+**`~/ghq` 深さ 3 の全 repo（`~/ghq/<host>/<org>/<repo>`）の `.git/config`・`.git/hooks` は sandbox 内から書けない**。
+起動元 repo は、Claude Code に組み込まれた sandbox-runtime が、起動ディレクトリの `.git` が実ディレクトリなら
+`<cwd>/.git/config` と `<cwd>/.git/hooks` を mandatory deny にする（2026-10-08、Claude Code 2.1.293 で実測。
+sandbox 外で走る git に `core.fsmonitor` 等を仕込ませないため）。runtime には `allowGitConfig` があるが settings.json の
+スキーマに無く、外せない。worktree は起動元の `.git/config` を共有するので同じく書けない。
+起動元以外の repo は組み込み保護が掛からないので、settings.json の `sandbox.filesystem.denyWrite` で
+`~/ghq/*/*/*/` の `.git/hooks`・`.git/config`・`.claude/settings.json`・`.claude/settings.local.json`・`.claude/hooks` を塞ぐ
+（issue #366。後で sandbox 外の git や Claude Code に実行される hook・`core.hooksPath`・project settings を仕込ませないため）。
+Edit / Write ツール向けに `permissions.deny` にも `Edit(~/ghq/*/*/*/.git/config)`・`Edit(~/ghq/*/*/*/.git/hooks/**)` を置く。
+glob は深さを固定する。`**` にすると `<repo>/.claude/worktrees/<n>/` に追跡ファイル（`.claude/settings.json` 等）を
+取り出せなくなり、bg job と dev-flow の worktree 作成が落ちる。
+
+- `~/ghq/<host>/<org>/<repo>` への新規 clone・`ghq get`・`git init` は `.git/config` / `.git/hooks` を書けず EPERM になる。
+  host-exec（`ghq get`）か人間が行う。sandbox 内で clone を確かめるときは `$TMPDIR` に向ける
+- `git push -u` は rc 0 で push されるが、upstream は書かれない（エラー表示だけ出る）
+- 他 repo のメイン checkout で pull / switch が `.claude/settings.json`（`.claude/settings.local.json`・`.claude/hooks` も同じ）を
+  変えるときは、`unable to unlink old` が出ても rc 0 で終わり、変更が半端に適用される。その repo を起動元にするか
+  host-exec でやり直し、`git status` を確かめる
+- 既知の限界: denyWrite は文字どおりのパスにしか効かず、祖先ディレクトリの rename で回避できる。誤った書き込みと
+  普通の git・ツールの書き込みを止める速度バンプであって、境界ではない。深さ 4 以上の clone も塞がない
 
 | 操作 | sandbox 内の結果（対処前） | 対処 |
 |------|------|------|
 | `git worktree add -b X <path> origin/main`・`git switch -c X origin/main`・`git switch X`（origin/X から自動作成） | upstream を書けず中断（rc 255）/ branch だけ残って rc 1 | wrapper が `branch.autoSetupMerge=false` を入れる |
-| `git push -u` | push は通るが upstream を書けずにエラー表示 | `-u` を付けない。wrapper の `push.default=current` で素の `git push` が同名 branch へ |
+| `git push -u` | rc 0 で push されるが、upstream は書かれずエラー表示が出る | `-u` を付けない。wrapper の `push.default=current` で素の `git push` が同名 branch へ |
 | `gh pr checkout`（未実測。branch の upstream を `git config` で書く） | 失敗する見込み | `git fetch origin <branch>` → `git switch <branch>` |
-| `git config --local` / `git remote add/set-url` | 書けない（rc 255） | 人間が通常ターミナルで行う |
+| 起動元 repo の `git config --local` / `git remote add/set-url` | 書けない（rc 255） | 人間が通常ターミナルで行う |
+| 他 repo の `git remote add` / `git remote set-url` / `git branch --set-upstream-to` / `git config --local` | 書けない（`remote add` rc 128、`config --local` rc 4） | 人間が通常ターミナルで行う |
+| `git branch -m X Y` | rc 128。rename は済むが、`branch.X` 節の書き換えに失敗して config が半端に残る | sandbox 内で rename しない。必要なら人間が通常ターミナルで行う |
+| `git sparse-checkout init` | `.git/config` を書けず rc 1 | 人間が通常ターミナルで行う |
+| `git clone` / `ghq get` / `git init`（`~/ghq/<host>/<org>/<repo>` へ） | EPERM で落ちる | host-exec の `ghq get` か人間。sandbox 内の確認は `$TMPDIR` へ clone |
+| 他 repo のメイン checkout で `.claude/settings*.json`・`.claude/hooks` を変える pull / switch | `unable to unlink old` を出して rc 0、半端に適用 | その repo を起動元にするか host-exec でやり直し、`git status` を確かめる |
+| husky v9 の `prepare`（`git config core.hooksPath`） | 失敗するが exit 0 で install は続く | 何もしない（`HUSKY=0` は不要） |
 | `git branch -D X` | rc 0 で branch は消えるが、`branch.X` 節を消せずに config lock の警告が出る | upstream 無しで作った branch なら実害なし。人間が upstream 付きで作った branch の節は通常ターミナルで `git config --remove-section` |
 | worktree の中での `gh pr close <N> --delete-branch` | close は通るが、gh がローカルで main に switch しようとして「別の worktree で使用中」で止まり、branch も消えない（sandbox とは無関係） | `gh pr close <N>` → `git push origin --delete <branch>` に分ける |
 
