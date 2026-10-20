@@ -461,9 +461,10 @@ bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の g
   - 残る制約（実機で確かめる）: Desktop が launch environment で同じ変数（`HTTPS_PROXY` / CA 系 / `GIT_CONFIG_COUNT`）を
     設定していると、Desktop のセッションでは settings の `env` が無視される（2026-10-09 の実測では設定していなかった。
     debug log に無視した変数名が出る）。`GIT_CONFIG_*` が Claude Code が settings の `env` で無視する変数に入っていないかは
-    未確認。本体（API）の通信が agent-vault の CA を要るか・`NODE_EXTRA_CA_CERTS` を起動後に読み直すかも未確認。
-    agent-vault が落ちてから drop-in が戻るまで（最大 `StartInterval`）は、Claude が API に繋がらない
-    （wrapper 経由で起動中のセッションも、process の env に `HTTPS_PROXY` が残るので同じ）
+    未確認。`NODE_EXTRA_CA_CERTS` を起動後に読み直すかも未確認。
+    api.anthropic.com は `NO_PROXY` で agent-vault を通さないので、agent-vault が落ちていても本体（API）は繋がる。
+    hook の `/usr/bin/python3`（Apple の 3.9 + LibreSSL）は `SSL_CERT_FILE` を読まず、agent-vault を通すと
+    security-guidance のレビューが `CERTIFICATE_VERIFY_FAILED` で落ちていた（2026-10-21 に実測）
   - account-exec は目印（`CLAUDE_GH_VAULT`）が無ければ従来の `gh_config_dir` を使う（人間の端末と同じ）
 - **本体の env に `AGENT_VAULT_TOKEN` を出さない**。agent-vault の CLI はこれで管理 API（`127.0.0.1:14321`。
   sandbox から到達できる）に認証するので、出すと sandbox 内から credential を読めてしまう。
