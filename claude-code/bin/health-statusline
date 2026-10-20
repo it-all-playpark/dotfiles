@@ -6,11 +6,13 @@
 # stdin の JSON（statusLine の入力）は読み捨てる。読むのは次のファイルだけで、何も書かない:
 #   - ~/.claude/logs/dev-flow-health.log・~/.claude/logs/dev-flow-health.watch-journal.log
 #     （1 行 1 JSON。最終行の report が report JSON のパスを指す）と、その report
-#   - ~/.claude/logs/sandbox-tune/runs.jsonl（1 行 1 JSON。成功行は ts と remaining、失敗行は ts と error）
+#   - ~/.claude/logs/sandbox-tune/runs.jsonl（1 行 1 JSON。成功行は ts と recurring（今も再発している型の数）、
+#     失敗行は ts と error。recurring の無い古い成功行は sbx の値として使わない）
 #
 # 出力（health・sbx の順に ` · ` で繋ぐ。出すものが無い部分は省き、両方無ければ空行）:
 #   health ✓ <経過> / health ⚠ new<N> regressed<M> <経過> / health ⚠ 止まっている? <経過>（26 時間を超えたら）
-#   sbx 残<N>(+d|-d|±0) <経過> / sbx 残<N> <経過>（比べる成功行が無いとき） / sbx ⚠ 失敗 <経過>
+#   sbx 再発<N>(+d|-d|±0) <経過> / sbx 再発<N> <経過>（recurring を持つ比べる成功行が無いとき） / sbx ⚠ 失敗 <経過>
+#   （最後の成功行に recurring が無ければ sbx の部分は出さない）
 # statusLine は頻繁に呼ばれるので jq 3 回で終える。どの入力が壊れていても exit 0。
 set -uo pipefail
 
@@ -60,23 +62,23 @@ jq -nr --arg runs "$runs" '
       end
   ] | first) as $health
 
-  # 増減は直前の成功行と比べる
+  # 増減は recurring を持つ直前の成功行と比べる
   | ([[$runs | split("\n")[]
       | try fromjson catch null | objects
       | (.ts | strings | epoch) as $ts
       | select($ts != null)
       | if .error != null then {ts: $ts, error: true}
-        elif (.remaining | type) == "number" then {ts: $ts, remaining: .remaining}
-        else empty
+        else {ts: $ts, recurring: ((.recurring | numbers) // null)}
         end
     ] | select(length > 0)
       | last as $last
       | ($last.ts | ago) as $age
       | if $last.error then "sbx ⚠ 失敗 \($age)"
-        else (.[:-1] | map(select(.remaining != null)) | last) as $prev
-          | if $prev == null then "sbx 残\($last.remaining) \($age)"
-            else ($last.remaining - $prev.remaining) as $d
-              | "sbx 残\($last.remaining)(\(if $d > 0 then "+\($d)" elif $d < 0 then "-\(-$d)" else "±0" end)) \($age)"
+        elif $last.recurring == null then empty
+        else (.[:-1] | map(select(.recurring != null)) | last) as $prev
+          | if $prev == null then "sbx 再発\($last.recurring) \($age)"
+            else ($last.recurring - $prev.recurring) as $d
+              | "sbx 再発\($last.recurring)(\(if $d > 0 then "+\($d)" elif $d < 0 then "-\(-$d)" else "±0" end)) \($age)"
             end
         end
   ] | first) as $sbx
