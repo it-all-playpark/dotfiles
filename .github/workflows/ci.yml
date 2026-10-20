@@ -27,6 +27,9 @@ jobs:
       GIT_COMMITTER_EMAIL: ci@example.invalid
     steps:
       - uses: actions/checkout@v4
+        with:
+          # lima-sandbox の判定で、PR の merge commit の 1 つ目の親（base）・push 前の commit と diff を取る
+          fetch-depth: 2
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -44,5 +47,36 @@ jobs:
             .#homeConfigurations.naramotoyuuji-darwin.activationPackage \
             .#homeConfigurations.yuji_naramoto-darwin.activationPackage
 
+      # パッチ版 Lima（lib/lima-sandbox）は cache.nixos.org に無く、tests/lima-sandbox.test.sh の build に約 3 分かかる。
+      # PR は base（merge commit の 1 つ目の親）、main への push は push 前との差分に関係するパスがあるときだけ build する。
+      # 差分を取れないとき（初回の push・workflow_dispatch 等）は build する。tests/lima-sandbox-ci.test.sh が確かめる
+      - name: Decide whether to build lib/lima-sandbox
+        id: lima-sandbox
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          if [ "${EVENT_NAME}" = pull_request ]; then
+            base="$(git rev-parse --verify --quiet 'HEAD^1' || true)"
+          elif [ "${EVENT_NAME}" = push ] && [ -n "${BEFORE}" ] && [ "${BEFORE}" != 0000000000000000000000000000000000000000 ]; then
+            # 複数 commit の push で fetch-depth: 2 に入らないときは、push 前の commit だけを取る
+            if ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "${BEFORE}" || true
+            fi
+            if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              base="${BEFORE}"
+            fi
+          fi
+          if [ -n "${base}" ] && changed="$(git diff --name-only "${base}" HEAD)" &&
+            ! grep -qE '^(lib/lima-sandbox/|flake\.nix$|flake\.lock$|tests/lima-sandbox\.test\.sh$)' <<<"${changed}"; then
+            echo "skip_build=1" >>"${GITHUB_OUTPUT}"
+            echo "lib/lima-sandbox に関係する変更が無いので、パッチ版 Lima を build しない（base=${base}）"
+          else
+            echo "パッチ版 Lima を build する（base=${base:-<none>}）"
+          fi
+
       - name: Tests
+        env:
+          LIMA_SANDBOX_SKIP_BUILD: ${{ steps.lima-sandbox.outputs.skip_build }}
         run: nix develop --command tests/run-all.sh
