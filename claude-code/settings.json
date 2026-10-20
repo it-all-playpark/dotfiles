@@ -27,7 +27,6 @@
     "playwright@claude-plugins-official": false,
     "rust-analyzer-lsp@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": true,
     "swift-lsp@claude-plugins-official": false,
     "telegram@claude-plugins-official": false,
     "vercel@claude-plugins-official": true
@@ -76,7 +75,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -98,7 +97,7 @@
         "hooks": [
           {
             "async": false,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -128,7 +127,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -138,7 +137,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -261,7 +260,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -271,7 +270,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -283,7 +282,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -325,7 +324,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -345,7 +344,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -356,7 +355,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
