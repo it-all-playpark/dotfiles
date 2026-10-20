@@ -1,4 +1,9 @@
-_: {
+{ lib, username, ... }:
+let
+  # yuji_naramoto の MacBook では App Store のアプリを使わないので入れない
+  installMasApps = username != "yuji_naramoto";
+in
+{
   # Homebrewの統合設定
   homebrew = {
     enable = true; # Homebrewを有効化
@@ -55,7 +60,7 @@ _: {
       "1password"
       "1password-cli"
     ];
-    masApps = {
+    masApps = lib.optionalAttrs installMasApps {
       # Mac App Storeからインストールするアプリケーションのリスト
       "1Password for Safari" = 1569813296;
       # 接続側(viewer)。ホスト側の jump-desktop-connect は casks にある
