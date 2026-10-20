@@ -1,7 +1,7 @@
 { lib, username, ... }:
 let
-  # yuji_naramoto の MacBook では Jump Desktop と App Store のアプリを使わないので入れない
-  installPersonalApps = username != "yuji_naramoto";
+  # yuji_naramoto の MacBook では App Store のアプリを使わないので入れない
+  installMasApps = username != "yuji_naramoto";
 in
 {
   # Homebrewの統合設定
@@ -45,6 +45,7 @@ in
       "google-japanese-ime"
       "ghostty"
       "hhkb"
+      "jump-desktop-connect"
       "monitorcontrol"
       "microsoft-teams"
       "obsidian"
@@ -58,10 +59,8 @@ in
       "zoom"
       "1password"
       "1password-cli"
-    ]
-    # ホスト側。接続側(viewer)の "Jump Desktop" は masApps にある
-    ++ lib.optionals installPersonalApps [ "jump-desktop-connect" ];
-    masApps = lib.optionalAttrs installPersonalApps {
+    ];
+    masApps = lib.optionalAttrs installMasApps {
       # Mac App Storeからインストールするアプリケーションのリスト
       "1Password for Safari" = 1569813296;
       # 接続側(viewer)。ホスト側の jump-desktop-connect は casks にある
