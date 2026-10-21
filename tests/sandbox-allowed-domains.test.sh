@@ -13,6 +13,10 @@
 # issue #352: gh run view --log / --log-failed はログ本体を GitHub の Actions ログ用ストレージ
 # productionresultssa<N>.blob.core.windows.net から取る（N は run ごとに変わり、観測は 1〜19）。
 # *.blob.core.windows.net は誰でもストレージを作れる外部の書き込み先になるので、0〜19 を完全一致で列挙する。
+#
+# issue #385: Prisma CLI は実行のたびに checkpoint.prisma.io:443 へ使用状況を送り、sandbox が
+# `host is not on the allow list` で拒否していた。allowedDomains には足さず、env の
+# CHECKPOINT_DISABLE=1 で送信そのものを止める。
 
 set -euo pipefail
 
@@ -74,6 +78,20 @@ if [ "${#missing[@]}" -eq 0 ]; then
   pass "gh_actions_log_hosts_exact"
 else
   fail "gh_actions_log_hosts_exact" "missing=${missing[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# prisma_checkpoint_disabled_by_env: env.CHECKPOINT_DISABLE が "1" で、checkpoint.prisma.io は
+# allowedDomains に入れていない（送信を止めて拒否をなくし、外向きの許可は広げない）
+# ---------------------------------------------------------------------------
+echo "- prisma_checkpoint_disabled_by_env"
+checkpoint_disable="$(jq -r '.env.CHECKPOINT_DISABLE // ""' "${SETTINGS}")"
+if [ "${checkpoint_disable}" != "1" ]; then
+  fail "prisma_checkpoint_disabled_by_env" "env.CHECKPOINT_DISABLE=${checkpoint_disable} want=1"
+elif jq -e '.sandbox.network.allowedDomains | index("checkpoint.prisma.io") != null' "${SETTINGS}" >/dev/null; then
+  fail "prisma_checkpoint_disabled_by_env" "checkpoint.prisma.io is in allowedDomains"
+else
+  pass "prisma_checkpoint_disabled_by_env"
 fi
 
 # ---------------------------------------------------------------------------
