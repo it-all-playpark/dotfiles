@@ -32,6 +32,10 @@
     {
       "id": "request:request:docker rmi",
       "reason": "RULES: ホスト（OrbStack）のイメージ削除は人間に頼む"
+    },
+    {
+      "id": "host_exec:ran:dotfiles-sync",
+      "reason": "RULES: dotfiles の PR merge 後のメイン checkout への取り込みは host-exec で dotfiles-sync だけを実行する"
     }
   ],
   "issue": {
