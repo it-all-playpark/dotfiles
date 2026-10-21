@@ -12,6 +12,28 @@
   "criteriaFiles": [
     "claude-code/RULES.md"
   ],
+  "intended": [
+    {
+      "kind": "worktree-guard",
+      "reason": "Claude Code 組み込みの worktree 隔離ガード。設定では外せないので RULES の書き方で避ける"
+    },
+    {
+      "kind": "permission-rule",
+      "reason": "claude-code/settings.json の permissions.deny で止めている。RULES の Tool routing の代替を使う"
+    },
+    {
+      "id": "request:request:kill",
+      "reason": "RULES: プロセスを止めるのは人間（PID を特定して ! kill を示す）"
+    },
+    {
+      "id": "request:request:docker stop",
+      "reason": "RULES: ホスト（OrbStack）のコンテナの停止・削除は人間に頼む"
+    },
+    {
+      "id": "request:request:docker rmi",
+      "reason": "RULES: ホスト（OrbStack）のコンテナの停止・削除は人間に頼む"
+    }
+  ],
   "issue": {
     "repo": "it-all-playpark/dotfiles"
   }
