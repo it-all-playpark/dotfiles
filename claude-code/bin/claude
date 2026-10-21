@@ -52,6 +52,13 @@
 #                              branch / worktree add -b、push -u）が EPERM で失敗するか中断する。upstream を
 #                              自動で書かせず、upstream が無くても素の `git push` が同名 branch に push する
 #
+# 付ける env（sandbox 内から呼んだときだけ。SANDBOX_RUNTIME=1 で判定する）:
+#   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+#                              sandbox 内の Bash から動かす claude（`claude plugin validate` 等）は
+#                              api.anthropic.com と Datadog（http-intake.logs.us5.datadoghq.com）へ必須でない
+#                              通信を出し、allowedDomains に無いので sandbox 拒否を量産する。宛先は許可せず、
+#                              通信そのものを止める。sandbox の外で起動した claude のテレメトリ・自動更新は変えない
+#
 # GIT_CONFIG_* は既にある GIT_CONFIG_COUNT の後ろに積む。Claude Code も sandbox 内のコマンドに
 # safe.directory を同じ形で積み足すので、ここで入れた設定は sandbox 内の git にも届く。
 #
@@ -111,6 +118,11 @@ fi
 # 起動元 repo の .git/config は sandbox が書かせない（下の header 参照）ので、upstream を書きに行かせない
 git_config_add branch.autoSetupMerge false
 git_config_add push.default current
+
+# sandbox 内の claude は必須でない通信を sandbox に拒否されるので出さない（上の header 参照）
+if [ "${SANDBOX_RUNTIME:-}" = 1 ]; then
+  export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+fi
 
 # PATH から shim dir（$HOME/.claude/bin と自身の物理 dir）を除いて実体を解決する
 self="$0"
