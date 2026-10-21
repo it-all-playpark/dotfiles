@@ -132,6 +132,8 @@ sandbox に塞がれたら:
   （組み込み保護は作業中の repo とその上位にしか掛からない）。
 - 2026-10-16 qiita-publish / zenn-publish の除外（4 行）を撤去: corporate-site の .claude/skills へ移って plugin の bin/ から消え、
   PATH 上に実体が無かった。実体の無い bare 名の除外は、PATH に同名を置ければ sandbox 外で走る口になる。
+- 2026-10-21（PR #373）dep-guardian-{discover-prs,test-pr,merge-prs} の除外（6 行）を撤去: dep-guardian skill の撤去で plugin の bin/ から消え、
+  PATH 上に実体が無かった。理由は qiita-publish / zenn-publish と同じ。
 - 2026-10-16 denyWrite の `~/ghq/**/.claude/skills` を `~/ghq/*/*/*/.claude/skills` に絞る: `**` が
   `<repo>/.claude/worktrees/<name>/.claude/skills` にも一致し、wt-add が取り出せず corporate-site の worktree から push すると
   pre-push のテストが毎回落ちていた。denyWrite の glob は配下にも効く（作業中でない repo の既存 .claude/skills へのファイル作成が
