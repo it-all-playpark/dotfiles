@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# test-stop-unfinished-guard.sh
+# stop-unfinished-guard.test.sh
 # stop-unfinished-guard.sh の振る舞いテスト
 #
-# 使い方: bash tests/test-stop-unfinished-guard.sh
+# 使い方: bash claude-code/hooks/stop-unfinished-guard.test.sh
 #
 # 検証項目:
 #   1. main/master/dev/develop branch では exit 0
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK_SCRIPT="${SCRIPT_DIR}/../stop-unfinished-guard.sh"
+HOOK_SCRIPT="${SCRIPT_DIR}/stop-unfinished-guard.sh"
 
 if [[ ! -x ${HOOK_SCRIPT} ]]; then
   echo "ERROR: hook script not found or not executable: ${HOOK_SCRIPT}" >&2
