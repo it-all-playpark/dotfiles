@@ -132,7 +132,7 @@ nix run .#update -- --full
 ```
 
 普段の更新は launchd agent `com.playpark.brew-upgrade` が毎日 04:00 に行います（ログ: `~/Library/Logs/brew-upgrade.log`）。
-sudo が必要な `.pkg` 系 cask は無人では更新できずログに `FAILED:` と残るので、`--full` で拾ってください。
+sudo が必要な `.pkg` 系 cask は無人では更新せずログに `SKIPPED (.pkg, ...)` と残すので、`--full` で拾ってください。
 
 ## Agent Skills
 

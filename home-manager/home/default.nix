@@ -714,9 +714,12 @@ in
     # masApps (App Store アプリ) は macOS の App Store 自動アップデートに任せる。
     # nix-darwin の switch からは brew update / upgrade を外している (darwin/homebrew.nix) ので、
     # 日々の追随はここで行う。brew はユーザー権限で動くため sudo 不要。
-    # ただし .pkg インストーラの cask (box-drive 等) は brew が内部で sudo を呼び、
-    # 無人ではパスワード / Touch ID 待ちで止まる。cask は 1 つずつ timeout 付きで回し、
-    # 止まったものだけ諦めて残りを続ける (取りこぼしは `nix run .#update -- --full` で拾う)。
+    # ただし .pkg インストーラの cask (box-drive, google-japanese-ime 等) は brew が内部で sudo を呼び、
+    # 無人ではパスワード / Touch ID 待ちで止まる。sudo 待ちは uninstall の途中 (launchctl の job を
+    # 外した後) で起きるため、timeout で打ち切ると半端に消えたまま残る (google-japanese-ime では
+    # 変換エンジンの job が外れ、再ログインまでかな変換が効かなくなった)。
+    # そのため .pkg の cask は無人では触らず SKIPPED とだけ記録し、`nix run .#update -- --full` に回す。
+    # 残りの cask は 1 つずつ timeout 付きで回し、止まったものだけ諦めて残りを続ける。
     # 04:00 にスリープ中だった場合は launchd が復帰時にまとめて実行する。
     brew-upgrade = {
       enable = true;
@@ -728,13 +731,21 @@ in
           ''
             /bin/wait4path /opt/homebrew/bin/brew || exit 1
             timeout="${pkgs.coreutils}/bin/timeout"
+            jq="${pkgs.jq}/bin/jq"
             rc=0
             echo "=== brew-upgrade $(date) ==="
             "$timeout" 600 brew update || rc=1
             "$timeout" 1800 brew upgrade --formula || rc=1
-            for cask in $(brew outdated --cask --quiet); do
-              "$timeout" 900 brew upgrade --cask "$cask" </dev/null || { echo "FAILED: $cask"; rc=1; }
-            done
+            outdated=$(brew outdated --cask --quiet) || rc=1
+            if [ -n "$outdated" ]; then
+              info=$(brew info --cask --json=v2 $outdated) || rc=1
+              for cask in $(printf '%s\n' "$info" | "$jq" -r '.casks[] | select(any(.artifacts[]; has("pkg"))) | .full_token'); do
+                echo "SKIPPED (.pkg, run nix run .#update -- --full): $cask"
+              done
+              for cask in $(printf '%s\n' "$info" | "$jq" -r '.casks[] | select(any(.artifacts[]; has("pkg")) | not) | .full_token'); do
+                "$timeout" 900 brew upgrade --cask "$cask" </dev/null || { echo "FAILED: $cask"; rc=1; }
+              done
+            fi
             exit $rc
           ''
         ];
