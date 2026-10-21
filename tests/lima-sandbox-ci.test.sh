@@ -5,7 +5,8 @@
 # Requires: git, yq (yq-go)
 #
 # - ci.yml の判定 step（id: lima-sandbox）の run を取り出し、一時 repo の差分で skip_build を出すかを見る
-# - tests/lima-sandbox.test.sh を偽の nix で走らせ、LIMA_SANDBOX_SKIP_BUILD=1 で nix build を呼ばないことを見る
+# - tests/lima-sandbox.test.sh・tests/sandbox-docker.test.sh を偽の nix で走らせ、LIMA_SANDBOX_SKIP_BUILD=1 で
+#   パッチ版 Lima の nix build を呼ばないことを見る
 
 set -euo pipefail
 
@@ -117,6 +118,8 @@ expect_decision pr_lima_sandbox_dir_builds pull_request lib/lima-sandbox/deny.go
 expect_decision pr_flake_lock_builds pull_request flake.lock ""
 expect_decision pr_flake_nix_builds pull_request flake.nix ""
 expect_decision pr_lima_sandbox_test_builds pull_request tests/lima-sandbox.test.sh ""
+expect_decision pr_sandbox_docker_yaml_builds pull_request home-manager/home/file/sandbox-docker/lima.yaml ""
+expect_decision pr_sandbox_docker_test_builds pull_request tests/sandbox-docker.test.sh ""
 expect_decision pr_similar_path_skips_build pull_request docs/lib/lima-sandbox/x.md 1
 expect_decision push_unrelated_skips_build push README.md 1
 expect_decision push_lima_sandbox_dir_builds push lib/lima-sandbox/default.nix ""
@@ -164,11 +167,12 @@ if [ -z "${got}" ]; then pass "pr_without_parent_builds"; else fail "pr_without_
 echo ""
 echo "--- tests/lima-sandbox.test.sh: LIMA_SANDBOX_SKIP_BUILD ---"
 
-# 偽の nix: 呼ばれた引数を記録し、aarch64-darwin で daemon に届くふりをする（build は失敗させる）
+# 偽の nix: 呼ばれた引数を 1 呼び出し 1 行で記録し（--expr の改行は空白にする）、aarch64-darwin で daemon に
+# 届くふりをする（build は失敗させる）
 mkdir -p "${TMPROOT}/bin"
 cat >"${TMPROOT}/bin/nix" <<'EOF'
 #!/usr/bin/env bash
-echo "$*" >>"${NIX_STUB_LOG}"
+echo "${*//$'\n'/ }" >>"${NIX_STUB_LOG}"
 case "$1" in
 store) exit 0 ;;
 build) exit 1 ;;
@@ -222,6 +226,54 @@ if [ -z "${problems}" ]; then
   pass "no_skip_build_runs_nix_build"
 else
   fail "no_skip_build_runs_nix_build" "${problems} out=$(tail -n 8 "${TMPROOT}/noskip.out")"
+fi
+
+echo ""
+echo "--- tests/sandbox-docker.test.sh: LIMA_SANDBOX_SKIP_BUILD ---"
+
+run_docker_test() {
+  local name="$1"
+  shift
+  : >"${TMPROOT}/${name}.nix.log"
+  env "$@" PATH="${TMPROOT}/bin:${PATH}" NIX_STUB_LOG="${TMPROOT}/${name}.nix.log" \
+    bash "${REPO_ROOT}/tests/sandbox-docker.test.sh" >"${TMPROOT}/${name}.out" 2>&1 || true
+}
+
+lima_build_tests=(filled_mounts_only_tmp_claude filled_port_forwards filled_egress_proxy provision_matches_docker_template)
+
+# -------------------------------------------------------------------------
+# docker_skip_build_skips_lima_build: 1 なら build した limactl を要する 4 つを SKIP と出して
+# パッチ版 Lima を nix build せず、評価だけの launchd_agent_uses_patched_limactl は走らせる
+# -------------------------------------------------------------------------
+echo "- docker_skip_build_skips_lima_build"
+run_docker_test docker-skip LIMA_SANDBOX_SKIP_BUILD=1
+problems=""
+grep -q '^build.*lib/lima-sandbox' "${TMPROOT}/docker-skip.nix.log" && problems="${problems} lima-build-called"
+for t in "${lima_build_tests[@]}"; do
+  grep -qF "SKIP: ${t}" "${TMPROOT}/docker-skip.out" || problems="${problems} no-skip-${t}"
+done
+grep -qF -- '- launchd_agent_uses_patched_limactl' "${TMPROOT}/docker-skip.out" || problems="${problems} launchd-not-run"
+if [ -z "${problems}" ]; then
+  pass "docker_skip_build_skips_lima_build"
+else
+  fail "docker_skip_build_skips_lima_build" "${problems} out=$(tail -n 8 "${TMPROOT}/docker-skip.out")"
+fi
+
+# -------------------------------------------------------------------------
+# docker_no_skip_build_runs_lima_build: 変数が無いときは今どおりパッチ版 Lima を build して 4 つを検査する
+# -------------------------------------------------------------------------
+echo "- docker_no_skip_build_runs_lima_build"
+run_docker_test docker-noskip -u LIMA_SANDBOX_SKIP_BUILD
+problems=""
+grep -q '^build.*lib/lima-sandbox' "${TMPROOT}/docker-noskip.nix.log" || problems="${problems} lima-build-not-called"
+grep -qF 'SKIP:' "${TMPROOT}/docker-noskip.out" && problems="${problems} skipped"
+for t in "${lima_build_tests[@]}"; do
+  grep -qF -- "- ${t}" "${TMPROOT}/docker-noskip.out" || problems="${problems} ${t}-not-run"
+done
+if [ -z "${problems}" ]; then
+  pass "docker_no_skip_build_runs_lima_build"
+else
+  fail "docker_no_skip_build_runs_lima_build" "${problems} out=$(tail -n 8 "${TMPROOT}/docker-noskip.out")"
 fi
 
 echo ""

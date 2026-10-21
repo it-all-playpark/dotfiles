@@ -8,6 +8,9 @@
 # tier-1: lima.yaml の定義と vm-egress-proxy の設定、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）
 # tier-2: パッチ版 limactl の template copy --fill で展開した mounts / portForwards、
 #         Lima の docker template との手順の突き合わせ、home-manager の評価結果（launchd agent・docker-vm・image）
+#
+# LIMA_SANDBOX_SKIP_BUILD=1 のときはパッチ版 Lima の build を要する 4 つ（filled_*・provision_matches_docker_template）を
+# skip し、評価だけで済む残りの tier-2 は走らせる
 
 set -euo pipefail
 
@@ -238,42 +241,50 @@ else
   # path: で評価する（git の flake は untracked の新規ファイルを見ないので、commit 前でも走るように）
   flake_ref="path:${REPO_ROOT}"
   pkgs_expr="import (builtins.getFlake \"${flake_ref}\").inputs.nixpkgs { system = \"${system}\"; }"
-  lima="$(nix build --no-link --print-out-paths --impure --expr "
+
+  # パッチ版 Lima は cache.nixos.org に無く、build はソースからで約 3 分かかる。CI は関係するパスが変わらない
+  # PR・push でこれを 1 にして、build した limactl を要する 4 つを飛ばす（.github/workflows/ci.yml）
+  if [ "${LIMA_SANDBOX_SKIP_BUILD:-}" = "1" ]; then
+    for t in filled_mounts_only_tmp_claude filled_port_forwards filled_egress_proxy provision_matches_docker_template; do
+      skip "${t}" "LIMA_SANDBOX_SKIP_BUILD=1"
+    done
+  else
+    lima="$(nix build --no-link --print-out-paths --impure --expr "
     let pkgs = ${pkgs_expr}; in pkgs.callPackage ${REPO_ROOT}/lib/lima-sandbox { }
   " 2>"${TMPROOT}/nix.err" || true)"
 
-  # 展開は使い捨ての LIMA_HOME で行う（~/.lima/_config の default.yaml / override.yaml を混ぜない）。
-  # image は nix が store パスを差し込む前の @image@ のままでは展開できないので仮のパスにする
-  sed 's|@image@|/nix/store/00000000000000000000000000000000-image.img|' "${LIMA_YAML}" >"${TMPROOT}/sandbox-docker.yaml"
-  mkdir -p "${TMPROOT}/lima-home"
-  if [ -n "${lima}" ] &&
-    LIMA_HOME="${TMPROOT}/lima-home" HOME="${TMPROOT}" "${lima}/bin/limactl" template copy --fill \
-      "${TMPROOT}/sandbox-docker.yaml" - >"${TMPROOT}/filled.yaml" 2>>"${TMPROOT}/nix.err"; then
-    yq -o=json '.' "${TMPROOT}/filled.yaml" >"${TMPROOT}/filled.json"
-  else
-    echo '{}' >"${TMPROOT}/filled.json"
-  fi
+    # 展開は使い捨ての LIMA_HOME で行う（~/.lima/_config の default.yaml / override.yaml を混ぜない）。
+    # image は nix が store パスを差し込む前の @image@ のままでは展開できないので仮のパスにする
+    sed 's|@image@|/nix/store/00000000000000000000000000000000-image.img|' "${LIMA_YAML}" >"${TMPROOT}/sandbox-docker.yaml"
+    mkdir -p "${TMPROOT}/lima-home"
+    if [ -n "${lima}" ] &&
+      LIMA_HOME="${TMPROOT}/lima-home" HOME="${TMPROOT}" "${lima}/bin/limactl" template copy --fill \
+        "${TMPROOT}/sandbox-docker.yaml" - >"${TMPROOT}/filled.yaml" 2>>"${TMPROOT}/nix.err"; then
+      yq -o=json '.' "${TMPROOT}/filled.yaml" >"${TMPROOT}/filled.json"
+    else
+      echo '{}' >"${TMPROOT}/filled.json"
+    fi
 
-  # ---------------------------------------------------------------------------
-  # filled_mounts_only_tmp_claude: 展開後の mounts は /private/tmp/claude（writable）の 1 件だけ
-  # ---------------------------------------------------------------------------
-  echo "- filled_mounts_only_tmp_claude"
-  got="$(jq -c '[(.mounts // [])[] | {location, mountPoint, writable}]' "${TMPROOT}/filled.json")"
-  want='[{"location":"/private/tmp/claude","mountPoint":"/private/tmp/claude","writable":true}]'
-  if [ "${got}" = "${want}" ]; then
-    pass "filled_mounts_only_tmp_claude"
-  else
-    fail "filled_mounts_only_tmp_claude" "got=${got} err=$(tail -n 3 "${TMPROOT}/nix.err")"
-  fi
+    # ---------------------------------------------------------------------------
+    # filled_mounts_only_tmp_claude: 展開後の mounts は /private/tmp/claude（writable）の 1 件だけ
+    # ---------------------------------------------------------------------------
+    echo "- filled_mounts_only_tmp_claude"
+    got="$(jq -c '[(.mounts // [])[] | {location, mountPoint, writable}]' "${TMPROOT}/filled.json")"
+    want='[{"location":"/private/tmp/claude","mountPoint":"/private/tmp/claude","writable":true}]'
+    if [ "${got}" = "${want}" ]; then
+      pass "filled_mounts_only_tmp_claude"
+    else
+      fail "filled_mounts_only_tmp_claude" "got=${got} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+    fi
 
-  # ---------------------------------------------------------------------------
-  # filled_port_forwards: 展開後の portForwards を Lima と同じく上から最初に一致した規則で引き、
-  # guest の TCP 1024〜9999 だけが host の 127.0.0.1 に転送され、8384 とそれ以外（UDP を含む）は
-  # ignore になる。どれにも一致しなければ Lima が末尾に足す 127.0.0.1 への転送に落ちる。
-  # guestIP 127.0.0.1 は 0.0.0.0・::・::1 で待ち受けるものにも一致する（Lima の templates/default.yaml）
-  # ---------------------------------------------------------------------------
-  echo "- filled_port_forwards"
-  got="$(jq -c --argjson uid "$(id -u)" '
+    # ---------------------------------------------------------------------------
+    # filled_port_forwards: 展開後の portForwards を Lima と同じく上から最初に一致した規則で引き、
+    # guest の TCP 1024〜9999 だけが host の 127.0.0.1 に転送され、8384 とそれ以外（UDP を含む）は
+    # ignore になる。どれにも一致しなければ Lima が末尾に足す 127.0.0.1 への転送に落ちる。
+    # guestIP 127.0.0.1 は 0.0.0.0・::・::1 で待ち受けるものにも一致する（Lima の templates/default.yaml）
+    # ---------------------------------------------------------------------------
+    echo "- filled_port_forwards"
+    got="$(jq -c --argjson uid "$(id -u)" '
     def ip_match($r; $ip):
       if ($r.guestIP == "0.0.0.0" or $r.guestIP == "::") then
         (if $r.guestIPMustBeZero then ($ip == "0.0.0.0" or $ip == "::") else true end)
@@ -299,7 +310,7 @@ else
       ] as $cases
       | [$cases[] as $c | "\($c[0]) \($c[1]) \($c[2]) => \(decide($c[0]; $c[1]; $c[2]))"])
     }' "${TMPROOT}/filled.json" 2>&1 || true)"
-  want="$(jq -cn --arg s "/run/user/$(id -u)/docker.sock" '{
+    want="$(jq -cn --arg s "/run/user/$(id -u)/docker.sock" '{
     sockets: [$s],
     ports: [
       "tcp 127.0.0.1 1024 => forward 127.0.0.1:1024", "tcp 0.0.0.0 3000 => forward 127.0.0.1:3000",
@@ -310,56 +321,57 @@ else
       "udp 0.0.0.0 3000 => ignore", "udp 127.0.0.1 53 => ignore", "udp 0.0.0.0 8384 => ignore"
     ]
   }')"
-  if [ "${got}" = "${want}" ]; then
-    pass "filled_port_forwards"
-  else
-    fail "filled_port_forwards" "got=${got}"
-  fi
+    if [ "${got}" = "${want}" ]; then
+      pass "filled_port_forwards"
+    else
+      fail "filled_port_forwards" "got=${got}"
+    fi
 
-  # ---------------------------------------------------------------------------
-  # filled_egress_proxy: Lima が展開した後の provision（apt の data・daemon.json・config.json の yq）に
-  # param.egressProxy が埋まり、env が VM に渡る（param を展開しない欄に書いていないこと）
-  # ---------------------------------------------------------------------------
-  echo "- filled_egress_proxy"
-  proxy="$(jq -r '.param.egressProxy' "${TMPROOT}/lima.json")"
-  # {{.Home}} は VM の中のホーム（.user.home）に展開されるので ~ に戻して比べる
-  got="$(jq -c --arg p "${proxy}" '(.user.home // "") as $h | {
+    # ---------------------------------------------------------------------------
+    # filled_egress_proxy: Lima が展開した後の provision（apt の data・daemon.json・config.json の yq）に
+    # param.egressProxy が埋まり、env が VM に渡る（param を展開しない欄に書いていないこと）
+    # ---------------------------------------------------------------------------
+    echo "- filled_egress_proxy"
+    proxy="$(jq -r '.param.egressProxy' "${TMPROOT}/lima.json")"
+    # {{.Home}} は VM の中のホーム（.user.home）に展開されるので ~ に戻して比べる
+    got="$(jq -c --arg p "${proxy}" '(.user.home // "") as $h | {
     env: ((.env // {}) | [.http_proxy, .https_proxy, .HTTP_PROXY, .HTTPS_PROXY] | unique),
     provisions: [(.provision // [])[] | select((.content // .expression // "") | contains($p))
       | .path | if $h != "" and startswith($h + "/") then "~" + ltrimstr($h) else . end],
     unfilled: [(.provision // [])[] | select(tojson | contains("{{.Param.egress"))] | length
   }' "${TMPROOT}/filled.json" 2>&1 || true)"
-  want="$(jq -cn --arg p "${proxy}" '{
+    want="$(jq -cn --arg p "${proxy}" '{
     env: [$p],
     provisions: ["/etc/apt/apt.conf.d/95vm-egress-proxy", "~/.config/docker/daemon.json", "~/.docker/config.json"],
     unfilled: 0
   }')"
-  if [ "${got}" = "${want}" ]; then
-    pass "filled_egress_proxy"
-  else
-    fail "filled_egress_proxy" "got=${got} want=${want}"
-  fi
-
-  # ---------------------------------------------------------------------------
-  # provision_matches_docker_template: rootless docker の入れ方は Lima の docker template と同じ。
-  # 外すのは先頭の provision（/etc/hosts に host.docker.internal を足す）だけ。
-  # 足すのは vm-egress-proxy の設定（param.egressProxy を使うもの。lima_yaml_egress_proxy で見る）だけ
-  # ---------------------------------------------------------------------------
-  echo "- provision_matches_docker_template"
-  upstream="${lima}/share/lima/templates/docker.yaml"
-  if [ -n "${lima}" ] && [ -f "${upstream}" ]; then
-    yq -o=json '{"provision": .provision[1:], "probes": .probes, "containerd": .containerd,
-      "containerdSnapshotter": .param.containerdSnapshotter}' "${upstream}" >"${TMPROOT}/upstream.json"
-    jq '{"provision": [.provision[] | select(tojson | test("egressProxy") | not)], "probes": .probes,
-      "containerd": .containerd, "containerdSnapshotter": .param.containerdSnapshotter}' "${TMPROOT}/lima.json" >"${TMPROOT}/ours.json"
-    if jq -e --slurpfile u "${TMPROOT}/upstream.json" '. == $u[0]' "${TMPROOT}/ours.json" >/dev/null &&
-      jq -e '.provision[0].script | test("get.docker.com")' "${TMPROOT}/ours.json" >/dev/null; then
-      pass "provision_matches_docker_template"
+    if [ "${got}" = "${want}" ]; then
+      pass "filled_egress_proxy"
     else
-      fail "provision_matches_docker_template" "ours=$(jq -c . "${TMPROOT}/ours.json") upstream=$(jq -c . "${TMPROOT}/upstream.json")"
+      fail "filled_egress_proxy" "got=${got} want=${want}"
     fi
-  else
-    fail "provision_matches_docker_template" "lima=${lima:-<none>} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+
+    # ---------------------------------------------------------------------------
+    # provision_matches_docker_template: rootless docker の入れ方は Lima の docker template と同じ。
+    # 外すのは先頭の provision（/etc/hosts に host.docker.internal を足す）だけ。
+    # 足すのは vm-egress-proxy の設定（param.egressProxy を使うもの。lima_yaml_egress_proxy で見る）だけ
+    # ---------------------------------------------------------------------------
+    echo "- provision_matches_docker_template"
+    upstream="${lima}/share/lima/templates/docker.yaml"
+    if [ -n "${lima}" ] && [ -f "${upstream}" ]; then
+      yq -o=json '{"provision": .provision[1:], "probes": .probes, "containerd": .containerd,
+      "containerdSnapshotter": .param.containerdSnapshotter}' "${upstream}" >"${TMPROOT}/upstream.json"
+      jq '{"provision": [.provision[] | select(tojson | test("egressProxy") | not)], "probes": .probes,
+      "containerd": .containerd, "containerdSnapshotter": .param.containerdSnapshotter}' "${TMPROOT}/lima.json" >"${TMPROOT}/ours.json"
+      if jq -e --slurpfile u "${TMPROOT}/upstream.json" '. == $u[0]' "${TMPROOT}/ours.json" >/dev/null &&
+        jq -e '.provision[0].script | test("get.docker.com")' "${TMPROOT}/ours.json" >/dev/null; then
+        pass "provision_matches_docker_template"
+      else
+        fail "provision_matches_docker_template" "ours=$(jq -c . "${TMPROOT}/ours.json") upstream=$(jq -c . "${TMPROOT}/upstream.json")"
+      fi
+    else
+      fail "provision_matches_docker_template" "lima=${lima:-<none>} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+    fi
   fi
 
   hm_expr="
