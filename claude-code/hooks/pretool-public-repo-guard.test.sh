@@ -182,6 +182,8 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=matching \
   run_case "21f_push_default_matching_falls_back" "$OTHER" "git push" ask
 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0='refs/heads/*:refs/heads/*' \
   run_case "21g_remote_push_refspec_falls_back" "$OTHER" "git push origin" ask
+run_case "21h_xargs_appended_refspec_falls_back" "$OTHER" "echo leak | xargs git push origin" ask
+run_case "21i_env_prefix_falls_back" "$OTHER" "GIT_DIR=$OTHER/.git git push origin HEAD" ask
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"

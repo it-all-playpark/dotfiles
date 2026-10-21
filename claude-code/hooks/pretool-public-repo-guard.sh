@@ -60,7 +60,7 @@ trap 'rm -f "$TEXT"' EXIT
 # push_revs: コマンド中の git push が送る src を commit に解決して PUSH_REVS に入れる。
 # 解決できない・判定に迷う形は 1 を返す（呼び出し側は全ローカルブランチの検査に戻す。未検査では通さない）
 push_revs() {
-  local seg tok spec src sha i
+  local seg tok spec src sha
   local -a toks args srcs=()
   PUSH_REVS=()
   while IFS= read -r seg; do
@@ -68,12 +68,12 @@ push_revs() {
     # quote・変数展開・redirect などを含む形は token に割れないので解決しない
     [[ $seg != *[\"\'\`\$\\\(\)\<\>]* ]] || return 1
     read -ra toks <<<"$seg"
-    i=0
-    while [[ $i -lt ${#toks[@]} && ${toks[$i]} != git ]]; do i=$((i + 1)); done
-    # git と push の間にグローバルオプション（-C 等）がある形・push 以外のサブコマンドは解決しない
-    [[ ${toks[$((i + 1))]:-} == push ]] || return 1
+    # git がコマンド語でない形（`… | xargs git push origin` は refspec が後から足される、
+    # `GIT_DIR=… git push` は別 repo を送る）・git と push の間にグローバルオプション（-C 等）が
+    # ある形・push 以外のサブコマンドは解決しない
+    [[ ${toks[0]:-} == git && ${toks[1]:-} == push ]] || return 1
     args=()
-    for tok in "${toks[@]:$((i + 2))}"; do
+    for tok in "${toks[@]:2}"; do
       case $tok in
       -f | --force | --force-with-lease | --force-with-lease=* | --force-if-includes | -u | --set-upstream | \
         -q | --quiet | -v | --verbose | -n | --dry-run | --no-verify | --verify | --atomic | --progress | --no-progress | --porcelain) ;;
