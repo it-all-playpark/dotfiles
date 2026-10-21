@@ -47,7 +47,8 @@ jobs:
             .#homeConfigurations.naramotoyuuji-darwin.activationPackage \
             .#homeConfigurations.yuji_naramoto-darwin.activationPackage
 
-      # パッチ版 Lima（lib/lima-sandbox）は cache.nixos.org に無く、tests/lima-sandbox.test.sh の build に約 3 分かかる。
+      # パッチ版 Lima（lib/lima-sandbox）は cache.nixos.org に無く、tests/lima-sandbox.test.sh・tests/sandbox-docker.test.sh の
+      # build に約 3 分かかる。
       # PR は base（merge commit の 1 つ目の親）、main への push は push 前との差分に関係するパスがあるときだけ build する。
       # 差分を取れないとき（初回の push・workflow_dispatch 等）は build する。tests/lima-sandbox-ci.test.sh が確かめる
       - name: Decide whether to build lib/lima-sandbox
@@ -69,7 +70,7 @@ jobs:
             fi
           fi
           if [ -n "${base}" ] && changed="$(git diff --no-renames --name-only "${base}" HEAD)" &&
-            ! grep -qE '^(lib/lima-sandbox/|flake\.nix$|flake\.lock$|tests/lima-sandbox\.test\.sh$)' <<<"${changed}"; then
+            ! grep -qE '^(lib/lima-sandbox/|home-manager/home/file/sandbox-docker/|flake\.nix$|flake\.lock$|tests/(lima-sandbox|sandbox-docker)\.test\.sh$)' <<<"${changed}"; then
             echo "skip_build=1" >>"${GITHUB_OUTPUT}"
             echo "lib/lima-sandbox に関係する変更が無いので、パッチ版 Lima を build しない（base=${base}）"
           else
