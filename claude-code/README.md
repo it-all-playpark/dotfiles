@@ -418,7 +418,7 @@ glob は深さを固定する。`**` にすると `<repo>/.claude/worktrees/<n>/
 | worktree の中での `gh pr close <N> --delete-branch` | close は通るが、gh がローカルで main に switch しようとして「別の worktree で使用中」で止まり、branch も消えない（sandbox とは無関係） | `gh pr close <N>` → `git push origin --delete <branch>` に分ける |
 
 bg job でも `echo "$CLAUDE_GH_VAULT"` と `gh api user --jq .login`、上の git の行（push・worktree・clone を含む）を確かめる。
-あわせて git / gh を使う skill（dep-guardian・zenn-publish・qiita-publish）を 1 回ずつ流し、結果を PR に記録してからマージする。
+あわせて git / gh を使う skill（dev-flow・pr-iterate）を 1 回ずつ流し、結果を PR に記録してからマージする。
 
 ### 決めたこと
 

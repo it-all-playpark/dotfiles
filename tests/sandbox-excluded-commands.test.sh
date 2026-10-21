@@ -108,7 +108,6 @@ fi
 # どちらにも無い bin は分類漏れとして落とす（issue #238）。
 # ---------------------------------------------------------------------------
 UNREGISTERED_BINS=(
-  "ui-verify-stack|repo の dev コマンドを実行する。sandbox 外に出すと脱出口になる（skills #766）"
   "workspace-prebuild|repo の pnpm build を実行する。sandbox 外に出すと脱出口になる"
   "run-tests|repo の tests/run-*.sh や pnpm test を実行する。sandbox 外に出すと脱出口になる"
   "detect-and-install|repo の依存を install する（postinstall は repo の任意コード）。sandbox 外に出すと脱出口になる（skills #868）"
@@ -136,7 +135,6 @@ UNREGISTERED_BINS=(
   "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "gmail-receipts|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "ga-analyzer-fetch|GA4 API（*.googleapis.com）は sandbox 内から届く"
-  "blog-cross-post-resolve-source|gh も git 書き込みも呼ばない"
   "skill-creator-init|gh も git 書き込みも呼ばない"
   "sns-announce-check-length|gh も git 書き込みも呼ばない"
   "sns-announce-extract-metadata|gh も git 書き込みも呼ばない"
