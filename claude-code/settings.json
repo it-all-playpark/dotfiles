@@ -563,6 +563,7 @@
       "generate-thumbnail *",
       "codex:*",
       "zernio:*",
+      "meeting play *",
       "/usr/bin/top *",
       "/usr/bin/pgrep *",
       "/usr/sbin/lsof *"
