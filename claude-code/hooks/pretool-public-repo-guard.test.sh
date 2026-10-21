@@ -139,6 +139,59 @@ R=$(new_repo hashlike 1)
 commit_file "$R" "rev = a${PHONE//-/}b; name = task-$(printf 'x%.0s' {1..24})"
 run_case "14_embedded_digits_and_task_prefix_pass" "$R" "git push" pass
 
+# commit_on_branch <repo> <branch> <content>: 別ブランチに未 push の commit を作り、元のブランチに戻る
+commit_on_branch() {
+  git -C "$1" switch -q -c "$2"
+  commit_file "$1" "$3"
+  git -C "$1" switch -q -
+}
+
+# 15-16. push する src だけを見る: 別ブランチにだけ token があり、現在ブランチは clean → 通す
+OTHER=$(new_repo otherleak 1)
+commit_on_branch "$OTHER" leak "token=$GH_TOKEN_LIKE"
+commit_on_branch "$OTHER" side "just a normal line"
+commit_file "$OTHER" "just a normal line"
+run_case "15_other_branch_leak_push_passes" "$OTHER" "git push" pass
+run_case "16_other_branch_leak_push_head_passes" "$OTHER" "git push origin HEAD" pass
+
+# 17. 現在ブランチに token（別ブランチは clean）→ git push / git push origin HEAD とも ask
+CUR=$(new_repo curleak 1)
+commit_on_branch "$CUR" side "just a normal line"
+commit_file "$CUR" "token=$GH_TOKEN_LIKE"
+run_case "17a_current_branch_leak_push_asks" "$CUR" "git push" ask
+run_case "17b_current_branch_leak_push_head_asks" "$CUR" "git push -u origin HEAD" ask
+
+# 18-19. src を明示した push はそのブランチを見る
+run_case "18a_explicit_leak_branch_asks" "$OTHER" "git push origin leak" ask
+run_case "18b_explicit_leak_refspec_asks" "$OTHER" "git push origin +leak:refs/heads/review" ask
+run_case "19a_explicit_clean_branch_passes" "$CUR" "git push origin side" pass
+run_case "19b_explicit_clean_refspec_passes" "$CUR" "git push origin side:review" pass
+
+# 20. 複数 refspec はすべての src を見る（どれか 1 つに token があれば ask）
+run_case "20a_multiple_refspecs_one_leak_asks" "$OTHER" "git push origin side leak:review" ask
+run_case "20b_multiple_refspecs_all_clean_passes" "$OTHER" "git push origin HEAD side:review" pass
+run_case "20c_multiple_push_commands_one_leak_asks" "$OTHER" "git push origin side && git push origin leak" ask
+
+# 21. src を解決できない push は全ローカルブランチを見る
+run_case "21a_all_falls_back_to_branches" "$OTHER" "git push --all origin" ask
+run_case "21b_mirror_falls_back_to_branches" "$OTHER" "git push --mirror origin" ask
+run_case "21c_tags_falls_back_to_branches" "$OTHER" "git push --tags origin" ask
+run_case "21d_missing_ref_falls_back_to_branches" "$OTHER" "git push origin no-such-branch" ask
+run_case "21e_global_option_falls_back_to_branches" "$OTHER" "git -C $OTHER push" ask
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=push.default GIT_CONFIG_VALUE_0=matching \
+  run_case "21f_push_default_matching_falls_back" "$OTHER" "git push" ask
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0='refs/heads/*:refs/heads/*' \
+  run_case "21g_remote_push_refspec_falls_back" "$OTHER" "git push origin" ask
+run_case "21h_xargs_appended_refspec_falls_back" "$OTHER" "echo leak | xargs git push origin" ask
+run_case "21i_env_prefix_falls_back" "$OTHER" "GIT_DIR=$OTHER/.git git push origin HEAD" ask
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.mirror GIT_CONFIG_VALUE_0=true \
+  run_case "21j_remote_mirror_falls_back" "$OTHER" "git push origin" ask
+
+# 22. 前段が HEAD や cwd を変えうる複合コマンドは、hook 時点の HEAD で解決せず全ローカルブランチを見る
+run_case "22a_switch_then_push_falls_back" "$OTHER" "git switch leak && git push" ask
+run_case "22b_checkout_then_push_head_falls_back" "$OTHER" "git checkout leak; git push origin HEAD" ask
+run_case "22c_cd_then_push_falls_back" "$OTHER" "cd $OTHER && git push" ask
+
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 if [[ $FAIL -gt 0 ]]; then
