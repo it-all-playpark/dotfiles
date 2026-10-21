@@ -12,7 +12,8 @@
 # 検査する操作と範囲:
 #   - git push: push する src（refspec 省略時は現在ブランチ）から辿れて、まだどの remote にも無い
 #     commit（<src>... --not --remotes）の追加行と commit message。src を解決できない・判定に迷う
-#     push（--all / --mirror / --tags、未知のオプション、存在しない ref、push.default=matching 等）は
+#     push（--all / --mirror / --tags、未知のオプション、存在しない ref、push.default=matching、
+#     remote.<name>.mirror、git push 単独でない複合コマンド等）は
 #     全ローカルブランチ（--branches --not --remotes）を検査する
 #   - gh pr|issue create|comment|edit: コマンド文字列（--title / --body）と --body-file / -F のファイル
 #
@@ -60,42 +61,41 @@ trap 'rm -f "$TEXT"' EXIT
 # push_revs: コマンド中の git push が送る src を commit に解決して PUSH_REVS に入れる。
 # 解決できない・判定に迷う形は 1 を返す（呼び出し側は全ローカルブランチの検査に戻す。未検査では通さない）
 push_revs() {
-  local seg tok spec src sha
+  local tok spec src sha
   local -a toks args srcs=()
   PUSH_REVS=()
-  while IFS= read -r seg; do
-    grep -qE "$PUSH_RE" <<<"$seg" || continue
-    # quote・変数展開・redirect などを含む形は token に割れないので解決しない
-    [[ $seg != *[\"\'\`\$\\\(\)\<\>]* ]] || return 1
-    read -ra toks <<<"$seg"
-    # git がコマンド語でない形（`… | xargs git push origin` は refspec が後から足される、
-    # `GIT_DIR=… git push` は別 repo を送る）・git と push の間にグローバルオプション（-C 等）が
-    # ある形・push 以外のサブコマンドは解決しない
-    [[ ${toks[0]:-} == git && ${toks[1]:-} == push ]] || return 1
-    args=()
-    for tok in "${toks[@]:2}"; do
-      case $tok in
-      -f | --force | --force-with-lease | --force-with-lease=* | --force-if-includes | -u | --set-upstream | \
-        -q | --quiet | -v | --verbose | -n | --dry-run | --no-verify | --verify | --atomic | --progress | --no-progress | --porcelain) ;;
-      -*) return 1 ;; # --all / --mirror / --tags / 値を取るオプションなど、送る ref が変わりうるもの
-      *) args+=("$tok") ;;
-      esac
+  # 解決するのはコマンド全体が git push 1 つの形だけ。複合コマンドは前段が HEAD や cwd を変えうる
+  # （`git switch x && git push`、`cd … && git push`、`… | xargs git push origin`）ので解決しない。
+  # quote・変数展開・redirect などを含む形は token に割れないので解決しない
+  [[ $CMD != *[\;\&\|\"\'\`\$\\\(\)\<\>]* && $CMD != *$'\n'* ]] || return 1
+  read -ra toks <<<"$CMD"
+  # git がコマンド語でない形（`GIT_DIR=… git push` は別 repo を送る）・git と push の間に
+  # グローバルオプション（-C 等）がある形は解決しない
+  [[ ${toks[0]:-} == git && ${toks[1]:-} == push ]] || return 1
+  # remote.<name>.mirror は refspec を省いた push でも全 ref を送る
+  ! git -C "$CWD" config --get-regexp '^remote\..*\.mirror$' >/dev/null 2>&1 || return 1
+  args=()
+  for tok in "${toks[@]:2}"; do
+    case $tok in
+    -f | --force | --force-with-lease | --force-with-lease=* | --force-if-includes | -u | --set-upstream | \
+      -q | --quiet | -v | --verbose | -n | --dry-run | --no-verify | --verify | --atomic | --progress | --no-progress | --porcelain) ;;
+    -*) return 1 ;; # --all / --mirror / --tags / 値を取るオプションなど、送る ref が変わりうるもの
+    *) args+=("$tok") ;;
+    esac
+  done
+  if [[ ${#args[@]} -le 1 ]]; then
+    # refspec 省略: 現在ブランチ。matching や remote.<name>.push の設定では他のブランチも送られる
+    [[ $(git -C "$CWD" config --get push.default || true) != matching ]] || return 1
+    ! git -C "$CWD" config --get-regexp '^remote\..*\.push$' >/dev/null 2>&1 || return 1
+    srcs+=(HEAD)
+  else
+    for spec in "${args[@]:1}"; do
+      spec=${spec#+}
+      src=${spec%%:*}
+      [[ -n $src && $src != -* && $src != *\** ]] || return 1
+      srcs+=("$src")
     done
-    if [[ ${#args[@]} -le 1 ]]; then
-      # refspec 省略: 現在ブランチ。matching や remote.<name>.push の設定では他のブランチも送られる
-      [[ $(git -C "$CWD" config --get push.default || true) != matching ]] || return 1
-      ! git -C "$CWD" config --get-regexp '^remote\..*\.push$' >/dev/null 2>&1 || return 1
-      srcs+=(HEAD)
-    else
-      for spec in "${args[@]:1}"; do
-        spec=${spec#+}
-        src=${spec%%:*}
-        [[ -n $src && $src != -* && $src != *\** ]] || return 1
-        srcs+=("$src")
-      done
-    fi
-  done <<<"${CMD//[;&|]/$'\n'}"
-  [[ ${#srcs[@]} -gt 0 ]] || return 1
+  fi
   for src in "${srcs[@]}"; do
     sha=$(git -C "$CWD" rev-parse --verify --quiet "$src^{commit}") || return 1
     PUSH_REVS+=("$sha")

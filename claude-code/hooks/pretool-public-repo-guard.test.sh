@@ -184,6 +184,13 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.push GIT_CONFIG_VALUE_0='refs/
   run_case "21g_remote_push_refspec_falls_back" "$OTHER" "git push origin" ask
 run_case "21h_xargs_appended_refspec_falls_back" "$OTHER" "echo leak | xargs git push origin" ask
 run_case "21i_env_prefix_falls_back" "$OTHER" "GIT_DIR=$OTHER/.git git push origin HEAD" ask
+GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.mirror GIT_CONFIG_VALUE_0=true \
+  run_case "21j_remote_mirror_falls_back" "$OTHER" "git push origin" ask
+
+# 22. 前段が HEAD や cwd を変えうる複合コマンドは、hook 時点の HEAD で解決せず全ローカルブランチを見る
+run_case "22a_switch_then_push_falls_back" "$OTHER" "git switch leak && git push" ask
+run_case "22b_checkout_then_push_head_falls_back" "$OTHER" "git checkout leak; git push origin HEAD" ask
+run_case "22c_cd_then_push_falls_back" "$OTHER" "cd $OTHER && git push" ask
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
