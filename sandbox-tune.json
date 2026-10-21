@@ -31,7 +31,7 @@
     },
     {
       "id": "request:request:docker rmi",
-      "reason": "RULES: ホスト（OrbStack）のコンテナの停止・削除は人間に頼む"
+      "reason": "RULES: ホスト（OrbStack）のイメージ削除は人間に頼む"
     }
   ],
   "issue": {
