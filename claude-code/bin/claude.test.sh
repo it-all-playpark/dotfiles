@@ -71,7 +71,7 @@ done
 cat >"$FAKE_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO \
-  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT HOST_EXEC_ENV GIT_CONFIG_COUNT; do
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT HOST_EXEC_ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC GIT_CONFIG_COUNT; do
   printf '%s=%s\n' "$v" "${!v-<unset>}"
 done
 i=0
@@ -398,6 +398,39 @@ for preset in none safe_directory; do
   else
     fail "12_host_exec_env_restores_plain_git_credential_helper ($preset)" \
       "rc=$RC out=$OUT plain=[$(cat "$TMPROOT/plain-helpers")] host=[$(cat "$TMPROOT/host-helpers" 2>/dev/null)] list=[$host_list]"
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# 13. sandbox 内から呼んだ claude（SANDBOX_RUNTIME=1）だけ CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 を付ける。
+#     引数の受け渡しと GIT_CONFIG_* の付与は変わらない。sandbox の外（SANDBOX_RUNTIME が無い）では付けない
+# ---------------------------------------------------------------------------
+for preset in sandbox_proxy vault; do
+  # sandbox 内のコマンドには Claude Code の proxy が HTTPS_PROXY に入っている（agent-vault の分岐を通らない）
+  base_env=()
+  want_git_config=$'GIT_CONFIG_COUNT=2\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n'
+  if [[ $preset == sandbox_proxy ]]; then
+    base_env=("HTTPS_PROXY=http://localhost:9999")
+  else
+    want_git_config=$'GIT_CONFIG_COUNT=3\ngit_config=credential.https://github.com.helper=\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n'
+  fi
+  RUN_ENV=(${base_env[@]+"${base_env[@]}"} "SANDBOX_RUNTIME=1")
+  run_wrapper plugin validate "/x/my plugin"
+  if [[ $RC -eq 0 ]] && contains "$OUT" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1" &&
+    contains "$OUT" "$want_git_config" &&
+    contains "$OUT" $'argc=3\narg=[plugin]\narg=[validate]\narg=[/x/my plugin]' && [[ -z $ERR ]]; then
+    pass "13_sandbox_runtime_disables_nonessential_traffic ($preset)"
+  else
+    fail "13_sandbox_runtime_disables_nonessential_traffic ($preset)" "rc=$RC out=$OUT err=$ERR"
+  fi
+  RUN_ENV=(${base_env[@]+"${base_env[@]}"})
+  run_wrapper plugin validate "/x/my plugin"
+  if [[ $RC -eq 0 ]] && contains "$OUT" "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=<unset>" &&
+    contains "$OUT" "$want_git_config" &&
+    contains "$OUT" $'argc=3\narg=[plugin]\narg=[validate]\narg=[/x/my plugin]'; then
+    pass "13_no_sandbox_runtime_keeps_nonessential_traffic ($preset)"
+  else
+    fail "13_no_sandbox_runtime_keeps_nonessential_traffic ($preset)" "rc=$RC out=$OUT err=$ERR"
   fi
 done
 
