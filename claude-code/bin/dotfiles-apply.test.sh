@@ -5,7 +5,8 @@
 # Usage: bash claude-code/bin/dotfiles-apply.test.sh
 #
 # ケースごとに bare の origin と、メイン checkout 役の clone（$HOME/ghq/github.com/it-all-playpark/dotfiles。HOME を
-# $TMPDIR に向ける）を作り、nix / sudo は呼ばれた引数を記録するだけの stub に PATH で差し替える。
+# $TMPDIR に向ける）を作り、nix / sudo は呼ばれた引数を記録するだけの stub に PATH で差し替える。固定 URL への
+# git ls-remote はケースの bare origin に向ける。
 # 本物の dotfiles にも、システムの設定にも触れない。
 
 set -euo pipefail
@@ -55,7 +56,18 @@ cat >"$STUB/sudo" <<'EOF'
 #!/usr/bin/env bash
 echo "sudo $*" >>"$CALLS"
 EOF
-chmod +x "$STUB/nix" "$STUB/sudo"
+# git は固定 URL への ls-remote だけをケースの bare origin（$FAKE_ORIGIN）に向け、他は本物に渡す
+REAL_GIT="$(command -v git)"
+export REAL_GIT
+cat >"$STUB/git" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = ls-remote ] && [ "${2:-}" = https://github.com/it-all-playpark/dotfiles.git ]; then
+  shift 2
+  exec "$REAL_GIT" ls-remote "$FAKE_ORIGIN" "$@"
+fi
+exec "$REAL_GIT" "$@"
+EOF
+chmod +x "$STUB/nix" "$STUB/sudo" "$STUB/git"
 
 # setup_case <name>: $TMPROOT/<name>/{origin.git,home/ghq/.../dotfiles,pusher} を作り、CASE_HOME / REPO / PUSHER を設定する
 setup_case() {
@@ -72,6 +84,7 @@ setup_case() {
   mkdir -p "${REPO%/*}"
   git clone -q "$dir/origin.git" "$REPO"
   PUSHER="$dir/pusher"
+  export FAKE_ORIGIN="$dir/origin.git"
   export CALLS="$dir/calls"
   : >"$CALLS"
 }
@@ -172,6 +185,44 @@ if [ "$RC" -eq 2 ] && [ -z "$CALLED" ] && [[ $ERR == *"usage: dotfiles-apply"* ]
   pass "06_arguments_are_rejected"
 else
   fail "06_arguments_are_rejected" "rc=$RC calls=[$CALLED] err=$ERR"
+fi
+
+# make_evil <dir>: origin を clone して偽の commit を足した bare（<dir>/evil.git）を作る
+make_evil() {
+  git clone -q --bare "$1/origin.git" "$1/evil.git"
+  git clone -q "$1/evil.git" "$1/evil-work" 2>/dev/null
+  echo evil >"$1/evil-work/a.txt"
+  git -C "$1/evil-work" commit -q -am evil
+  git -C "$1/evil-work" push -q origin main
+}
+
+# ---------------------------------------------------------------------------
+# 7. .git/commondir があれば（config・refs を偽の repo から読まされる）fetch の前に止め、何も反映しない
+# ---------------------------------------------------------------------------
+setup_case commondir
+make_evil "$TMPROOT/commondir"
+git clone -q "$TMPROOT/commondir/evil.git" "$TMPROOT/commondir/evil-clone"
+printf '%s\n' "$TMPROOT/commondir/evil-clone/.git" >"$REPO/.git/commondir"
+run_apply
+if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *".git/commondir がある"* ]]; then
+  pass "07_commondir_stops_before_fetch"
+else
+  fail "07_commondir_stops_before_fetch" "rc=$RC calls=[$CALLED] err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 8. .git の origin の URL を偽の repo に書き換えて HEAD を揃えても、固定 URL の main と違うので何も反映しない
+# ---------------------------------------------------------------------------
+setup_case evil-url
+make_evil "$TMPROOT/evil-url"
+git -C "$REPO" remote set-url origin "$TMPROOT/evil-url/evil.git"
+git -C "$REPO" fetch -q origin
+git -C "$REPO" reset -q --hard origin/main
+run_apply
+if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"https://github.com/it-all-playpark/dotfiles.git の main"* ]]; then
+  pass "08_origin_main_not_matching_fixed_url_stops_without_applying"
+else
+  fail "08_origin_main_not_matching_fixed_url_stops_without_applying" "rc=$RC calls=[$CALLED] err=$ERR"
 fi
 
 echo ""
