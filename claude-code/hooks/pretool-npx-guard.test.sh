@@ -106,6 +106,30 @@ run_reason_case "reason suggests node_modules/.bin" 'npx biome check .' './node_
 run_reason_case "reason suggests pnpm exec" 'npx biome check .' 'pnpm exec <bin>'
 run_reason_case "reason suggests nix for remote tools" 'npx -y actionlint' 'リモート取得が要るツールは nix 等で入れる'
 
+# --- 語が引数に入るだけでも deny（fail-closed。RULES.md の Tool routing はこれを前提に書く） ---
+echo "[Word as argument — should deny]"
+run_case "npx as grep search term" 'grep -rn npx claude-code/hooks' "deny"
+
+# --- RULES.md の Tool routing に、npx を使わないローカル CLI の実行形と、語だけでも止まる旨がある ---
+echo "[RULES.md Tool routing]"
+RULES="${SCRIPT_DIR}/../RULES.md"
+rules_line="$(awk '/^## Tool routing$/ { f = 1; next } /^## / { f = 0 } f && /pnpm exec/ && /\.\/node_modules\/\.bin/' "${RULES}")"
+missing=()
+for want in '`pnpm exec <bin>`' '`./node_modules/.bin/<bin>`' 'npx という語が引数に入るだけでも' 'hook が拒否する'; do
+  case "${rules_line}" in
+  *"${want}"*) ;;
+  *) missing+=("${want}") ;;
+  esac
+done
+if [[ -n ${rules_line} && ${#missing[@]} -eq 0 ]]; then
+  PASS=$((PASS + 1))
+  printf "  \033[32mPASS\033[0m %s\n" "rules tool routing local cli"
+else
+  FAIL=$((FAIL + 1))
+  FAILURES+=("rules tool routing local cli: line=${rules_line:-<none>} missing=${missing[*]:-}")
+  printf "  \033[31mFAIL\033[0m %s\n" "rules tool routing local cli"
+fi
+
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
 if ((FAIL > 0)); then
