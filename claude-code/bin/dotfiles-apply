@@ -8,18 +8,20 @@
 # sandbox 内では動かない。host-exec で sudo を任意の引数で組み立てると root で何でも走らせられるので、root で
 # 動かすものをここに固定する。入力の更新（nix flake update）は含めない — それは `nix run .#update` で人間が行う。
 #
-# 反映するのは fetch した origin/main の commit だけ（`git+file://<repo>?rev=<sha>` で固定する）。メイン checkout の
-# 作業ツリーと .git は sandbox 内から書けるので、作業ツリーを評価すると PR を通っていない変更が承認ダイアログに
-# 出ないまま root で反映される。rev は内容のハッシュなので .git を書き換えても中身を差し替えられない。
+# 反映するのは固定 URL（$origin_url）の main の commit だけ（`git+file://<repo>?rev=<sha>` で固定する）。メイン
+# checkout の作業ツリーと .git は sandbox 内から書けるので、作業ツリーを評価すると PR を通っていない変更が承認
+# ダイアログに出ないまま root で反映される。rev は repo の外で `git ls-remote <固定 URL>` から取り、repo の origin の
+# URL・refs・config は使わない（repo では fetch もしない — fetch は repo の hooks・config を sandbox の外で動かす）。
+# rev が信頼できれば、nix は rev（内容のハッシュ）で中身を確かめるので .git のオブジェクトを差し替えても偽れない。
 # 未 commit のローカル変更（flake.lock 等）は反映されない。
 #
 # 止まる条件（どれも何も反映せずに非 0 で終わる）:
 #   - 引数がある
 #   - main 以外を checkout している
-#   - .git がディレクトリでない・.git/commondir がある（config と refs を sandbox から書ける別の場所から読まされる）
-#   - fetch した origin/main が固定 URL（$origin_url）の main と違う（.git の origin の URL・refs は書き換えられる）
-#   - HEAD が origin/main と違う（ローカル commit が先行している・dotfiles-sync の前で遅れている）。作業ツリーの
-#     symlink 先と反映する設定がずれないようにする
+#   - .git がディレクトリでない・.git/commondir がある（HEAD・refs を sandbox から書ける別の場所から読まされる）
+#   - 固定 URL の main を取得できない
+#   - HEAD が固定 URL の main と違う（ローカル commit が先行している・dotfiles-sync の前で遅れている・origin を
+#     差し替えられている）。作業ツリーの symlink 先と反映する設定がずれないようにする
 # home-manager の switch が失敗したら nix-darwin の switch は走らせない。
 #
 # sudo は端末の無い起動では Touch ID（darwin/default.nix の pam_tid）でしか通らない。パスワード入力に落ちると失敗する。
@@ -40,24 +42,21 @@ if [ "$branch" != main ]; then
   exit 1
 fi
 
-# .git/commondir（と .git の差し替え）があると git も libgit2 も config・refs をその先から読み、偽の origin の
-# commit を rev に選べてしまうので、fetch の前に止める
+# .git/commondir（と .git の差し替え）があると git も libgit2 も HEAD・refs をその先から読むので止める
 if [ ! -d "$repo/.git" ] || [ -L "$repo/.git" ] || [ -e "$repo/.git/commondir" ] || [ -L "$repo/.git/commondir" ]; then
-  echo "dotfiles-apply: $repo/.git がディレクトリでないか .git/commondir がある（config・refs を別の場所から読まされる）。何も反映せずに止めた" >&2
+  echo "dotfiles-apply: $repo/.git がディレクトリでないか .git/commondir がある（HEAD・refs を別の場所から読まされる）。何も反映せずに止めた" >&2
   exit 1
 fi
 
-git -C "$repo" fetch --quiet origin
-rev="$(git -C "$repo" rev-parse --verify refs/remotes/origin/main)"
-# .git の origin の URL・refs は sandbox から書けるので、rev を固定 URL の main と突き合わせる。cwd を repo の外に
-# し、global / system の config（insteadOf 等）を読まない
-remote_rev="$(cd / && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git ls-remote "$origin_url" refs/heads/main | cut -f1)"
-if [ "$remote_rev" != "$rev" ]; then
-  echo "dotfiles-apply: origin/main（${rev}）が $origin_url の main（${remote_rev:-取得できない}）と違う。何も反映せずに止めた" >&2
+# cwd を repo の外にし、global / system の config（insteadOf 等）を読まない。dotfiles は public なので認証は要らない
+rev="$(cd / && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git ls-remote "$origin_url" refs/heads/main | cut -f1)" || rev=""
+if [ -z "$rev" ]; then
+  echo "dotfiles-apply: $origin_url の main を取得できない。何も反映せずに止めた" >&2
   exit 1
 fi
-if [ "$(git -C "$repo" rev-parse HEAD)" != "$rev" ]; then
-  echo "dotfiles-apply: HEAD が origin/main（${rev}）と違う。dotfiles-sync で揃えてから実行する。何も反映せずに止めた" >&2
+head="$(git -C "$repo" rev-parse HEAD)"
+if [ "$head" != "$rev" ]; then
+  echo "dotfiles-apply: HEAD（${head}）が $origin_url の main（${rev}）と違う。dotfiles-sync で揃えてから実行する。何も反映せずに止めた" >&2
   exit 1
 fi
 flake="git+file://$repo?rev=$rev"

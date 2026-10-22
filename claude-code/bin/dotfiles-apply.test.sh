@@ -149,14 +149,14 @@ setup_case local-commit
 echo local >"$REPO/a.txt"
 git -C "$REPO" commit -q -am local
 run_apply
-if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"HEAD が origin/main"* ]]; then
+if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"HEAD（"*"の main"* ]]; then
   pass "03_local_commit_ahead_of_origin_stops_without_applying"
 else
   fail "03_local_commit_ahead_of_origin_stops_without_applying" "rc=$RC calls=[$CALLED] err=$ERR"
 fi
 
 # ---------------------------------------------------------------------------
-# 4. origin/main が先に進んでいたら（dotfiles-sync の前）fetch して気付き、何も反映せずに非 0 で終わる
+# 4. 固定 URL の main が先に進んでいたら（dotfiles-sync の前）何も反映せずに非 0 で終わる
 # ---------------------------------------------------------------------------
 setup_case behind
 push_change a.txt a2
@@ -199,7 +199,7 @@ make_evil() {
 }
 
 # ---------------------------------------------------------------------------
-# 7. .git/commondir があれば（config・refs を偽の repo から読まされる）fetch の前に止め、何も反映しない
+# 7. .git/commondir があれば（HEAD・refs を偽の repo から読まされる）止め、何も反映しない
 # ---------------------------------------------------------------------------
 setup_case commondir
 make_evil "$TMPROOT/commondir"
@@ -223,10 +223,35 @@ git -C "$REPO" reset -q --hard origin/main
 evil_rev="$(git -C "$REPO" rev-parse origin/main)"
 run_apply
 if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"https://github.com/it-all-playpark/dotfiles.git の main"* ]] &&
-  [[ $ERR == *"origin/main（${evil_rev}）"* ]]; then
+  [[ $ERR == *"HEAD（${evil_rev}）"* ]]; then
   pass "08_origin_main_not_matching_fixed_url_stops_without_applying"
 else
   fail "08_origin_main_not_matching_fixed_url_stops_without_applying" "rc=$RC calls=[$CALLED] err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 9. repo では fetch しない（fetch は repo の hooks・config を sandbox の外で動かす）。repo の origin が取れない
+#    URL でも、HEAD が固定 URL の main と同じなら反映する
+# ---------------------------------------------------------------------------
+setup_case no-fetch
+git -C "$REPO" remote set-url origin "$TMPROOT/no-fetch/missing.git"
+rev="$(git -C "$REPO" rev-parse HEAD)"
+run_apply
+if [ "$RC" -eq 0 ] && [[ $CALLED == *"--flake git+file://$REPO?rev=$rev#MyMBP-${USER_NAME}"* ]]; then
+  pass "09_does_not_fetch_in_repo"
+else
+  fail "09_does_not_fetch_in_repo" "rc=$RC calls=[$CALLED] err=$ERR"
+fi
+
+# ---------------------------------------------------------------------------
+# 10. 固定 URL の main を取得できなければ何も反映せずに非 0 で終わる
+# ---------------------------------------------------------------------------
+setup_case no-remote
+FAKE_ORIGIN="$TMPROOT/no-remote/missing.git" run_apply
+if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"main を取得できない"* ]]; then
+  pass "10_unreachable_fixed_url_stops_without_applying"
+else
+  fail "10_unreachable_fixed_url_stops_without_applying" "rc=$RC calls=[$CALLED] err=$ERR"
 fi
 
 echo ""
