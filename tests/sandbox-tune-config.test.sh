@@ -4,6 +4,8 @@
 #   - 各項目は id か kind のどちらか一方と、空でない reason を持つ（sandbox-tune の config が受け付ける形）
 #   - RULES の Git 節どおりの host-exec の dotfiles-sync は型の id で intended にする。
 #     kind（host_exec 全体）で書くと、直すべきほかの host-exec の実行まで remaining から消える
+#   - 組み込み保護（.git/config 等）・人間が行うログイン（gws auth）・Bash からの .env.*.example 読み取りも型の id で intended にする。
+#     .env.*.example は deny の Read(./.env.*) と RULES の「Read ツールで読む」が前提なので、その 2 つも確かめる
 # Run from the repo root: bash tests/sandbox-tune-config.test.sh
 # Requires: jq
 
@@ -39,6 +41,32 @@ check "host-exec の dotfiles-sync を id で intended にしている" \
 
 check "host_exec を kind で intended にしない" \
   '[.intended[] | select(.kind == "host_exec")] | length == 0'
+
+check "設定では外せない組み込み保護と人間が行うログインを id で intended にしている" \
+  '[.intended[].id // empty] as $ids
+   | all("request:request:gws auth", "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.git/config"; IN($ids[]))'
+
+check "Bash からの .env.*.example 読み取りの拒否を id で 2 つ以上 intended にしている" \
+  '[.intended[].id // empty | select(endswith(".env.example"))] | length >= 2'
+
+# .env.*.example の intended は、deny の Read(./.env.*) を残したまま RULES の「Read ツールで読む」で避けることが前提。
+# deny を外したり RULES の行を消したりすると、intended が直すべき拒否を remaining から隠すことになる。
+SETTINGS="${REPO_ROOT}/claude-code/settings.json"
+if jq -e '.permissions.deny | index("Read(./.env.*)")' "${SETTINGS}" >/dev/null; then
+  echo "  PASS: settings.json の permissions.deny に Read(./.env.*) が残っている"
+else
+  echo "  FAIL: settings.json の permissions.deny に Read(./.env.*) が無い"
+  FAILED=1
+fi
+
+sandbox_section="$(awk '/^## Sandbox$/ { in_s = 1; next } /^## / { in_s = 0 } in_s' "${REPO_ROOT}/claude-code/RULES.md")"
+# shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
+if grep -qF -- '- `.env.*.example` は Read ツールで読む' <<<"${sandbox_section}"; then
+  echo "  PASS: RULES.md の Sandbox 節に .env.*.example を Read ツールで読む行がある"
+else
+  echo "  FAIL: RULES.md の Sandbox 節に .env.*.example を Read ツールで読む行が無い"
+  FAILED=1
+fi
 
 if [ "${FAILED}" -ne 0 ]; then
   echo "FAIL: sandbox-tune-config"
