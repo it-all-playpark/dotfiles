@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# dotfiles-apply: origin/main の dotfiles を home-manager と nix-darwin に反映する（flake.lock は更新しない）
+#
+# Usage: dotfiles-apply
+#
+# dotfiles-sync で取り込んだあと、host-exec（sandbox の外）で実行する固定のコマンド。home-manager の switch は
+# ~/.config・~/Library/LaunchAgents・~/.claude を書き換え、nix-darwin の switch は root が要るので、どちらも
+# sandbox 内では動かない。host-exec で sudo を任意の引数で組み立てると root で何でも走らせられるので、root で
+# 動かすものをここに固定する。入力の更新（nix flake update）は含めない — それは `nix run .#update` で人間が行う。
+#
+# 反映するのは固定 URL（$origin_url）の main の commit だけ（`git+file://<repo>?rev=<sha>` で固定する）。メイン
+# checkout の作業ツリーと .git は sandbox 内から書けるので、作業ツリーを評価すると PR を通っていない変更が承認
+# ダイアログに出ないまま root で反映される。rev は repo の外で `git ls-remote <固定 URL>` から取り、repo の origin の
+# URL・refs・config は使わない（repo では fetch もしない — fetch は repo の hooks・config を sandbox の外で動かす）。
+# rev が信頼できれば、nix は rev（内容のハッシュ）で中身を確かめるので .git のオブジェクトを差し替えても偽れない。
+# 未 commit のローカル変更（flake.lock 等）は反映されない。
+#
+# 止まる条件（どれも何も反映せずに非 0 で終わる）:
+#   - 引数がある
+#   - main 以外を checkout している
+#   - .git がディレクトリでない・.git/commondir がある（HEAD・refs を sandbox から書ける別の場所から読まされる）
+#   - 固定 URL の main を取得できない
+#   - HEAD が固定 URL の main と違う（ローカル commit が先行している・dotfiles-sync の前で遅れている・origin を
+#     差し替えられている）。作業ツリーの symlink 先と反映する設定がずれないようにする
+# home-manager の switch が失敗したら nix-darwin の switch は走らせない。
+#
+# sudo は端末の無い起動では Touch ID（darwin/default.nix の pam_tid）でしか通らない。パスワード入力に落ちると失敗する。
+set -euo pipefail
+
+if [ $# -ne 0 ]; then
+  echo "usage: dotfiles-apply" >&2
+  exit 2
+fi
+
+repo="$HOME/ghq/github.com/it-all-playpark/dotfiles"
+origin_url=https://github.com/it-all-playpark/dotfiles.git
+user="$(id -un)"
+
+branch="$(git -C "$repo" symbolic-ref --quiet --short HEAD || true)"
+if [ "$branch" != main ]; then
+  echo "dotfiles-apply: $repo が main ではなく '${branch:-detached HEAD}' を checkout している。何も反映せずに止めた" >&2
+  exit 1
+fi
+
+# .git/commondir（と .git の差し替え）があると git も libgit2 も HEAD・refs をその先から読むので止める
+if [ ! -d "$repo/.git" ] || [ -L "$repo/.git" ] || [ -e "$repo/.git/commondir" ] || [ -L "$repo/.git/commondir" ]; then
+  echo "dotfiles-apply: $repo/.git がディレクトリでないか .git/commondir がある（HEAD・refs を別の場所から読まされる）。何も反映せずに止めた" >&2
+  exit 1
+fi
+
+# cwd を repo の外にし、global / system の config（insteadOf 等）を読まない。dotfiles は public なので認証は要らない
+rev="$(cd / && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git ls-remote "$origin_url" refs/heads/main | cut -f1)" || rev=""
+if [ -z "$rev" ]; then
+  echo "dotfiles-apply: $origin_url の main を取得できない。何も反映せずに止めた" >&2
+  exit 1
+fi
+head="$(git -C "$repo" rev-parse HEAD)"
+if [ "$head" != "$rev" ]; then
+  echo "dotfiles-apply: HEAD（${head}）が $origin_url の main（${rev}）と違う。dotfiles-sync で揃えてから実行する。何も反映せずに止めた" >&2
+  exit 1
+fi
+flake="git+file://$repo?rev=$rev"
+
+# ~/.cache/nix（fetcher cache・eval cache）は sandbox 内から書けるので、書き換えられると rev を固定しても評価結果や
+# 取得物を差し替えられる。両 step とも sandbox から書けない /private/tmp 直下に作った空の XDG_CACHE_HOME で走らせる。
+# home-manager / nix-darwin も registry（sandbox から書ける ~/.config/nix 等）ではなく flake.lock の入力で解決する。
+# nix-darwin の step は root がこの中に書くので、後始末で消せずに残ることがある（rm の失敗は無視する）
+cache="$(mktemp -d /private/tmp/dotfiles-apply.XXXXXX)"
+trap 'rm -rf "$cache" 2>/dev/null || true' EXIT
+mkdir "$cache/home-manager" "$cache/nix-darwin"
+
+echo "dotfiles-apply: home-manager を反映する（${user}-darwin, ${rev}）"
+XDG_CACHE_HOME="$cache/home-manager" nix run --inputs-from "$flake" home-manager -- \
+  -b "backup-$(date +%Y%m%d%H%M%S)" --flake "$flake#${user}-darwin" switch
+
+echo "dotfiles-apply: nix-darwin を反映する（MyMBP-${user}, ${rev}）"
+sudo env XDG_CACHE_HOME="$cache/nix-darwin" nix --extra-experimental-features 'nix-command flakes' \
+  run --inputs-from "$flake" nix-darwin -- switch --flake "$flake#MyMBP-${user}"

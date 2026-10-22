@@ -2,7 +2,7 @@
 # tests/sandbox-tune-config.test.sh
 # sandbox-tune.json の intended（sandbox-tune が remaining・recurring から外す意図した拒否・実行）を検証する。
 #   - 各項目は id か kind のどちらか一方と、空でない reason を持つ（sandbox-tune の config が受け付ける形）
-#   - RULES の Git 節どおりの host-exec の dotfiles-sync は型の id で intended にする。
+#   - RULES の Git 節どおりの host-exec の dotfiles-sync・dotfiles-apply は型の id で intended にする。
 #     kind（host_exec 全体）で書くと、直すべきほかの host-exec の実行まで remaining から消える
 #   - 組み込み保護（.git/config 等）・人間が行うログイン（gws auth）・Bash からの .env.*.example 読み取りも型の id で intended にする。
 #     .env.*.example は deny の Read(./.env.*) と RULES の「Read ツールで読む」が前提なので、その 2 つも確かめる
@@ -37,8 +37,8 @@ check() {
 check "intended の各項目は id か kind の一方と空でない reason を持つ" \
   '.intended | length > 0 and all(.[]; ((has("id")) != (has("kind"))) and (.reason | type == "string" and length > 0))'
 
-check "host-exec の dotfiles-sync を id で intended にしている" \
-  '.intended[] | select(.id == "host_exec:ran:dotfiles-sync") | .reason | length > 0'
+check "host-exec の dotfiles-sync・dotfiles-apply を id で intended にしている" \
+  '[.intended[] | select(.id == "host_exec:ran:dotfiles-sync" or .id == "host_exec:ran:dotfiles-apply") | .reason | length > 0] | length == 2 and all'
 
 check "host_exec を kind で intended にしない" \
   '[.intended[] | select(.kind == "host_exec")] | length == 0'
