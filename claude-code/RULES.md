@@ -52,6 +52,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 コマンド側で避ける:
 - bg セッションでも一時ファイルは `$TMPDIR`。`$CLAUDE_JOB_DIR/tmp` は system prompt が案内しても書けない（`~/.claude/jobs` は組み込みガードで write deny）
 - process substitution `<(…)` は使わない（`/dev/fd/*` が塞がれる）。tempfile に落としてから渡す
+- `.env.*.example` は Read ツールで読む（Bash からは sandbox が拒否する）。permissions.deny の `Read(./.env.*)` は sandbox の読み取り拒否に入るが、除外の `Read(!.env.*.example)` は sandbox では効かないので、rg / wc / cat 等で読むと `Operation not permitted` になる
 - `~/.claude/skills` を repo への symlink にしない（skill は playpark marketplace の plugin で読み込む）。Claude Code の組み込み保護は `~/.claude/skills` の symlink 先にも掛かり、repo ルートを指すと `.git` ごと書けなくなって commit・worktree が sandbox 内で動かない
 - Bash から書けない場所。編集は Edit / Write ツールで行う:
   - sandbox 外で実行されるので書き換えが脱出口になる: dotfiles メインチェックアウトの `claude-code/bin` / `claude-code/hooks`、全 repo の `.husky`・`.githooks`（dotfiles の 2 つは worktree 側なら Bash でも書ける）

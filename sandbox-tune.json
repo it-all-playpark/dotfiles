@@ -36,6 +36,42 @@
     {
       "id": "host_exec:ran:dotfiles-sync",
       "reason": "RULES: dotfiles の PR merge 後のメイン checkout への取り込みは host-exec で dotfiles-sync だけを実行する"
+    },
+    {
+      "id": "request:request:gws auth",
+      "reason": "gws のログインはブラウザでの認証が要るので人間が行う"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/corporate-site/.claude/worktrees/*/.env.example",
+      "reason": "permissions.deny の Read(./.env.*) が sandbox の読み取り拒否に入る。RULES: .env.*.example は Read ツールで読む"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/shift-bud/.claude/worktrees/*/.env.example",
+      "reason": "permissions.deny の Read(./.env.*) が sandbox の読み取り拒否に入る。RULES: .env.*.example は Read ツールで読む"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/shift-bud/.claude/worktrees/*/packages/landing/.env.example",
+      "reason": "permissions.deny の Read(./.env.*) が sandbox の読み取り拒否に入る。RULES: .env.*.example は Read ツールで読む"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/YujiNaramoto/0-colle/.env.b.example",
+      "reason": "permissions.deny の Read(./.env.*) が sandbox の読み取り拒否に入る。RULES: .env.*.example は Read ツールで読む"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.git/config",
+      "reason": "起動元 repo の .git/config は Claude Code の組み込み保護で設定では外せない（RULES: git config --local は人間に頼む）"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.git/worktrees/*",
+      "reason": "起動元 repo の .git/worktrees は Claude Code の組み込み保護で設定では外せない"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills",
+      "reason": "作業中の repo の .claude/skills は Claude Code の組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write ツールで行う"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.mcp.json",
+      "reason": "作業中の repo の .mcp.json は Claude Code の組み込み保護で設定では外せない"
     }
   ],
   "issue": {
