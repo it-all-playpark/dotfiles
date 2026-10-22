@@ -99,9 +99,10 @@ push_change() {
 
 run_apply() {
   set +e
-  HOME="$CASE_HOME" PATH="$STUB:$PATH" bash "$APPLY" "$@" >/dev/null 2>"$TMPROOT/err"
+  HOME="$CASE_HOME" PATH="$STUB:$PATH" bash "$APPLY" "$@" >"$TMPROOT/out" 2>"$TMPROOT/err"
   RC=$?
   set -e
+  OUT="$(cat "$TMPROOT/out")"
   ERR="$(cat "$TMPROOT/err")"
   CALLED="$(cat "$CALLS")"
 }
@@ -122,10 +123,11 @@ flake="git+file://$REPO?rev=$rev"
 if [ "$RC" -eq 0 ] && [ "$(wc -l <"$CALLS" | tr -d ' ')" -eq 2 ] &&
   [[ $hm_line == "nix run home-manager -- -b backup-"*" --flake $flake#${USER_NAME}-darwin switch" ]] &&
   [ "$darwin_line" = "sudo nix --extra-experimental-features nix-command flakes run nix-darwin -- switch --flake $flake#MyMBP-${USER_NAME}" ] &&
-  [[ $CALLED != *"flake update"* ]]; then
+  [[ $CALLED != *"flake update"* ]] &&
+  [[ $OUT == *"（${USER_NAME}-darwin, ${rev}）"* ]] && [[ $OUT == *"（MyMBP-${USER_NAME}, ${rev}）"* ]]; then
   pass "01_applies_origin_main_rev_with_home_manager_then_nix_darwin"
 else
-  fail "01_applies_origin_main_rev_with_home_manager_then_nix_darwin" "rc=$RC calls=[$CALLED] err=$ERR"
+  fail "01_applies_origin_main_rev_with_home_manager_then_nix_darwin" "rc=$RC calls=[$CALLED] out=$OUT err=$ERR"
 fi
 
 # ---------------------------------------------------------------------------
@@ -218,8 +220,10 @@ make_evil "$TMPROOT/evil-url"
 git -C "$REPO" remote set-url origin "$TMPROOT/evil-url/evil.git"
 git -C "$REPO" fetch -q origin
 git -C "$REPO" reset -q --hard origin/main
+evil_rev="$(git -C "$REPO" rev-parse origin/main)"
 run_apply
-if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"https://github.com/it-all-playpark/dotfiles.git の main"* ]]; then
+if [ "$RC" -ne 0 ] && [ -z "$CALLED" ] && [[ $ERR == *"https://github.com/it-all-playpark/dotfiles.git の main"* ]] &&
+  [[ $ERR == *"origin/main（${evil_rev}）"* ]]; then
   pass "08_origin_main_not_matching_fixed_url_stops_without_applying"
 else
   fail "08_origin_main_not_matching_fixed_url_stops_without_applying" "rc=$RC calls=[$CALLED] err=$ERR"

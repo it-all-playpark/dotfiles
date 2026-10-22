@@ -53,17 +53,17 @@ rev="$(git -C "$repo" rev-parse --verify refs/remotes/origin/main)"
 # し、global / system の config（insteadOf 等）を読まない
 remote_rev="$(cd / && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git ls-remote "$origin_url" refs/heads/main | cut -f1)"
 if [ "$remote_rev" != "$rev" ]; then
-  echo "dotfiles-apply: origin/main（）が $origin_url の main（${remote_rev:-取得できない}）と違う。何も反映せずに止めた" >&2
+  echo "dotfiles-apply: origin/main（${rev}）が $origin_url の main（${remote_rev:-取得できない}）と違う。何も反映せずに止めた" >&2
   exit 1
 fi
 if [ "$(git -C "$repo" rev-parse HEAD)" != "$rev" ]; then
-  echo "dotfiles-apply: HEAD が origin/main（）と違う。dotfiles-sync で揃えてから実行する。何も反映せずに止めた" >&2
+  echo "dotfiles-apply: HEAD が origin/main（${rev}）と違う。dotfiles-sync で揃えてから実行する。何も反映せずに止めた" >&2
   exit 1
 fi
 flake="git+file://$repo?rev=$rev"
 
-echo "dotfiles-apply: home-manager を反映する（${user}-darwin, ）"
+echo "dotfiles-apply: home-manager を反映する（${user}-darwin, ${rev}）"
 nix run home-manager -- -b "backup-$(date +%Y%m%d%H%M%S)" --flake "$flake#${user}-darwin" switch
 
-echo "dotfiles-apply: nix-darwin を反映する（MyMBP-${user}, ）"
+echo "dotfiles-apply: nix-darwin を反映する（MyMBP-${user}, ${rev}）"
 sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake "$flake#MyMBP-${user}"
