@@ -6,6 +6,7 @@
 #     kind（host_exec 全体）で書くと、直すべきほかの host-exec の実行まで remaining から消える
 #   - 組み込み保護（.git/config 等）・人間が行うログイン（gws auth）・Bash からの .env.*.example 読み取りも型の id で intended にする。
 #     .env.*.example は deny の Read(./.env.*) と RULES の「Read ツールで読む」が前提なので、その 2 つも確かめる
+#   - 人間へのコピペ実行の依頼（request:request:bash）を直す RULES の host-exec の行と、人間に頼む例外がある
 # Run from the repo root: bash tests/sandbox-tune-config.test.sh
 # Requires: jq
 
@@ -65,6 +66,19 @@ if grep -qF -- '- `.env.*.example` は Read ツールで読む' <<<"${sandbox_se
   echo "  PASS: RULES.md の Sandbox 節に .env.*.example を Read ツールで読む行がある"
 else
   echo "  FAIL: RULES.md の Sandbox 節に .env.*.example を Read ツールで読む行が無い"
+  FAILED=1
+fi
+
+# request:request:bash（sandbox の外が要るコマンドを人間にコピペ実行で頼む）は、RULES の host-exec の行で直す。
+# 人間に頼む例外（対話的なログイン・RULES が人間の操作と決めたもの）も同じ行に書く
+# shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
+host_exec_line="$(grep -F -- '- sandbox の外が要るコマンドは、人間に `!` やコピペで実行を頼まず host-exec' <<<"${sandbox_section}" || true)"
+if [ -n "${host_exec_line}" ] &&
+  grep -qF '対話的なログイン' <<<"${host_exec_line}" &&
+  grep -qF 'RULES が人間の操作と決めたもの' <<<"${host_exec_line}"; then
+  echo "  PASS: RULES.md の Sandbox 節に、人間にコピペ実行を頼まず host-exec を使い、例外を書いた行がある"
+else
+  echo "  FAIL: RULES.md の Sandbox 節に、人間にコピペ実行を頼まず host-exec を使い、例外（対話的なログイン・RULES が人間の操作と決めたもの）を書いた行が無い"
   FAILED=1
 fi
 

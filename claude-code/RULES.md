@@ -85,6 +85,7 @@ sandbox に塞がれたら:
 - uv を使うものを `excludedCommands` に足すときは、その起動で `UV_CACHE_DIR` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/uv-cache` を sandbox 外で読ませることになる）
 - plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る
 - sandbox を広げる変更（`allowMachLookup`・`allowUnixSockets`・`allowedDomains`・`excludedCommands` 等）は、広げた口の悪用を防ぐ手当てまで dotfiles（`nix run .#update`）で完結するものだけにする。手当てに dotfiles の外（システム拡張・GUI での許可・MDM）が要るものは入れず、repo 側か手順で直す。設定が分散すると、片方だけ外れても気付けない
+- sandbox の外が要るコマンドは、人間に `!` やコピペで実行を頼まず host-exec の argv（複数の手順は steps）で実行する（1 回ごとに人間の承認を通る）。人間に頼むのは対話的なログイン（`gws auth` 等）と、RULES が人間の操作と決めたもの（プロセスの kill・ホストの docker の停止・削除・`git config --local`・remote の変更等）だけ。git / gh は sandbox 内でそのまま叩く
 - auto mode classifier が settings / RULES の commit を Self-Modification として止めたら回避しない。worktree パスと実行コマンド（commit → push → PR）を渡して止まる
 - Unix ソケットへの接続は `filesystem.allowWrite` では開かない。`sandbox.network.allowUnixSockets` にパスを足す（`allowAllUnixSockets` は使わない）
 
