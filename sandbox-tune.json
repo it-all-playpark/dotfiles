@@ -38,6 +38,10 @@
       "reason": "RULES: dotfiles の PR merge 後のメイン checkout への取り込みは host-exec で dotfiles-sync だけを実行する"
     },
     {
+      "id": "host_exec:ran:dotfiles-apply",
+      "reason": "RULES: 取り込んだ nix の設定の反映は dotfiles-sync のあと host-exec で dotfiles-apply を実行する"
+    },
+    {
       "id": "request:request:gws auth",
       "reason": "gws のログインはブラウザでの認証が要るので人間が行う"
     },

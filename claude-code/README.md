@@ -19,7 +19,8 @@ claude-code/
 ├── bin/                  # gh / gcloud / tofu の cwd 連動アカウント shim（account-exec + symlink の gh / gcloud / tofu）、
 │                         # 本体の上流 proxy を agent-vault に向ける claude wrapper、
 │                         # agent-vault-sync-gh（gh の token を agent-vault に写す）、wt-add（worktree 作成）、
-│                         # dotfiles-sync（merge 後にメイン checkout を origin/main まで fast-forward）
+│                         # dotfiles-sync（merge 後にメイン checkout を origin/main まで fast-forward）、
+│                         # dotfiles-apply（取り込んだ設定を home-manager / nix-darwin に反映。flake.lock は更新しない）
 └── hooks/                # SessionStart / PreCompact / Pre|PostToolUse / PostToolUseFailure /
                           # PermissionRequest / Stop スクリプト
 ```

@@ -40,6 +40,7 @@
 - 保護ブランチ（main / dev / production 等）には push せず、feature branch から PR を出す。`保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなく `allow-feature-push.sh` hook
 - PR / issue コメントの編集は `gh api -X PATCH` ではなく `gh pr comment <N> --edit-last --body-file <file>` / `gh issue comment <N> --edit-last --body-file <file>` を使う（`gh api -X PATCH` は permissions.deny で止まる）
 - dotfiles の PR を merge したあとメイン checkout に取り込むときは、host-exec で `dotfiles-sync` だけを実行する。止まったら人間に判断を渡す
+- 取り込んだ nix の設定（home-manager / nix-darwin）の反映は人間に頼まず、`dotfiles-sync` のあと host-exec で `dotfiles-apply` を実行する（timeoutSec 600。nix-darwin の sudo は Touch ID で人間が通す）。sudo を host-exec で直接組み立てない。入力の更新（`nix run .#update`）は人間が行う
 
 <!--
 保護ブランチ判定は allow-feature-push.sh（PreToolUse）が唯一の強制点。9 ブランチ（main / master / dev / develop /

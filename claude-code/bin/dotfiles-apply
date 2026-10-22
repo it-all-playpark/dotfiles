@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# dotfiles-apply: origin/main の dotfiles を home-manager と nix-darwin に反映する（flake.lock は更新しない）
+#
+# Usage: dotfiles-apply
+#
+# dotfiles-sync で取り込んだあと、host-exec（sandbox の外）で実行する固定のコマンド。home-manager の switch は
+# ~/.config・~/Library/LaunchAgents・~/.claude を書き換え、nix-darwin の switch は root が要るので、どちらも
+# sandbox 内では動かない。host-exec で sudo を任意の引数で組み立てると root で何でも走らせられるので、root で
+# 動かすものをここに固定する。入力の更新（nix flake update）は含めない — それは `nix run .#update` で人間が行う。
+#
+# 反映するのは fetch した origin/main の commit だけ（`git+file://<repo>?rev=<sha>` で固定する）。メイン checkout の
+# 作業ツリーと .git は sandbox 内から書けるので、作業ツリーを評価すると PR を通っていない変更が承認ダイアログに
+# 出ないまま root で反映される。rev は内容のハッシュなので .git を書き換えても中身を差し替えられない。
+# 未 commit のローカル変更（flake.lock 等）は反映されない。
+#
+# 止まる条件（どれも何も反映せずに非 0 で終わる）:
+#   - 引数がある
+#   - main 以外を checkout している
+#   - HEAD が origin/main と違う（ローカル commit が先行している・dotfiles-sync の前で遅れている）。作業ツリーの
+#     symlink 先と反映する設定がずれないようにする
+# home-manager の switch が失敗したら nix-darwin の switch は走らせない。
+#
+# sudo は端末の無い起動では Touch ID（darwin/default.nix の pam_tid）でしか通らない。パスワード入力に落ちると失敗する。
+set -euo pipefail
+
+if [ $# -ne 0 ]; then
+  echo "usage: dotfiles-apply" >&2
+  exit 2
+fi
+
+repo="$HOME/ghq/github.com/it-all-playpark/dotfiles"
+user="$(id -un)"
+
+branch="$(git -C "$repo" symbolic-ref --quiet --short HEAD || true)"
+if [ "$branch" != main ]; then
+  echo "dotfiles-apply: $repo が main ではなく '${branch:-detached HEAD}' を checkout している。何も反映せずに止めた" >&2
+  exit 1
+fi
+
+git -C "$repo" fetch --quiet origin
+rev="$(git -C "$repo" rev-parse --verify refs/remotes/origin/main)"
+if [ "$(git -C "$repo" rev-parse HEAD)" != "$rev" ]; then
+  echo "dotfiles-apply: HEAD が origin/main（$rev）と違う。dotfiles-sync で揃えてから実行する。何も反映せずに止めた" >&2
+  exit 1
+fi
+flake="git+file://$repo?rev=$rev"
+
+echo "dotfiles-apply: home-manager を反映する（${user}-darwin, $rev）"
+nix run home-manager -- -b "backup-$(date +%Y%m%d%H%M%S)" --flake "$flake#${user}-darwin" switch
+
+echo "dotfiles-apply: nix-darwin を反映する（MyMBP-${user}, $rev）"
+sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake "$flake#MyMBP-${user}"
