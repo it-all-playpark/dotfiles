@@ -26,6 +26,8 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 DENYLIST="$TMPROOT/denylist"
 printf '# client names\nacme-secret-corp\n' >"$DENYLIST"
 export PUBLIC_GUARD_DENYLIST="$DENYLIST"
+# --repo の checkout は一時ディレクトリの ghq 配置から探す（実際の ~/ghq を見ない）
+export PUBLIC_GUARD_GHQ_ROOT="$TMPROOT/ghq"
 
 PHONE="090-$((1000 + 2345))-6789"
 GH_TOKEN_LIKE="ghp_$(printf 'a%.0s' {1..36})"
@@ -191,6 +193,37 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=remote.origin.mirror GIT_CONFIG_VALUE_0=true
 run_case "22a_switch_then_push_falls_back" "$OTHER" "git switch leak && git push" ask
 run_case "22b_checkout_then_push_head_falls_back" "$OTHER" "git checkout leak; git push origin HEAD" ask
 run_case "22c_cd_then_push_falls_back" "$OTHER" "cd $OTHER && git push" ask
+
+# 23. gh を内部で呼ぶ起票スクリプト（create_issue.py）も --title / --body-file を検査する
+R=$(new_repo issuescript 1)
+echo "deployed for acme-secret-corp" >"$R/leak.md"
+echo "plain body" >"$R/clean.md"
+SCRIPT=/opt/plugins/dev-flow/git-issue/scripts/create_issue.py
+run_case "23a_create_issue_body_file_asks" "$R" "python3 $SCRIPT --title t --body-file leak.md" ask
+run_case "23b_create_issue_title_asks" "$R" "create_issue.py --title 'notes for ACME-Secret-Corp' --body-file clean.md" ask
+run_case "23c_create_issue_clean_passes" "$R" "python3 $SCRIPT --title t --body-file clean.md" pass
+if [[ -z $LAST_OUTPUT ]]; then
+  PASS=$((PASS + 1))
+  echo "  PASS: 23d_create_issue_clean_stdout_empty"
+else
+  FAIL=$((FAIL + 1))
+  FAILURES+=("23d_create_issue_clean_stdout_empty: $LAST_OUTPUT")
+  echo "  FAIL: 23d_create_issue_clean_stdout_empty"
+fi
+
+# 24. --repo OWNER/NAME は cwd ではなく ghq 配置の checkout の .public-repo で判定する
+mkdir -p "$PUBLIC_GUARD_GHQ_ROOT/github.com/acme-test/pubrepo" "$PUBLIC_GUARD_GHQ_ROOT/github.com/acme-test/privrepo"
+touch "$PUBLIC_GUARD_GHQ_ROOT/github.com/acme-test/pubrepo/.public-repo"
+P=$(new_repo privcwd 0)
+echo "deployed for acme-secret-corp" >"$P/leak.md"
+run_case "24a_gh_repo_public_target_asks" "$P" "gh issue create --repo acme-test/pubrepo --title t --body-file leak.md" ask
+run_case "24b_create_issue_repo_public_target_asks" "$P" "python3 $SCRIPT --title t --body-file leak.md --repo acme-test/pubrepo" ask
+run_case "24c_gh_short_repo_option_asks" "$P" "gh issue create -R github.com/acme-test/pubrepo --title t --body-file leak.md" ask
+run_case "24d_gh_repo_private_target_passes" "$R" "gh issue create --repo acme-test/privrepo --title t --body-file leak.md" pass
+
+# 25. --repo の checkout が見つからなければ cwd の repo で判定する
+run_case "25a_missing_checkout_public_cwd_asks" "$R" "gh issue create --repo acme-test/nowhere --title t --body-file leak.md" ask
+run_case "25b_missing_checkout_private_cwd_passes" "$P" "python3 $SCRIPT --title t --body-file leak.md --repo acme-test/nowhere" pass
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"

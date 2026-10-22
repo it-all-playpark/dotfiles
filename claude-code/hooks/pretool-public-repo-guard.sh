@@ -7,7 +7,10 @@
 #   API キーが公開されていた件の再発防止）。
 #
 # 対象 repo:
-#   cwd の repo の root に `.public-repo` がある repo だけ（他の repo では何もしない）。
+#   提出先の repo の root に `.public-repo` がある repo だけ（他の repo では何もしない）。
+#   提出先は cwd の repo。gh / 起票スクリプトに --repo（-R）[HOST/]OWNER/NAME があるときは、その
+#   ローカル checkout（ghq の配置 <ghq root>/<host>/<owner>/<name>）。checkout が無ければ cwd の repo。
+#   公開範囲はローカルの `.public-repo` だけで決める（hook からネットワークに出ない）
 #
 # 検査する操作と範囲:
 #   - git push: push する src（refspec 省略時は現在ブランチ）から辿れて、まだどの remote にも無い
@@ -15,7 +18,8 @@
 #     push（--all / --mirror / --tags、未知のオプション、存在しない ref、push.default=matching、
 #     remote.<name>.mirror、git push 単独でない複合コマンド等）は
 #     全ローカルブランチ（--branches --not --remotes）を検査する
-#   - gh pr|issue create|comment|edit: コマンド文字列（--title / --body）と --body-file / -F のファイル
+#   - gh pr|issue create|comment|edit と、gh を内部で呼ぶ起票スクリプト（dev-flow git-issue の
+#     create_issue.py）: コマンド文字列（--title / --body）と --body-file / -F のファイル
 #
 # パターン:
 #   - 汎用（ここに書く）: 携帯電話番号、token の形（GitHub / AWS / Slack / OpenAI 系 / DeepL）、秘密鍵
@@ -28,6 +32,7 @@
 #
 # 環境変数:
 #   PUBLIC_GUARD_DENYLIST  denylist の場所（既定 ~/ghq/github.com/it-all-playpark/dotfiles-private/public-guard/denylist）
+#   PUBLIC_GUARD_GHQ_ROOT  --repo の checkout を探す ghq root（既定 ~/ghq）
 
 set -euo pipefail
 
@@ -39,15 +44,57 @@ CWD=$(jq -r '.cwd // empty' <<<"$INPUT")
 
 PUSH_RE='(^|[;&|[:space:]])git([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+push([[:space:];&|]|$)'
 GH_RE='(^|[;&|[:space:]])gh([[:space:]]+[^;&|[:space:]]+)*[[:space:]]+(pr|issue)[[:space:]]+(create|comment|edit)([[:space:];&|]|$)'
+# gh を内部で呼ぶ起票スクリプト。`python3 <path>/create_issue.py …` の形も拾う
+ISSUE_SCRIPT_RE='(^|[;&|[:space:]/])create_issue\.py([[:space:];&|]|$)'
 
 is_push=0
 is_gh=0
 grep -qE "$PUSH_RE" <<<"$CMD" && is_push=1
 grep -qE "$GH_RE" <<<"$CMD" && is_gh=1
+grep -qE "$ISSUE_SCRIPT_RE" <<<"$CMD" && is_gh=1
 [[ $is_push -eq 1 || $is_gh -eq 1 ]] || exit 0
 
-ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || exit 0
-[[ -f "$ROOT/.public-repo" ]] || exit 0
+CWD_ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)
+
+# repo_checkout <[HOST/]OWNER/NAME>: --repo の値に対応する ghq の配置の checkout を出す。無ければ 1
+repo_checkout() {
+  local slug=${1#http*://} dir
+  slug=${slug%/}
+  slug=${slug%.git}
+  [[ $slug =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+){1,2}$ && /$slug/ != */../* && /$slug/ != */./* ]] || return 1
+  [[ $slug == */*/* ]] || slug="github.com/$slug"
+  dir="${PUBLIC_GUARD_GHQ_ROOT:-$HOME/ghq}/$slug"
+  [[ -d $dir ]] || return 1
+  printf '%s\n' "$dir"
+}
+
+ROOT=""
+scan_push=0
+scan_gh=0
+# git push は cwd の repo を送る
+if [[ $is_push -eq 1 && -n $CWD_ROOT && -f "$CWD_ROOT/.public-repo" ]]; then
+  scan_push=1
+  ROOT=$CWD_ROOT
+fi
+# gh / 起票スクリプトは --repo の提出先で判定する。--repo が無い・checkout が見つからないものは cwd の repo
+if [[ $is_gh -eq 1 ]]; then
+  targets=()
+  repos=$(grep -oE '(^|[[:space:]])(--repo|-R)(=|[[:space:]]+)[^;&|[:space:]]+' <<<"$CMD" |
+    sed -E 's/^[[:space:]]*(--repo|-R)(=|[[:space:]]+)//; s/^["'\'']//; s/["'\'']$//' || true)
+  while IFS= read -r r; do
+    [[ -n $r ]] || continue
+    if dir=$(repo_checkout "$r"); then targets+=("$dir"); else targets+=("$CWD_ROOT"); fi
+  done <<<"$repos"
+  [[ ${#targets[@]} -gt 0 ]] || targets=("$CWD_ROOT")
+  for t in "${targets[@]}"; do
+    if [[ -n $t && -f "$t/.public-repo" ]]; then
+      scan_gh=1
+      ROOT=$t
+      break
+    fi
+  done
+fi
+[[ $scan_push -eq 1 || $scan_gh -eq 1 ]] || exit 0
 
 DENYLIST="${PUBLIC_GUARD_DENYLIST:-$HOME/ghq/github.com/it-all-playpark/dotfiles-private/public-guard/denylist}"
 
@@ -102,7 +149,7 @@ push_revs() {
   done
 }
 
-if [[ $is_push -eq 1 ]]; then
+if [[ $scan_push -eq 1 ]]; then
   revs=(--branches)
   if push_revs; then revs=("${PUSH_REVS[@]}"); fi
   git -C "$CWD" log --format=%B "${revs[@]}" --not --remotes >>"$TEXT" 2>/dev/null || true
@@ -110,7 +157,7 @@ if [[ $is_push -eq 1 ]]; then
     grep -E '^\+' | grep -vE '^\+\+\+ ' >>"$TEXT" || true
 fi
 
-if [[ $is_gh -eq 1 ]]; then
+if [[ $scan_gh -eq 1 ]]; then
   printf '%s\n' "$CMD" >>"$TEXT"
   files=$(grep -oE '(--body-file|-F)(=|[[:space:]]+)[^;&|[:space:]]+' <<<"$CMD" |
     sed -E 's/^(--body-file|-F)(=|[[:space:]]+)//; s/^["'\'']//; s/["'\'']$//' || true)
