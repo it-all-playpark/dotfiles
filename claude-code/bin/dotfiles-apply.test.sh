@@ -42,12 +42,18 @@ git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
 
 USER_NAME="$(id -un)"
 
-# stub: 呼ばれた引数を $CALLS に 1 行ずつ書く。nix は NIX_FAIL_ON に一致する引数を含むと失敗する
+# stub: 呼ばれた引数を $CALLS に 1 行ずつ書く。nix は NIX_FAIL_ON に一致する引数を含むと失敗する。
+# nix は XDG_CACHE_HOME と、それが空のディレクトリかを $CACHES に書く
 STUB="$TMPROOT/stub"
 mkdir -p "$STUB"
 cat >"$STUB/nix" <<'EOF'
 #!/usr/bin/env bash
 echo "nix $*" >>"$CALLS"
+if [ -d "${XDG_CACHE_HOME:-}" ] && [ -z "$(ls -A "$XDG_CACHE_HOME")" ]; then
+  echo "${XDG_CACHE_HOME} empty" >>"$CACHES"
+else
+  echo "${XDG_CACHE_HOME:-unset} not-empty-or-missing" >>"$CACHES"
+fi
 if [ -n "${NIX_FAIL_ON:-}" ] && [[ " $* " == *" $NIX_FAIL_ON "* ]]; then
   exit 1
 fi
@@ -56,6 +62,19 @@ cat >"$STUB/sudo" <<'EOF'
 #!/usr/bin/env bash
 echo "sudo $*" >>"$CALLS"
 EOF
+# mktemp: 本番の /private/tmp は sandbox 内のテストから書けないので、テンプレートの basename だけ使って $TMPROOT に作る
+REAL_MKTEMP="$(command -v mktemp)"
+export REAL_MKTEMP
+cat >"$STUB/mktemp" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = -d ] && [ "${2:-}" = /private/tmp/dotfiles-apply.XXXXXX ]; then
+  exec "$REAL_MKTEMP" -d "$MKTEMP_ROOT/dotfiles-apply.XXXXXX"
+fi
+exec "$REAL_MKTEMP" "$@"
+EOF
+chmod +x "$STUB/mktemp"
+export MKTEMP_ROOT="$TMPROOT/mktemp"
+mkdir -p "$MKTEMP_ROOT"
 # git は固定 URL への ls-remote だけをケースの bare origin（$FAKE_ORIGIN）に向け、他は本物に渡す
 REAL_GIT="$(command -v git)"
 export REAL_GIT
@@ -86,7 +105,9 @@ setup_case() {
   PUSHER="$dir/pusher"
   export FAKE_ORIGIN="$dir/origin.git"
   export CALLS="$dir/calls"
+  export CACHES="$dir/caches"
   : >"$CALLS"
+  : >"$CACHES"
 }
 
 # push_change <file> <content>: origin/main に <file> を <content> にする commit を足す
@@ -120,9 +141,12 @@ run_apply
 hm_line="$(sed -n 1p "$CALLS")"
 darwin_line="$(sed -n 2p "$CALLS")"
 flake="git+file://$REPO?rev=$rev"
+hm_cache="$(cat "$CACHES")"
 if [ "$RC" -eq 0 ] && [ "$(wc -l <"$CALLS" | tr -d ' ')" -eq 2 ] &&
-  [[ $hm_line == "nix run home-manager -- -b backup-"*" --flake $flake#${USER_NAME}-darwin switch" ]] &&
-  [ "$darwin_line" = "sudo nix --extra-experimental-features nix-command flakes run nix-darwin -- switch --flake $flake#MyMBP-${USER_NAME}" ] &&
+  [[ $hm_line == "nix run --inputs-from $flake home-manager -- -b backup-"*" --flake $flake#${USER_NAME}-darwin switch" ]] &&
+  [[ $hm_cache == "$MKTEMP_ROOT/dotfiles-apply."*"/home-manager empty" ]] &&
+  [[ $darwin_line == "sudo env XDG_CACHE_HOME=$MKTEMP_ROOT/dotfiles-apply."*"/nix-darwin nix --extra-experimental-features nix-command flakes run --inputs-from $flake nix-darwin -- switch --flake $flake#MyMBP-${USER_NAME}" ]] &&
+  [ -z "$(ls -A "$MKTEMP_ROOT")" ] &&
   [[ $CALLED != *"flake update"* ]] &&
   [[ $OUT == *"（${USER_NAME}-darwin, ${rev}）"* ]] && [[ $OUT == *"（MyMBP-${USER_NAME}, ${rev}）"* ]]; then
   pass "01_applies_origin_main_rev_with_home_manager_then_nix_darwin"
@@ -172,7 +196,7 @@ fi
 # ---------------------------------------------------------------------------
 setup_case hm-fail
 NIX_FAIL_ON=home-manager run_apply
-if [ "$RC" -ne 0 ] && [[ $CALLED == *"nix run home-manager"* ]] && [[ $CALLED != *sudo* ]]; then
+if [ "$RC" -ne 0 ] && [[ $CALLED == "nix run --inputs-from "*" home-manager "* ]] && [[ $CALLED != *sudo* ]]; then
   pass "05_home_manager_failure_skips_nix_darwin"
 else
   fail "05_home_manager_failure_skips_nix_darwin" "rc=$RC calls=[$CALLED] err=$ERR"

@@ -61,8 +61,18 @@ if [ "$head" != "$rev" ]; then
 fi
 flake="git+file://$repo?rev=$rev"
 
+# ~/.cache/nix（fetcher cache・eval cache）は sandbox 内から書けるので、書き換えられると rev を固定しても評価結果や
+# 取得物を差し替えられる。両 step とも sandbox から書けない /private/tmp 直下に作った空の XDG_CACHE_HOME で走らせる。
+# home-manager / nix-darwin も registry（sandbox から書ける ~/.config/nix 等）ではなく flake.lock の入力で解決する。
+# nix-darwin の step は root がこの中に書くので、後始末で消せずに残ることがある（rm の失敗は無視する）
+cache="$(mktemp -d /private/tmp/dotfiles-apply.XXXXXX)"
+trap 'rm -rf "$cache" 2>/dev/null || true' EXIT
+mkdir "$cache/home-manager" "$cache/nix-darwin"
+
 echo "dotfiles-apply: home-manager を反映する（${user}-darwin, ${rev}）"
-nix run home-manager -- -b "backup-$(date +%Y%m%d%H%M%S)" --flake "$flake#${user}-darwin" switch
+XDG_CACHE_HOME="$cache/home-manager" nix run --inputs-from "$flake" home-manager -- \
+  -b "backup-$(date +%Y%m%d%H%M%S)" --flake "$flake#${user}-darwin" switch
 
 echo "dotfiles-apply: nix-darwin を反映する（MyMBP-${user}, ${rev}）"
-sudo nix --extra-experimental-features 'nix-command flakes' run nix-darwin -- switch --flake "$flake#MyMBP-${user}"
+sudo env XDG_CACHE_HOME="$cache/nix-darwin" nix --extra-experimental-features 'nix-command flakes' \
+  run --inputs-from "$flake" nix-darwin -- switch --flake "$flake#MyMBP-${user}"
