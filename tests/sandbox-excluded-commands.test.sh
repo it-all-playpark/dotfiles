@@ -276,7 +276,7 @@ OTHER_ENTRIES=(
   "codex:*"
   "zernio:*"
   "meeting play *"
-  "meeting name *"
+  "meeting set-names *"
 )
 missing_other=()
 for e in "${OTHER_ENTRIES[@]}"; do

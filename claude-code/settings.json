@@ -558,7 +558,7 @@
       "codex:*",
       "zernio:*",
       "meeting play *",
-      "meeting name *",
+      "meeting set-names *",
       "/usr/bin/top *",
       "/usr/bin/pgrep *",
       "/usr/sbin/lsof *"
