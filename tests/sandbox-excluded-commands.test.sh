@@ -276,6 +276,7 @@ OTHER_ENTRIES=(
   "codex:*"
   "zernio:*"
   "meeting play *"
+  "meeting set-names *"
 )
 missing_other=()
 for e in "${OTHER_ENTRIES[@]}"; do
@@ -341,10 +342,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 12 ]; then
+if [ "${total_len}" -eq 13 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 12 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 13 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------
