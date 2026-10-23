@@ -76,7 +76,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -98,7 +98,7 @@
         "hooks": [
           {
             "async": false,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -128,7 +128,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -138,7 +138,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -261,7 +261,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -271,7 +271,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ],
@@ -283,7 +283,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -325,7 +325,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -345,7 +345,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
@@ -356,7 +356,7 @@
         "hooks": [
           {
             "async": true,
-            "command": "'/opt/homebrew/bin/moshi-hook' claude-hook",
+            "command": "'/opt/homebrew/opt/moshi-hook/bin/moshi-hook' claude-hook",
             "type": "command"
           }
         ]
