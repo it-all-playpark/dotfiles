@@ -101,7 +101,7 @@ else
   changed="$(git -C "$origin" diff --name-only "main" "$br")"
   parent="$(git -C "$origin" rev-parse "$br^")"
   lock="$(git -C "$origin" show "$br:flake.lock")"
-  if [[ "$br" == chore/flake-lock-* ]] && [ "$changed" = flake.lock ] && [ "$parent" = "$main_sha" ] && [ "$lock" = lock-v2 ]; then
+  if [[ $br == chore/flake-lock-* ]] && [ "$changed" = flake.lock ] && [ "$parent" = "$main_sha" ] && [ "$lock" = lock-v2 ]; then
     pass "pushes_lock_only_commit_and_opens_auto_merge_pr: commit"
   else
     fail "pushes_lock_only_commit_and_opens_auto_merge_pr: commit" "br=$br changed=$changed parent=$parent main=$main_sha lock=$lock"
@@ -148,7 +148,7 @@ echo "- auto_merge_failure_only_warns"
 W="$(setup mergefail)"
 echo lock-v2 >"$W/flake.lock"
 GH_FAIL_MERGE=1 run "$W"
-if [ "$RC" -eq 0 ] && [ "$(cat "$W/flake.lock")" = lock-v1 ] && [[ "$OUT" == *"auto-merge を予約できない"* ]]; then
+if [ "$RC" -eq 0 ] && [ "$(cat "$W/flake.lock")" = lock-v1 ] && [[ $OUT == *"auto-merge を予約できない"* ]]; then
   pass "auto_merge_failure_only_warns"
 else
   fail "auto_merge_failure_only_warns" "rc=$RC lock=$(cat "$W/flake.lock") out=$OUT"

@@ -52,7 +52,7 @@ if ! git push --no-verify --quiet origin "$commit:refs/heads/$branch"; then
   exit 1
 fi
 
-body="\`nix run .#update\` が更新し、ビルドと switch が通った flake.lock。CI が通ったら auto-merge する。"
+body='`nix run .#update` が更新し、ビルドと switch が通った flake.lock。CI が通ったら auto-merge する。'
 if ! url="$(gh pr create --base main --head "$branch" --title "$title" --body "$body")"; then
   echo "flake-lock-pr: PR を作れない（$branch は push 済み）。flake.lock は作業ツリーに残した" >&2
   exit 1
