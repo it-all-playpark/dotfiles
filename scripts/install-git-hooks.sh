@@ -6,7 +6,9 @@
 # hooksPath 自体は触らず、git が見る場所に .githooks/<name> へ委譲する shim を置く。
 # shim は実行時の作業ツリー（worktree を含む）の .githooks を呼ぶので、ブランチごとの hook が効く。
 # wt-add の worktree は .githooks を sandbox から書けないので取り出さない（skip-worktree）。その hook は
-# HEAD の中身を一時ファイルに取り出して走らせる（作業ツリーに無いのを理由に黙って飛ばさない）。
+# sandbox 内で呼ばれたときだけ HEAD の中身を一時ファイルに取り出して走らせる（黙って飛ばさない）。
+# HEAD は sandbox 内からも commit できるので、sandbox 外（人間の git 等）では走らせない。走らせると
+# .githooks の denyWrite を commit 経由で迂回して、sandbox 外で任意のコードを実行できてしまう。
 #
 # Claude のセッション（CLAUDECODE=1）では、sandbox 内で呼ばれたときだけ hook を動かす。
 # issue #249 以降 Claude Code の git は sandbox 内で動き、hook も sandbox 内で走るので脱出口にならない。
@@ -45,6 +47,10 @@ for src in "$top"/.githooks/*; do
     "hook=\"\$(git rev-parse --show-toplevel)/.githooks/$name\"" \
     'if [ ! -e "$hook" ]; then' \
     "  case \"\$(git ls-files -v -- .githooks/$name)\" in S\\ *) ;; *) exit 0 ;; esac" \
+    '  if [ -z "${CLAUDECODE:-}" ]; then' \
+    "    echo \"githooks: .githooks/$name は skip-worktree で作業ツリーに無い。sandbox 外では HEAD の hook を走らせない\" >&2" \
+    '    exit 0' \
+    '  fi' \
     "  tmp=\"\$(mktemp \"\${TMPDIR:-/tmp}/githook-$name.XXXXXX\")\" || exit 1" \
     '  trap '"'"'rm -f "$tmp"'"'"' EXIT' \
     "  git show \"HEAD:.githooks/$name\" >\"\$tmp\" && chmod +x \"\$tmp\" || exit 1" \

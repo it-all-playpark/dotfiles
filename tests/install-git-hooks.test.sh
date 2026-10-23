@@ -104,7 +104,8 @@ else
 fi
 
 echo "- shim_runs_head_hook_when_skip_worktree"
-# wt-add の worktree の形: .githooks を skip-worktree にして作業ツリーから外す。HEAD の hook が stdin・終了コードごと動く
+# wt-add の worktree の形: .githooks を skip-worktree にして作業ツリーから外す。
+# sandbox 内（CLAUDECODE=1 で hooks dir に書けない）では HEAD の hook が stdin・終了コードごと動く
 git -C "$REPO" worktree add -q -b wt-skip "$TMPROOT/wt-skip"
 # shellcheck disable=SC2016 # hook の中身として $x をそのまま書く
 printf '#!/bin/sh\nread x\necho "head-hook $x"\nexit 3\n' >"$TMPROOT/wt-skip/.githooks/pre-push"
@@ -114,11 +115,23 @@ rm "$TMPROOT/wt-skip/.githooks/pre-push"
 tmpdir="$TMPROOT/hook-tmp"
 mkdir -p "$tmpdir"
 rc=0
-out="$(cd "$TMPROOT/wt-skip" && echo refs | TMPDIR="$tmpdir" "$HOOKS/pre-push")" || rc=$?
+chmod a-w "$HOOKS"
+out="$(cd "$TMPROOT/wt-skip" && echo refs | CLAUDECODE=1 TMPDIR="$tmpdir" "$HOOKS/pre-push")" || rc=$?
+chmod u+w "$HOOKS"
 if [ "$out" = "head-hook refs" ] && [ "$rc" -eq 3 ] && [ -z "$(ls -A "$tmpdir")" ]; then
   pass "shim_runs_head_hook_when_skip_worktree"
 else
   fail "shim_runs_head_hook_when_skip_worktree" "expected 'head-hook refs' rc=3 and no temp left, got '$out' rc=$rc tmp=$(ls -A "$tmpdir")"
+fi
+
+echo "- shim_skips_head_hook_outside_claude"
+# HEAD は sandbox 内からも commit できるので、sandbox 外（CLAUDECODE なしの人間の git）では HEAD の hook を走らせない
+rc=0
+out="$(cd "$TMPROOT/wt-skip" && echo refs | "$HOOKS/pre-push" 2>/dev/null)" || rc=$?
+if [ -z "$out" ] && [ "$rc" -eq 0 ]; then
+  pass "shim_skips_head_hook_outside_claude"
+else
+  fail "shim_skips_head_hook_outside_claude" "HEAD hook ran without CLAUDECODE: '$out' rc=$rc"
 fi
 
 echo "- shim_skips_deleted_hook"
