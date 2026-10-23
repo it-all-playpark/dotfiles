@@ -586,6 +586,7 @@
         "~/.config/gws",
         "~/.config/gcloud",
         "~/.config/neon",
+        "~/.config/receipt-video",
         "/private/tmp/claude"
       ],
       "denyRead": [
