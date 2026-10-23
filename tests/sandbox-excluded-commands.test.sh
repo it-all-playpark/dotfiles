@@ -128,6 +128,7 @@ UNREGISTERED_BINS=(
   "pr-push|push と pre-push hook（repo の任意コード）を sandbox 内で走らせる（skills #871）"
   "conflict-autoresolve|worktree 内のローカル merge だけで push / fetch / gh を呼ばない"
   "secfloor-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "security-review-scope|worktree の git diff を node で判定するだけで、.git/config を書かず ssh / Keychain / ソケットも使わない"
   "structural-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "veridelta-archive|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "worktree-diff-hash|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"

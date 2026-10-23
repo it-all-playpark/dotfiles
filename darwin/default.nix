@@ -12,6 +12,7 @@ in
 {
   imports = [
     ./agent-vault.nix
+    ./claude-host-plugins.nix
     ./homebrew.nix
     ./nix.nix
     ./remote-access.nix
