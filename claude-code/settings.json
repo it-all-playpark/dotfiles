@@ -682,7 +682,10 @@
         "fonts.googleapis.com",
         "console.neon.tech",
         "oauth2.neon.tech",
-        "sales-prod-playpark-llc.aws-ap-northeast-1.turso.io"
+        "sales-prod-playpark-llc.aws-ap-northeast-1.turso.io",
+        "api.biz.moneyforward.com",
+        "api-accounting.moneyforward.com",
+        "api.box.moneyforward.com"
       ],
       "strictAllowlist": true
     }

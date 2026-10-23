@@ -17,6 +17,12 @@
 # issue #385: Prisma CLI は実行のたびに checkpoint.prisma.io:443 へ使用状況を送り、sandbox が
 # `host is not on the allow list` で拒否していた。allowedDomains には足さず、env の
 # CHECKPOINT_DISABLE=1 で送信そのものを止める。
+#
+# back-office の領収書の自動添付: 証憑を MF クラウド会計 API（POST /api/v3/vouchers）で仕訳に付け、
+# クラウドBox API で取引日・金額を書き、OAuth のトークンを更新する。sandbox が
+# `host is not on the allow list` で拒否し、毎回 host-exec の承認が要っていた。
+# どれも OAuth のトークンが要る API なので、完全一致の 3 ホストだけ足し、*.moneyforward.com にはしない。
+# 認可画面（api.biz.moneyforward.com/authorize）はブラウザで開くので sandbox を通らない。
 
 set -euo pipefail
 
@@ -78,6 +84,22 @@ if [ "${#missing[@]}" -eq 0 ]; then
   pass "gh_actions_log_hosts_exact"
 else
   fail "gh_actions_log_hosts_exact" "missing=${missing[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# moneyforward_api_hosts_exact: MF の会計 API・クラウドBox API・トークン更新の 3 ホストが完全一致のエントリで入っている
+# ---------------------------------------------------------------------------
+echo "- moneyforward_api_hosts_exact"
+missing=()
+for host in api-accounting.moneyforward.com api.box.moneyforward.com api.biz.moneyforward.com; do
+  if ! jq -e --arg h "${host}" '.sandbox.network.allowedDomains | index($h) != null' "${SETTINGS}" >/dev/null; then
+    missing+=("${host}")
+  fi
+done
+if [ "${#missing[@]}" -eq 0 ]; then
+  pass "moneyforward_api_hosts_exact"
+else
+  fail "moneyforward_api_hosts_exact" "missing=${missing[*]}"
 fi
 
 # ---------------------------------------------------------------------------
