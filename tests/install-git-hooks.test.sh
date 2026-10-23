@@ -103,6 +103,35 @@ else
   fail "shim_uses_worktree_hooks" "expected wt-hook, got '$out'"
 fi
 
+echo "- shim_runs_head_hook_when_skip_worktree"
+# wt-add の worktree の形: .githooks を skip-worktree にして作業ツリーから外す。HEAD の hook が stdin・終了コードごと動く
+git -C "$REPO" worktree add -q -b wt-skip "$TMPROOT/wt-skip"
+# shellcheck disable=SC2016 # hook の中身として $x をそのまま書く
+printf '#!/bin/sh\nread x\necho "head-hook $x"\nexit 3\n' >"$TMPROOT/wt-skip/.githooks/pre-push"
+git -C "$TMPROOT/wt-skip" commit -q -am "hook reads stdin"
+git -C "$TMPROOT/wt-skip" update-index --skip-worktree .githooks/pre-push
+rm "$TMPROOT/wt-skip/.githooks/pre-push"
+tmpdir="$TMPROOT/hook-tmp"
+mkdir -p "$tmpdir"
+rc=0
+out="$(cd "$TMPROOT/wt-skip" && echo refs | TMPDIR="$tmpdir" "$HOOKS/pre-push")" || rc=$?
+if [ "$out" = "head-hook refs" ] && [ "$rc" -eq 3 ] && [ -z "$(ls -A "$tmpdir")" ]; then
+  pass "shim_runs_head_hook_when_skip_worktree"
+else
+  fail "shim_runs_head_hook_when_skip_worktree" "expected 'head-hook refs' rc=3 and no temp left, got '$out' rc=$rc tmp=$(ls -A "$tmpdir")"
+fi
+
+echo "- shim_skips_deleted_hook"
+# skip-worktree でなく作業ツリーで消しただけの hook は、これまでどおり走らせない
+git -C "$REPO" worktree add -q -b wt-del "$TMPROOT/wt-del"
+rm "$TMPROOT/wt-del/.githooks/pre-push"
+out="$(cd "$TMPROOT/wt-del" && "$HOOKS/pre-push")"
+if [ -z "$out" ]; then
+  pass "shim_skips_deleted_hook"
+else
+  fail "shim_skips_deleted_hook" "expected no output, got '$out'"
+fi
+
 echo "- respects_absolute_hookspath"
 # 絶対パスの core.hooksPath（実環境で見られる形）でも、その場所に shim を置く
 REPO2="$TMPROOT/repo2"

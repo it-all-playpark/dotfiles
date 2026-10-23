@@ -5,6 +5,8 @@
 # core.hooksPath は <repo>/.git/hooks の絶対パスに書き換えられていることがある（設定元は未特定）ので
 # hooksPath 自体は触らず、git が見る場所に .githooks/<name> へ委譲する shim を置く。
 # shim は実行時の作業ツリー（worktree を含む）の .githooks を呼ぶので、ブランチごとの hook が効く。
+# wt-add の worktree は .githooks を sandbox から書けないので取り出さない（skip-worktree）。その hook は
+# HEAD の中身を一時ファイルに取り出して走らせる（作業ツリーに無いのを理由に黙って飛ばさない）。
 #
 # Claude のセッション（CLAUDECODE=1）では、sandbox 内で呼ばれたときだけ hook を動かす。
 # issue #249 以降 Claude Code の git は sandbox 内で動き、hook も sandbox 内で走るので脱出口にならない。
@@ -41,6 +43,14 @@ for src in "$top"/.githooks/*; do
     '  if (: >"$probe") 2>/dev/null; then rm -f "$probe"; exit 0; fi' \
     'fi' \
     "hook=\"\$(git rev-parse --show-toplevel)/.githooks/$name\"" \
+    'if [ ! -e "$hook" ]; then' \
+    "  case \"\$(git ls-files -v -- .githooks/$name)\" in S\\ *) ;; *) exit 0 ;; esac" \
+    "  tmp=\"\$(mktemp \"\${TMPDIR:-/tmp}/githook-$name.XXXXXX\")\" || exit 1" \
+    '  trap '"'"'rm -f "$tmp"'"'"' EXIT' \
+    "  git show \"HEAD:.githooks/$name\" >\"\$tmp\" && chmod +x \"\$tmp\" || exit 1" \
+    '  "$tmp" "$@"' \
+    '  exit $?' \
+    'fi' \
     '[ -x "$hook" ] || exit 0' \
     'exec "$hook" "$@"' >"$dst"
   chmod +x "$dst"
