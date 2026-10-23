@@ -200,6 +200,9 @@
                 nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-$SUFFIX switch
               fi
 
+              # 更新した flake.lock を PR にして main に入れる（switch は済んでいるので失敗しても update は成功のまま）
+              bash scripts/flake-lock-pr.sh || echo "WARNING: flake.lock を PR にできなかった。作業ツリーの flake.lock を手で PR にする"
+
               echo "Update complete!"
             ''
           );
@@ -305,6 +308,9 @@
                   nix run home-manager -- -b "$BACKUP_EXT" --flake .#''${USERNAME}-$SUFFIX switch
                 done
               fi
+
+              # 更新した flake.lock を PR にして main に入れる（switch は済んでいるので失敗しても update は成功のまま）
+              bash scripts/flake-lock-pr.sh || echo "WARNING: flake.lock を PR にできなかった。作業ツリーの flake.lock を手で PR にする"
 
               echo "All updates complete!"
             ''

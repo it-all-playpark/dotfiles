@@ -5,7 +5,7 @@ Nix Flakes dotfiles for macOS (nix-darwin + home-manager). Multi-user, multi-pla
 ## Commands
 
 ```bash
-nix run .#update              # Apply config (default: naramotoyuuji)
+nix run .#update              # Apply config (default: naramotoyuuji); opens an auto-merge PR for the updated flake.lock
 nix run .#update <username>   # Apply config for specific user
 nix run .#update-all          # Apply all users
 nix run .#update -- --full    # Also brew update/upgrade (daily 04:00 via launchd brew-upgrade)
