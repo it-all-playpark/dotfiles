@@ -5,7 +5,7 @@
 # 反映するので、更新した lock を未 commit のまま残すと、次の apply で入力が古い rev に戻る。
 #
 # 作業ツリーと HEAD には触らず、origin/main の tree の flake.lock だけを差し替えた commit を作って
-# chore/flake-lock-<日時> に push し、PR を作って auto-merge（CI が通ったら squash merge）を予約する。
+# chore/flake-lock-<日時> に push し、PR を作って auto-merge（CI が通ったら merge commit で merge）を予約する。
 # main へは直接 push しない（保護ブランチ）。push する commit は作業ツリーと中身が違うので pre-push の検査は
 # 走らせず（--no-verify）、PR の CI を merge の関門にする。
 # PR を作れたら作業ツリーの flake.lock を HEAD に戻す。新しい入力は PR が main に運び、残すと dotfiles-sync が
@@ -59,7 +59,7 @@ if ! url="$(gh pr create --base main --head "$branch" --title "$title" --body "$
 fi
 echo "flake-lock-pr: $url"
 
-if ! gh pr merge "$url" --auto --squash --delete-branch; then
+if ! gh pr merge "$url" --auto --merge --delete-branch; then
   echo "flake-lock-pr: WARNING: auto-merge を予約できない。$url は手で merge する" >&2
 fi
 

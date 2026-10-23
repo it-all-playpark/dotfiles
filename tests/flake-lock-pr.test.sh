@@ -106,7 +106,7 @@ else
   else
     fail "pushes_lock_only_commit_and_opens_auto_merge_pr: commit" "br=$br changed=$changed parent=$parent main=$main_sha lock=$lock"
   fi
-  if grep -q "^pr create --base main --head $br " "$GH_LOG" && grep -q '^pr merge https://github.com/o/r/pull/1 --auto --squash' "$GH_LOG"; then
+  if grep -q "^pr create --base main --head $br " "$GH_LOG" && grep -q '^pr merge https://github.com/o/r/pull/1 --auto --merge' "$GH_LOG"; then
     pass "pushes_lock_only_commit_and_opens_auto_merge_pr: gh"
   else
     fail "pushes_lock_only_commit_and_opens_auto_merge_pr: gh" "gh=$(cat "$GH_LOG")"
