@@ -12,3 +12,4 @@ production.cloudflare.docker.com # Docker Hub の blob の配信元
 production.cloudfront.docker.com # Docker Hub の blob の配信元（CloudFront。registry-1.docker.io の blob の取得がここへリダイレクトされる）
 docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com # Docker Hub の blob の配信元（R2）。*.r2.cloudflarestorage.com は他人の bucket にも出られるので完全一致
 dl-cdn.alpinelinux.org # alpine のイメージの apk のミラー
+binaries.prisma.sh # Prisma の engine バイナリと sha256 の配信元（docker build 内の prisma generate が取る。リダイレクトなしで直接返す）
