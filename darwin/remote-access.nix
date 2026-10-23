@@ -234,7 +234,8 @@ in
   # LocalHostName/ComputerName に Studio を含む Mac は自動対象にし、マーカーでも明示できる。
   # 明示有効化: touch /Users/${username}/.config/dotfiles/.no-sleep-server
   # 明示無効化する場合は Mac 名から Studio を外すか、この設定を調整してから switch する。
-  system.activationScripts.pmsetServerConfig.text = ''
+  # nix-darwin は決まった名前の activation script しか実行しないので postActivation に入れる。
+  system.activationScripts.postActivation.text = ''
     MARKER="/Users/${username}/.config/dotfiles/.no-sleep-server"
     LOCAL_HOST_NAME=$(/usr/sbin/scutil --get LocalHostName 2>/dev/null || true)
     COMPUTER_NAME=$(/usr/sbin/scutil --get ComputerName 2>/dev/null || true)
