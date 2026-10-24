@@ -9,38 +9,24 @@
 #   `-s danger-full-access` を付ければ Codex の sandbox ごと外れる。どの session からも
 #   そうした Codex を起動できないよう、許可形以外の codex 呼び出しを deny する（issue #409）。
 #
-# 判定:
-#   コマンドを awk で語に分け（シングル / ダブルクォート・バックスラッシュ・`$(…)` / backtick・
-#   `;` `&` `|` `(` `)` 改行・リダイレクト・クォートした / しない heredoc の本文・コメント）、
-#   各単純コマンドの先頭の語（`VAR=x` 前置と `{` `!` `if` `then` `do` 等の予約語は飛ばす）が
-#   codex（パス付きを含む）のものを取り出す。`cd x && codex …` のような複合形も 1 つずつ見る。
-#   通すのは次だけで、それ以外の codex 呼び出し（sandbox・apply・mcp・対話 TUI・read-only を
-#   明示しない exec 等）は deny する:
-#     - `codex --version` / `codex --help` / `codex features list` / `codex login status`
-#     - `-s read-only` か `--sandbox read-only` を明示した `codex exec` / `codex review`
-#   ただし次を 1 つでも含めば、上の形でも deny する:
-#     - `--dangerously-*`（`--dangerously-bypass-approvals-and-sandbox` / `--dangerously-bypass-hook-trust`）と
-#       その隠し alias の `--yolo`
-#     - codex の前の `VAR=x` 前置（`env` の後ろを含む。`CODEX_HOME=` で書ける場所の config.toml を読ませられる）
-#     - `env -S` / `--split-string`（codex の引数を語として追えない）
-#     - `-s` / `--sandbox` の `workspace-write` / `danger-full-access`
-#     - `--add-dir`
-#     - `--approve-for-me`（workspace-write の sandbox で承認を自動で通す）
-#     - `-o` / `--output-last-message`（codex 本体が sandbox の外でファイルに書く）
-#     - `--full-auto`（codex は `-s` より優先して sandbox を workspace-write にする）
-#     - `-C` / `--cd`（codex の作業 dir と、その dir の project config を変える）
-#     - `--remote` / `--remote-auth-token-env` / `-p` / `--profile` / `--enable`
-#     - `-c` / `--config` で、許可するキー（model・model_reasoning_effort・
-#       model_reasoning_summary・model_verbosity）以外を上書きするもの
-#       （model_provider・mcp_servers・notify・otel 等で、通信先や sandbox の外で動くプログラムを変えられる）
-#     - hook の cwd から $HOME の手前までに project config（`.codex/config.toml`）があるもの
-#       （mcp_servers・notify を書ける。settings.json の denyWrite で ~/ghq/**/.codex も塞ぐ）
-#     - `$` 展開・コマンド置換・`<(…)`・クォートしない glob / brace を含む引数
-#       （hook からは展開後の値が見えず、`"$(cat f)"` でもフラグとして読まれうるため）。
-#       プロンプトは `-` を付けて stdin（`< file` かクォートした heredoc）から渡す
-#   lexical な判定でシェルの完全なパースではない（alias・関数・eval で組み立てた呼び出しは追えない）。
-#   追い切れない構造（算術 `$((…))` / `((…))` / `$[…]` の中の codex、クォートしない heredoc の本文の
-#   `$(` / backtick と codex、backtick の中の `\``、置換の中の case）は codex を動的として deny する。
+# 判定（許可形への完全一致。シェルの構文は解釈しない）:
+#   1. `codex` の語を含まないコマンドは見ない
+#   2. シェルのメタ文字（; & | ` $ ( ) { } < > 改行）を含まず、先頭の語が素の名前
+#      （英数字と _ . / ~ + - # だけ）で、codex（パス付きを含む）でも、後ろのコマンドを起動する
+#      wrapper（timeout・nice・env・command 等）でもなければ、codex は引数にしか現れないので素通しする
+#   3. それ以外は、次の許可形に完全一致するものだけ通し、残りはすべて deny する
+#      （複合コマンド・置換・算術式・heredoc・VAR=x 前置・wrapper 越しの codex は、中身を問わず deny）
+#        - `codex --version` / `codex --help` / `codex features list` / `codex login status`
+#        - `-s read-only` / `--sandbox read-only` / `--sandbox=read-only` を明示した `codex exec`（`e`）/
+#          `codex review` で、それ以外の option が次の許可リストにあるもの:
+#            -m / --model、-c / --config（キーが model・model_reasoning_effort・model_reasoning_summary・
+#            model_verbosity のもの）、exec の --skip-git-repo-check・--json・--ephemeral・--color、
+#            review の --uncommitted・--base・--commit・--title
+#          位置引数はプロンプト（`-` で stdin）。プロンプトは末尾の `< file` 1 つで渡せる
+#        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ
+#      hook の cwd から $HOME の手前までに project config（`.codex/config.toml`）があれば、
+#      許可形でも deny する（mcp_servers・notify が sandbox の外で動く）
+#   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
 #
 # 出力:
 #   - deny 時:  {"hookSpecificOutput":{"hookEventName":"PreToolUse",
@@ -58,210 +44,89 @@ if [[ $CMD != *codex* ]]; then
   exit 0
 fi
 
-# codex 呼び出し 1 つにつき `C`（引数が静的）か `D`（展開を含む）か `V`（`VAR=x` 前置あり）の行、引数ごとに `A<引数>` の行、
-# 終わりに `E` の行を出す
-# shellcheck disable=SC2016 # 意図的なリテラル: awk のプログラム
-TOKENIZER='
-function init(d) { cstart[d] = 1; iscodex[d] = 0; cn[d] = 0; cdyn[d] = 0; cenv[d] = 0; wrap[d] = 0; wrapval[d] = 0 }
-# 追い切れない構造: codex の呼び出しを動的として出す
-function bail() { print "D"; print "E" }
-function inbt(   k) { for (k = 1; k <= sp; k++) if (stk[k] == "B" || stk[k] == "BD") return 1; return 0 }
-# 算術展開 / 算術コマンド（`<<` はシフトで heredoc ではない）は対応する閉じまでを動的な語として読む
-function arith(   j, d, op, cl, ch, s) {
-  if (c == "$" && nc == "[") { op = "["; cl = "]"; j = i + 2; d = 1 } else { op = "("; cl = ")"; j = (c == "$") ? i + 3 : i + 2; d = 2 }
-  while (j <= n && d > 0) { ch = substr(src, j, 1); if (ch == op) d++; else if (ch == cl) d--; j++ }
-  s = substr(src, i, j - i)
-  # 括弧はクォートを無視して数えるので、クォート・backtick・\ を含む式は閉じの位置を信用できない
-  if (s ~ /codex/ || s ~ /[\047"`\\]/) bail()
-  word = word s; inword = 1; wdyn = 1
-  i = j
+deny() {
+  jq -cn --arg reason "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}'
+  exit 0
 }
-function kw(w) { return w ~ /^(\{|!|if|then|else|elif|do|while|until)$/ }
-function wrapper(w) { return w ~ /^(.*\/)?(timeout|nice|nohup|stdbuf|time|env)$/ }
-function endword(   w, dy, q) {
-  if (!inword) return
-  w = word; dy = wdyn; q = wq
-  word = ""; inword = 0; wdyn = 0; wq = 0
-  gsub(/\n/, " ", w)
-  # `<<<` やリダイレクト先の語も、展開を含めば codex の呼び出しを動的として扱う
-  if (skipnext) { skipnext = 0; if (dy && iscodex[depth]) cdyn[depth] = 1; return }
-  if (hdnext) { nhd++; hdelim[nhd] = w; hstrip[nhd] = (hdnext == 2); hquote[nhd] = q; hdnext = 0; return }
-  if (cstart[depth]) {
-    # timeout / nice / env 等の後ろの codex も sandbox の外で動くので、wrapper とそのオプション・
-    # 値（秒数・nice 値・展開を含む語）を飛ばして次の語を先頭として見る
-    if (wrapval[depth]) { wrapval[depth] = 0; return }
-    # `VAR=x` 前置（env の後ろを含む）は飛ばすが印を付ける（CODEX_HOME 等で書ける場所の config.toml を読ませられる）
-    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { cenv[depth] = 1; return }
-    # 置換の中の case は pattern の `)` で置換の終わりを読み違える
-    if (!dy && w == "case" && depth > 0) bail()
-    if (kw(w)) return
-    if (!dy && wrapper(w)) { wrap[depth] = w; sub(/.*\//, "", wrap[depth]); return }
-    if (wrap[depth] == "env") {
-      # env -S / --split-string は文字列を分けて実行するので、中の codex 呼び出しを語として追えない
-      if (!dy && w ~ /^(-[^-]*S|--split-string)/) { iscodex[depth] = 1; cdyn[depth] = 1; cstart[depth] = 0; return }
-      # env の後ろの展開は VAR=x に展開されうる
-      if (dy) { cenv[depth] = 1; return }
-      if (w ~ /^-/) {
-        if (w ~ /^(-[^-]*[uCP]|--unset|--chdir)$/) wrapval[depth] = 1
-        return
-      }
-    } else if (wrap[depth] && (dy || w ~ /^-/ || w ~ /^[0-9.]+[smhd]?$/)) {
-      if (w ~ /^(-n|-k|-s|-i|-o|-e|--signal|--kill-after|--adjustment|--input|--output|--error)$/) wrapval[depth] = 1
-      return
-    }
-    cstart[depth] = 0
-    if (!dy && (w == "codex" || w ~ /\/codex$/)) iscodex[depth] = 1
-    return
-  }
-  if (iscodex[depth]) {
-    cn[depth]++; ca[depth, cn[depth]] = w
-    if (dy) cdyn[depth] = 1
-  }
-}
-function endcmd(   k) {
-  endword()
-  skipnext = 0; hdnext = 0
-  if (iscodex[depth]) {
-    print (cenv[depth] ? "V" : (cdyn[depth] ? "D" : "C"))
-    for (k = 1; k <= cn[depth]; k++) print "A" ca[depth, k]
-    print "E"
-  }
-  init(depth)
-}
-function pushsub(kind) {
-  sp++; stk[sp] = kind
-  sword[sp] = word; sinw[sp] = inword
-  word = ""; inword = 0; wdyn = 0
-  depth++; init(depth)
-  mode = "N"
-}
-function popsub(   k) {
-  k = stk[sp]
-  endcmd()
-  depth--
-  word = sword[sp]; inword = 1; wdyn = 1
-  sp--
-  mode = (k == "SD" || k == "BD") ? "D" : "N"
-}
-{ src = (NR > 1) ? src "\n" $0 : $0 }
-END {
-  n = length(src)
-  depth = 0; sp = 0; mode = "N"; nhd = 0
-  init(0)
-  i = 1
-  while (i <= n) {
-    c = substr(src, i, 1)
-    nc = substr(src, i + 1, 1)
-    if (mode == "Q") {
-      e = index(substr(src, i), "\047")
-      if (e == 0) { word = word substr(src, i); i = n + 1; continue }
-      word = word substr(src, i, e - 1); i += e; mode = "N"; continue
-    }
-    # ANSI-C クォート（$ の直後のシングルクォート）: バックスラッシュは次の 1 文字（エスケープしたシングルクォートや
-    # バックスラッシュを含む）とまとめて読み、エスケープしていないシングルクォートで閉じる
-    if (mode == "A") {
-      if (c == "\\") { word = word c nc; i += 2; continue }
-      if (c == "\047") { mode = "N"; i++; continue }
-      word = word c; i++; continue
-    }
-    if (mode == "D") {
-      if (c == "$" && (nc == "[" || substr(src, i, 3) == "$((")) { arith(); continue }
-      if (c == "\\") {
-        if (nc == "`" && inbt()) bail()
-        if (nc == "\n") { i += 2; continue }
-        if (nc ~ /[$`"\\]/) { word = word nc; i += 2; continue }
-        word = word c; i++; continue
-      }
-      if (c == "\"") { mode = "N"; i++; continue }
-      if (c == "$" && nc == "(") { pushsub("SD"); i += 2; continue }
-      if (c == "`") { pushsub("BD"); i++; continue }
-      if (c == "$" && nc ~ /[A-Za-z0-9_{@*#?$!-]/) wdyn = 1
-      word = word c; i++; continue
-    }
-    # mode == "N"
-    if (c == "\\") {
-      if (nc == "\n") { i += 2; continue }
-      # backtick の中の \` は入れ子の backtick で、開き / 閉じを追えない
-      if (nc == "`" && inbt()) bail()
-      word = word nc; inword = 1; wq = 1; i += 2; continue
-    }
-    if (c == "\047") { mode = "Q"; inword = 1; wq = 1; i++; continue }
-    if (c == "\"") { mode = "D"; inword = 1; wq = 1; i++; continue }
-    if ((c == "$" && (nc == "[" || substr(src, i, 3) == "$((")) || (c == "(" && nc == "(")) { arith(); continue }
-    if (c == "$") {
-      if (nc == "(") { pushsub("S"); i += 2; continue }
-      if (nc ~ /[A-Za-z0-9_{@*#?$!\047"-]/) wdyn = 1
-      if (nc == "\047") { mode = "A"; inword = 1; wq = 1; i += 2; continue }
-      if (nc == "\"") { inword = 1; i++; continue }
-      word = word c; inword = 1; i++; continue
-    }
-    if (c == "`") {
-      if (sp > 0 && (stk[sp] == "B" || stk[sp] == "BD")) popsub(); else pushsub("B")
-      i++; continue
-    }
-    if (c == "#" && !inword) {
-      e = index(substr(src, i), "\n")
-      i = (e == 0) ? n + 1 : i + e - 1
-      continue
-    }
-    if (c == " " || c == "\t") { endword(); i++; continue }
-    if (c == "\n") {
-      endcmd()
-      i++
-      for (k = 1; k <= nhd; k++) {
-        body = ""
-        while (i <= n) {
-          e = index(substr(src, i), "\n")
-          if (e == 0) { line = substr(src, i); i = n + 1 } else { line = substr(src, i, e - 1); i += e }
-          if (hstrip[k]) sub(/^\t+/, "", line)
-          if (line == hdelim[k]) break
-          body = body line "\n"
-        }
-        # クォートしない heredoc の本文の $(…) / backtick は展開・実行される
-        if (!hquote[k] && body ~ /(\$\(|`)/ && body ~ /codex/) bail()
-      }
-      nhd = 0
-      continue
-    }
-    if (c == ";" || c == "|") { endcmd(); i++; continue }
-    if (c == "&") {
-      if (nc == ">") {
-        endword(); i += 2
-        if (substr(src, i, 1) == ">") i++
-        skipnext = 1; continue
-      }
-      endcmd(); i++; continue
-    }
-    if (c == "(") { endcmd(); sp++; stk[sp] = "P"; i++; continue }
-    if (c == ")") {
-      if (sp > 0 && (stk[sp] == "S" || stk[sp] == "SD")) { popsub(); i++; continue }
-      endcmd()
-      if (sp > 0 && stk[sp] == "P") sp--
-      i++; continue
-    }
-    if (c == "<" || c == ">") {
-      if (nc == "(") { pushsub("S"); i += 2; continue }
-      if (inword && !wdyn && word ~ /^[0-9]+$/) { word = ""; inword = 0 } else endword()
-      if (substr(src, i, 3) == "<<<") { skipnext = 1; i += 3; continue }
-      if (c == "<" && nc == "<") {
-        if (substr(src, i + 2, 1) == "-") { hdnext = 2; i += 3 } else { hdnext = 1; i += 2 }
-        continue
-      }
-      i++
-      while (substr(src, i, 1) ~ /[<>&|]/) i++
-      skipnext = 1; continue
-    }
-    if (c ~ /[*?[{]/) wdyn = 1
-    word = word c; inword = 1; i++
-  }
-  endcmd()
-  while (depth > 0) { depth--; endcmd() }
-}
-'
 
-# `-c` / `--config` で上書きを許すキー（それ以外は deny。model_provider・mcp_servers・notify・otel 等で
-# 通信先や Codex の sandbox の外で動くプログラムを変えられる）
+SHAPE_REASON='codex の語を含むコマンドは、; & | ` $ ( ) { } < > 改行を含まない単純コマンドにする（codex が引数に現れるだけのものか、codex の許可形）。codex を wrapper（timeout・env 等）や VAR=x 前置の後ろに置かない。プロンプトは - を付けて末尾の < file で渡す'
+FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、-s read-only を明示し、option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけの codex exec / codex review'
+PROJECT_REASON='cwd の上に codex の project config（.codex/config.toml）がある（mcp_servers・notify が sandbox の外で動く）。project config の無い dir から codex を呼ぶ'
+
+META_RE=$'[;&|`$(){}<>\n]'
+PLAIN_HEAD_RE='^[A-Za-z0-9_./~+#-]+$'
+# 後ろの語をコマンドとして起動する wrapper / precommand modifier（zsh の `-`・noglob 等を含む）
+RUNNER_RE='^(-|timeout|gtimeout|nice|nohup|stdbuf|time|env|command|exec|builtin|noglob|nocorrect|xargs|sudo|doas|caffeinate|ionice|chrt|taskset|setsid|arch|unbuffer|chronic)$'
+
+# 2. メタ文字を含まず、先頭の語が素の名前で codex でも wrapper でもない → codex は引数にしか現れない
+if [[ ! $CMD =~ $META_RE ]]; then
+  head=${CMD#"${CMD%%[![:blank:]]*}"}
+  head=${head%%[[:blank:]]*}
+  if [[ $head =~ $PLAIN_HEAD_RE && $head != codex && $head != */codex && ! ${head##*/} =~ $RUNNER_RE ]]; then
+    exit 0
+  fi
+fi
+
+# 3. codex の許可形への完全一致
+BARE='[A-Za-z0-9_./=:,+@%~-]+'
+SQ="'[^']*'"
+DQ='"[^"\]*"'
+WORD_RE="^(${BARE}|${SQ}|${DQ})+"
+BARE_CAP="^(${BARE})"
+SQ_CAP="^'([^']*)'"
+DQ_CAP='^"([^"\]*)"'
+# 末尾の `< file`（プロンプトを stdin で渡す）
+STDIN_RE="^(.*[^[:blank:]<])[[:blank:]]+<[[:blank:]]*(${BARE})[[:blank:]]*$"
 CONFIG_ALLOW_RE='^(model|model_reasoning_effort|model_reasoning_summary|model_verbosity)$'
+
+body=$CMD
+if [[ $body =~ $STDIN_RE ]]; then
+  body=${BASH_REMATCH[1]}
+fi
+if [[ $body =~ $META_RE ]]; then
+  deny "$SHAPE_REASON"
+fi
+
+# unquote <語>: '…' / "…" / 素の文字の連結を外して UQ に入れる
+unquote() {
+  local w=$1
+  UQ=""
+  while [[ -n $w ]]; do
+    if [[ $w =~ $SQ_CAP || $w =~ $DQ_CAP || $w =~ $BARE_CAP ]]; then
+      UQ+=${BASH_REMATCH[1]}
+      w=${w:${#BASH_REMATCH[0]}}
+    else
+      return 1
+    fi
+  done
+}
+
+# 語に分ける。許可した文字・クォート以外が混じれば deny
+RAW=()
+TOKS=()
+s=$body
+while :; do
+  s=${s#"${s%%[![:blank:]]*}"}
+  if [[ -z $s ]]; then
+    break
+  fi
+  if [[ ! $s =~ $WORD_RE ]]; then
+    deny "$SHAPE_REASON"
+  fi
+  w=${BASH_REMATCH[0]}
+  s=${s:${#w}}
+  if [[ -n $s && $s != [[:blank:]]* ]]; then
+    deny "$SHAPE_REASON"
+  fi
+  unquote "$w" || deny "$SHAPE_REASON"
+  RAW+=("$w")
+  TOKS+=("$UQ")
+done
+
+# 先頭はクォートしない codex（パス付きを含む）。VAR=x 前置・wrapper・クォートした名前は deny
+if ((${#RAW[@]} == 0)) || [[ ${RAW[0]} != codex && ${RAW[0]} != */codex ]] || [[ ${RAW[0]} == *[\'\"]* ]]; then
+  deny "$SHAPE_REASON"
+fi
 
 HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 HOOK_CWD=${HOOK_CWD:-$PWD}
@@ -279,132 +144,111 @@ has_project_config() {
   return 1
 }
 
-# judge <codex の引数…>: 通すなら何も出さない。deny なら理由の種類（danger / form）を出す
+# judge <codex の引数…>: 許可形なら 0
 judge() {
-  local n=$# i v key ro=0 sub=""
+  local n=$# i=0 np=0 t v key ro=0 sub=""
   local -a a=("$@")
 
-  for ((i = 0; i < n; i++)); do
-    case ${a[i]} in
-    # -o / --output-last-message は codex 本体が sandbox の外でファイルに書く
-    # --full-auto は -s より優先して sandbox を workspace-write にする。-C / --cd は作業 dir と project config を変える
-    --dangerously-* | --yolo | --add-dir | --add-dir=* | --approve-for-me | -o | -o?* | --output-last-message | --output-last-message=* | \
-      --full-auto | -C | -C?* | --cd | --cd=* | --remote | --remote=* | --remote-auth-token-env | --remote-auth-token-env=* | \
-      -p | -p?* | --profile | --profile=* | --enable | --enable=*)
-      echo danger
-      return
-      ;;
-    -s | --sandbox | --sandbox=* | -s?*)
-      case ${a[i]} in
-      -s | --sandbox) v=${a[i + 1]-} ;;
-      --sandbox=*) v=${a[i]#--sandbox=} ;;
-      *) v=${a[i]#-s} v=${v#=} ;;
-      esac
-      case $v in
-      read-only) ro=1 ;;
-      workspace-write | danger-full-access)
-        echo danger
-        return
-        ;;
-      esac
-      ;;
-    -c | --config | --config=* | -c?*)
-      case ${a[i]} in
-      -c | --config) v=${a[i + 1]-} ;;
-      --config=*) v=${a[i]#--config=} ;;
-      *) v=${a[i]#-c} v=${v#=} ;;
-      esac
-      key=${v%%=*}
-      key=${key//[[:space:]\"\']/}
-      if [[ ! $key =~ $CONFIG_ALLOW_RE ]]; then
-        echo danger
-        return
-      fi
-      ;;
-    esac
-  done
-
-  # サブコマンド（グローバルオプションとその値を飛ばした最初の位置引数）
-  for ((i = 0; i < n; i++)); do
-    case ${a[i]} in
-    --)
-      sub="--"
-      break
-      ;;
-    -c | --config | --enable | --disable | --remote | --remote-auth-token-env | -i | --image | -m | --model | --local-provider | -p | --profile | -s | --sandbox | -C | --cd | --add-dir | -a | --ask-for-approval)
-      i=$((i + 1))
-      ;;
-    -*) ;;
-    *)
-      sub=${a[i]}
-      break
-      ;;
-    esac
-  done
-
   if ((n == 1)) && [[ ${a[0]} == --version || ${a[0]} == --help ]]; then
-    return
+    return 0
   fi
   if ((n == 2)) && [[ "${a[0]} ${a[1]}" == "features list" || "${a[0]} ${a[1]}" == "login status" ]]; then
-    return
+    return 0
   fi
-  if [[ $sub == exec || $sub == e || $sub == review ]] && ((ro)); then
-    if has_project_config; then
-      echo project
-    fi
-    return
-  fi
-  echo form
-}
 
-deny() {
-  jq -cn --arg reason "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}'
-  exit 0
-}
-
-FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、-s read-only か --sandbox read-only を明示した codex exec / codex review だけ'
-DANGER_REASON='codex の sandbox を外す・広げる指定は使わない（--dangerously-* / --yolo / --full-auto / -s・--sandbox の workspace-write・danger-full-access / --add-dir / --approve-for-me / -o / -C・--cd / --remote* / -p・--profile / --enable / model・model_reasoning_effort・model_reasoning_summary・model_verbosity 以外の -c 上書き）。-s read-only で呼ぶ'
-PROJECT_REASON='cwd の上に codex の project config（.codex/config.toml）がある（mcp_servers・notify が sandbox の外で動く）。project config の無い dir から codex を呼ぶ'
-ENV_REASON='codex の前に VAR=x の前置（CODEX_HOME 等）を付けない（書ける場所の config で sandbox の設定を上書きできる）'
-DYNAMIC_REASON='codex の引数に $ 展開・コマンド置換・<(…)・クォートしない glob / brace を使わない（hook が展開後の値を確かめられない）。プロンプトは - を付けて stdin（< file かクォートした heredoc）から渡す'
-
-# collect: awk の出力を読み、最初に deny になった呼び出しの理由の種類を出す。awk が SIGPIPE で
-# 落ちて pipefail が exit 0 以外を返さないよう、入力は最後まで読む
-# （macOS の bash 3.2 は `$(…)` の中の case を読み違えるので関数に出しておく）
-collect() {
-  local verdict="" kind="" line
-  local -a args=()
-  while IFS= read -r line; do
-    case $line in
-    C | D | V)
-      kind=$line
-      args=()
+  while ((i < n)); do
+    t=${a[i]}
+    v=""
+    case $t in
+    -s | --sandbox | -m | --model | -c | --config | --color | --base | --commit | --title)
+      # 値の位置にフラグを置いて紛れ込ませる形（-m --yolo 等）も許可しない
+      if ((i + 1 >= n)) || [[ ${a[i + 1]} == -* ]]; then
+        return 1
+      fi
+      v=${a[i + 1]}
+      i=$((i + 2))
       ;;
-    A*) args+=("${line#A}") ;;
-    E)
-      if [[ -n $verdict ]]; then
-        continue
-      fi
-      if [[ $kind == V ]]; then
-        verdict="env"
-      elif [[ $kind == D ]]; then
-        verdict=dynamic
+    --sandbox=* | --model=* | --config=* | --color=* | --base=* | --commit=* | --title=*)
+      v=${t#*=}
+      t=${t%%=*}
+      i=$((i + 1))
+      ;;
+    -*)
+      # 値を取らない option（サブコマンドごとの許可は下で見る）
+      i=$((i + 1))
+      ;;
+    *)
+      # 位置引数: 最初の 1 つがサブコマンド、以降はプロンプト
+      if [[ -z $sub ]]; then
+        case $t in
+        exec | e | review) sub=$t ;;
+        *) return 1 ;;
+        esac
+      elif ((np == 0)) && [[ $sub != review && ($t == resume || $t == help) ]]; then
+        # codex exec resume / help はサブコマンド
+        return 1
       else
-        verdict=$(judge ${args[@]+"${args[@]}"})
+        np=$((np + 1))
       fi
+      i=$((i + 1))
+      continue
       ;;
     esac
+
+    case $t in
+    -s | --sandbox)
+      if [[ $v != read-only ]]; then
+        return 1
+      fi
+      ro=1
+      ;;
+    -c | --config)
+      key=${v%%=*}
+      key=${key//[[:blank:]]/}
+      if [[ $v != *=* || ! $key =~ $CONFIG_ALLOW_RE ]]; then
+        return 1
+      fi
+      ;;
+    -m | --model) ;;
+    --color)
+      if [[ $sub != exec && $sub != e ]]; then
+        return 1
+      fi
+      ;;
+    --base | --commit | --title)
+      if [[ $sub != review ]]; then
+        return 1
+      fi
+      ;;
+    --skip-git-repo-check | --json | --ephemeral)
+      if [[ $sub != exec && $sub != e ]]; then
+        return 1
+      fi
+      ;;
+    --uncommitted)
+      if [[ $sub != review ]]; then
+        return 1
+      fi
+      ;;
+    -)
+      if [[ -z $sub ]]; then
+        return 1
+      fi
+      ;;
+    *) return 1 ;;
+    esac
   done
-  echo "$verdict"
+
+  SUB=$sub
+  [[ -n $sub ]] && ((ro))
 }
 
-VERDICT=$(printf '%s\n' "$CMD" | awk "$TOKENIZER" | collect)
-
-case $VERDICT in
-env) deny "$ENV_REASON" ;;
-dynamic) deny "$DYNAMIC_REASON" ;;
-danger) deny "$DANGER_REASON" ;;
-project) deny "$PROJECT_REASON" ;;
-form) deny "$FORM_REASON" ;;
-esac
+SUB=""
+if ! judge "${TOKS[@]:1}"; then
+  deny "$FORM_REASON"
+fi
+# project config は exec / review だけが読む（--version 等の情報表示は見ない）
+if [[ -n $SUB ]] && has_project_config; then
+  deny "$PROJECT_REASON"
+fi
 exit 0
