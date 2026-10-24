@@ -195,14 +195,15 @@ fi
 #
 # 素の codex（excludedCommands の codex:* で sandbox 外）の呼び出しガードも全 Bash
 # コマンドで走らせる（`if` で絞ると `cd x && codex …` を見逃す）。新規の hook ファイルは
-# 次の activation までリンクされないので、無いときは exit 0 で抜ける形にする。
+# 次の activation までリンクされないので、無いときだけ exit 0 で抜ける形にする
+# （`|| true` で hook の失敗まで握り潰さない）。
 # ---------------------------------------------------------------------------
 echo "- settings_pretool_codex_guard_wired"
 count="$(jq '
     [.hooks.PreToolUse // [] | .[]
       | select(.matcher == "Bash")
       | .hooks[]
-      | select(.command == "[ -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] && bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\" || true" and (has("if") | not))
+      | select(.command == "[ ! -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] || bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\"" and (has("if") | not))
     ] | length
   ' "${SETTINGS}")"
 if [ "${count}" -eq 1 ] && [ -x "${HOOKS_DIR}/pretool-codex-guard.sh" ]; then

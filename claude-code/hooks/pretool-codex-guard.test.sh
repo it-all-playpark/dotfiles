@@ -265,7 +265,7 @@ echo "[Non-codex commands — should pass through silently]"
 run_case "generate-thumbnail" 'generate-thumbnail --input a.png --output b.png' "pass"
 run_case "grep codex" 'grep -rn codex claude-code/' "pass"
 run_case "rg dangerous flag as pattern" "rg -n 'codex exec --dangerously-bypass-approvals-and-sandbox' docs" "pass"
-run_case "git commit message" 'git commit -m "feat: codex exec -s danger-full-access を deny する"' "pass"
+run_case "git commit message" 'git commit -m "feat: deny codex exec -s danger-full-access"' "pass"
 run_case "echo codex" 'echo codex' "pass"
 run_case "ls ~/.codex" 'ls ~/.codex' "pass"
 run_case "cat codex config" 'cat codex/config.base.toml' "pass"
@@ -279,6 +279,18 @@ run_case "VAR= prefix before plain command" 'FOO=1 grep codex f' "deny"
 # メタ文字を含む非 codex コマンドも、codex を起動しうる形として deny に倒す（fail-closed）
 run_case "codex in quoted heredoc body" $'gh pr create --body-file - <<\'EOF\'\ncodex exec --dangerously-bypass-approvals-and-sandbox\nEOF' "deny"
 run_case "grep codex piped" 'grep -rn codex docs | head' "deny"
+# 印字可能な ASCII と空白以外のバイトを含むものは素通しせず、許可形の判定に回す
+run_case "non-ASCII git commit message" 'git commit -m "feat: codex exec -s danger-full-access を deny する"' "deny"
+run_case "non-ASCII bytes before ; codex" $'grep \xe3\x81 f ; codex --yolo exec x' "deny"
+# 4096 バイトを超えるものは字句分割の前に deny
+long_arg=$(printf 'a%.0s' {1..4100})
+run_case "codex word in an over-long command" "grep codex ${long_arg}" "deny"
+
+# --- cwd が symlink 越しでも、物理パスの祖先の project config を見る ---
+echo "[Project config via symlinked cwd — should deny]"
+ln -s "$TMPROOT/proj/sub" "$TMPROOT/plain/sublink"
+run_case "exec read-only with symlinked cwd into project" 'codex exec -s read-only "x"' "deny" "$TMPROOT/plain/sublink"
+run_case "exec read-only with missing cwd" 'codex exec -s read-only "x"' "deny" "$TMPROOT/missing"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

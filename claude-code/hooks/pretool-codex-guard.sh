@@ -11,7 +11,8 @@
 #
 # 判定（許可形への完全一致。シェルの構文は解釈しない）:
 #   1. `codex` の語を含まないコマンドは見ない
-#   2. シェルのメタ文字（; & | ` $ ( ) { } < > 改行）を含まず、先頭の語が素の名前
+#   （比較は LC_ALL=C のバイト単位。4096 バイトを超えるものと、途中で失敗したもの（ERR trap）は deny）
+#   2. シェルのメタ文字（; & | ` $ ( ) { } < > 改行）と、印字可能な ASCII・空白以外のバイトを含まず、先頭の語が素の名前
 #      （英数字と _ . / ~ + - # だけ）で、codex（パス付きを含む）でも、後ろのコマンドを起動する
 #      wrapper（timeout・nice・env・command 等）でもなければ、codex は引数にしか現れないので素通しする
 #   3. それ以外は、次の許可形に完全一致するものだけ通し、残りはすべて deny する
@@ -27,7 +28,7 @@
 #          位置引数はプロンプト（`-` で stdin）。exec の最初の位置引数が resume・fork・review・help なら
 #          サブコマンドなので deny。プロンプトは末尾の `< file` 1 つで渡せる
 #        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ
-#      hook の cwd から $HOME の手前までに codex の project 層（`.codex` dir。config.toml・rules・
+#      hook の cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層（`.codex` dir。config.toml・rules・
 #      hooks.json 等）があれば、許可形でも deny する（mcp_servers・notify・hooks が sandbox の外で動き、
 #      rules が承認を変える）
 #   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
@@ -38,7 +39,19 @@
 #     理由は固定文で、入力の command の文字列を埋め込まない
 #   - 素通し時: stdout 空で exit 0（allow は返さない。Claude 通常の permission flow に委ねる）
 
-set -euo pipefail
+set -eEuo pipefail
+# regex と glob をバイト単位で比べる（UTF-8 ロケールでは不正なマルチバイト列で regexec が一致なしを返しうる）
+export LC_ALL=C
+
+deny() {
+  trap - ERR
+  jq -cn --arg reason "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}'
+  exit 0
+}
+
+SHAPE_REASON='codex の語を含むコマンドは、; & | ` $ ( ) { } < > 改行と非 ASCII を含まない 4096 バイト以下の単純コマンドにする（codex が引数に現れるだけのものか、codex の許可形）。codex を wrapper（timeout・env 等）や VAR=x 前置の後ろに置かない。プロンプトや非 ASCII の文面は - を付けて末尾の < file（git commit は -F file）で渡す'
+# 途中で失敗したら deny に倒す（hook の非 0 終了は Claude にとって非ブロックで、素通しになる）
+trap 'deny "$SHAPE_REASON"' ERR
 
 INPUT=$(cat)
 CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
@@ -48,12 +61,10 @@ if [[ $CMD != *codex* ]]; then
   exit 0
 fi
 
-deny() {
-  jq -cn --arg reason "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$reason}}'
-  exit 0
-}
-
-SHAPE_REASON='codex の語を含むコマンドは、; & | ` $ ( ) { } < > 改行を含まない単純コマンドにする（codex が引数に現れるだけのものか、codex の許可形）。codex を wrapper（timeout・env 等）や VAR=x 前置の後ろに置かない。プロンプトは - を付けて末尾の < file で渡す'
+# 字句分割の前に長さで切る（巨大な入力で hook の timeout に達すると素通しになる）
+if ((${#CMD} > 4096)); then
+  deny "$SHAPE_REASON"
+fi
 FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、exec の後ろに -s read-only を明示した codex exec と、review の後ろに -c sandbox_mode=read-only を明示した codex review で、ほかの option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけのもの'
 PROJECT_REASON='cwd の上に codex の project 層（.codex dir。config.toml・rules・hooks.json 等）がある（mcp_servers・notify・hooks が sandbox の外で動き、rules が承認を変える）。.codex の無い dir から codex を呼ぶ'
 
@@ -63,7 +74,8 @@ PLAIN_HEAD_RE='^[A-Za-z0-9_./~+#-]+$'
 RUNNER_RE='^(-|timeout|gtimeout|nice|nohup|stdbuf|time|env|command|exec|builtin|noglob|nocorrect|xargs|sudo|doas|caffeinate|ionice|chrt|taskset|setsid|arch|unbuffer|chronic)$'
 
 # 2. メタ文字を含まず、先頭の語が素の名前で codex でも wrapper でもない → codex は引数にしか現れない
-if [[ ! $CMD =~ $META_RE ]]; then
+#    印字可能な ASCII と空白以外のバイトを含むものは素通しせず段階 3 に回す
+if [[ $CMD != *[![:print:][:blank:]]* && ! $CMD =~ $META_RE ]]; then
   head=${CMD#"${CMD%%[![:blank:]]*}"}
   head=${head%%[[:blank:]]*}
   if [[ $head =~ $PLAIN_HEAD_RE && $head != codex && $head != */codex && ! ${head##*/} =~ $RUNNER_RE ]]; then
@@ -132,19 +144,23 @@ if ((${#RAW[@]} == 0)) || [[ ${RAW[0]} != codex && ${RAW[0]} != */codex ]] || [[
   deny "$SHAPE_REASON"
 fi
 
-HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
-HOOK_CWD=${HOOK_CWD:-$PWD}
+LOGICAL_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
+LOGICAL_CWD=${LOGICAL_CWD:-$PWD}
+# codex は物理パス（getcwd）から project root を探すので、symlink を解いた cwd でも見る
+HOOK_CWD=$(cd -- "$LOGICAL_CWD" 2>/dev/null && pwd -P) || deny "$PROJECT_REASON"
 
-# has_project_config: hook の cwd から $HOME の手前までに codex の project 層（.codex dir）があるか
-# （config.toml の mcp_servers・notify や hooks.json は Codex の sandbox の外で起動し、rules は承認を
-#  変える。$HOME/.codex は user 設定なので見ない）
+# has_project_config: cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層
+# （.codex dir）があるか（config.toml の mcp_servers・notify や hooks.json は Codex の sandbox の外で
+#  起動し、rules は承認を変える。$HOME/.codex は user 設定なので見ない）
 has_project_config() {
-  local d=$HOOK_CWD
-  while [[ -n $d && $d != / && $d != "$HOME" ]]; do
-    if [[ -e $d/.codex ]]; then
-      return 0
-    fi
-    d=${d%/*}
+  local d
+  for d in "$LOGICAL_CWD" "$HOOK_CWD"; do
+    while [[ -n $d && $d != / && $d != "$HOME" ]]; do
+      if [[ -e $d/.codex ]]; then
+        return 0
+      fi
+      d=${d%/*}
+    done
   done
   return 1
 }
