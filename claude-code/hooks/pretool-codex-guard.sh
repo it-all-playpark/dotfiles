@@ -17,15 +17,19 @@
 #   3. それ以外は、次の許可形に完全一致するものだけ通し、残りはすべて deny する
 #      （複合コマンド・置換・算術式・heredoc・VAR=x 前置・wrapper 越しの codex は、中身を問わず deny）
 #        - `codex --version` / `codex --help` / `codex features list` / `codex login status`
-#        - `-s read-only` / `--sandbox read-only` / `--sandbox=read-only` を明示した `codex exec`（`e`）/
-#          `codex review` で、それ以外の option が次の許可リストにあるもの:
+#        - `codex exec`（`e`）の後ろに `-s read-only` / `--sandbox read-only` / `--sandbox=read-only` を
+#          明示したもの、`codex review` の後ろに `-c sandbox_mode=read-only` を明示したもの
+#          （codex 0.164.0 の review は -s を受けず、root の -s が review に効く裏付けも無いので、
+#          root の -s は受けない）で、それ以外の option が次の許可リストにあるもの:
 #            -m / --model、-c / --config（キーが model・model_reasoning_effort・model_reasoning_summary・
 #            model_verbosity のもの）、exec の --skip-git-repo-check・--json・--ephemeral・--color、
 #            review の --uncommitted・--base・--commit・--title
-#          位置引数はプロンプト（`-` で stdin）。プロンプトは末尾の `< file` 1 つで渡せる
+#          位置引数はプロンプト（`-` で stdin）。exec の最初の位置引数が resume・fork・review・help なら
+#          サブコマンドなので deny。プロンプトは末尾の `< file` 1 つで渡せる
 #        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ
-#      hook の cwd から $HOME の手前までに project config（`.codex/config.toml`）があれば、
-#      許可形でも deny する（mcp_servers・notify が sandbox の外で動く）
+#      hook の cwd から $HOME の手前までに codex の project 層（`.codex` dir。config.toml・rules・
+#      hooks.json 等）があれば、許可形でも deny する（mcp_servers・notify・hooks が sandbox の外で動き、
+#      rules が承認を変える）
 #   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
 #
 # 出力:
@@ -50,8 +54,8 @@ deny() {
 }
 
 SHAPE_REASON='codex の語を含むコマンドは、; & | ` $ ( ) { } < > 改行を含まない単純コマンドにする（codex が引数に現れるだけのものか、codex の許可形）。codex を wrapper（timeout・env 等）や VAR=x 前置の後ろに置かない。プロンプトは - を付けて末尾の < file で渡す'
-FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、-s read-only を明示し、option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけの codex exec / codex review'
-PROJECT_REASON='cwd の上に codex の project config（.codex/config.toml）がある（mcp_servers・notify が sandbox の外で動く）。project config の無い dir から codex を呼ぶ'
+FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、exec の後ろに -s read-only を明示した codex exec と、review の後ろに -c sandbox_mode=read-only を明示した codex review で、ほかの option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけのもの'
+PROJECT_REASON='cwd の上に codex の project 層（.codex dir。config.toml・rules・hooks.json 等）がある（mcp_servers・notify・hooks が sandbox の外で動き、rules が承認を変える）。.codex の無い dir から codex を呼ぶ'
 
 META_RE=$'[;&|`$(){}<>\n]'
 PLAIN_HEAD_RE='^[A-Za-z0-9_./~+#-]+$'
@@ -131,12 +135,13 @@ fi
 HOOK_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 HOOK_CWD=${HOOK_CWD:-$PWD}
 
-# has_project_config: hook の cwd から $HOME の手前までに codex の project config があるか
-# （mcp_servers・notify は Codex の sandbox の外で起動する。$HOME/.codex は user 設定なので見ない）
+# has_project_config: hook の cwd から $HOME の手前までに codex の project 層（.codex dir）があるか
+# （config.toml の mcp_servers・notify や hooks.json は Codex の sandbox の外で起動し、rules は承認を
+#  変える。$HOME/.codex は user 設定なので見ない）
 has_project_config() {
   local d=$HOOK_CWD
   while [[ -n $d && $d != / && $d != "$HOME" ]]; do
-    if [[ -e $d/.codex/config.toml ]]; then
+    if [[ -e $d/.codex ]]; then
       return 0
     fi
     d=${d%/*}
@@ -146,7 +151,7 @@ has_project_config() {
 
 # judge <codex の引数…>: 許可形なら 0
 judge() {
-  local n=$# i=0 np=0 t v key ro=0 sub=""
+  local n=$# i=0 np=0 t v key val ro=0 sub=""
   local -a a=("$@")
 
   if ((n == 1)) && [[ ${a[0]} == --version || ${a[0]} == --help ]]; then
@@ -184,8 +189,8 @@ judge() {
         exec | e | review) sub=$t ;;
         *) return 1 ;;
         esac
-      elif ((np == 0)) && [[ $sub != review && ($t == resume || $t == help) ]]; then
-        # codex exec resume / help はサブコマンド
+      elif ((np == 0)) && [[ $sub != review && ($t == resume || $t == fork || $t == review || $t == help) ]]; then
+        # codex exec resume / fork / review / help はサブコマンド
         return 1
       else
         np=$((np + 1))
@@ -197,7 +202,8 @@ judge() {
 
     case $t in
     -s | --sandbox)
-      if [[ $v != read-only ]]; then
+      # -s を受けるのは exec の後ろだけ（review は -s を受けず、root の -s が review に効く裏付けが無い）
+      if [[ $v != read-only || ($sub != exec && $sub != e) ]]; then
         return 1
       fi
       ro=1
@@ -205,7 +211,18 @@ judge() {
     -c | --config)
       key=${v%%=*}
       key=${key//[[:blank:]]/}
-      if [[ $v != *=* || ! $key =~ $CONFIG_ALLOW_RE ]]; then
+      if [[ $v != *=* ]]; then
+        return 1
+      fi
+      if [[ $key == sandbox_mode ]]; then
+        # review の read-only の証明は review の後ろの -c sandbox_mode=read-only（TOML の文字列も可）
+        val=${v#*=}
+        val=${val//[[:blank:]]/}
+        if [[ $sub != review || ($val != read-only && $val != '"read-only"' && $val != "'read-only'") ]]; then
+          return 1
+        fi
+        ro=1
+      elif [[ ! $key =~ $CONFIG_ALLOW_RE ]]; then
         return 1
       fi
       ;;
