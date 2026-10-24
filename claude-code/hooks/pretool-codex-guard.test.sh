@@ -22,14 +22,17 @@ PASS=0
 FAIL=0
 FAILURES=()
 
-# hook の cwd（project config の有無を見る起点）。既定は project config の無い一時 dir
-TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/codex-guard-test.XXXXXX")"
+# hook の cwd（project config の有無を見る起点）。exec / review は $HOME/ghq/ の下でだけ通るので、
+# HOME を一時 dir に向け、既定の cwd は その ghq/ の下の project config の無い dir にする
+TMPROOT="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/codex-guard-test.XXXXXX")" && pwd -P)"
 trap 'rm -rf "$TMPROOT"' EXIT
-mkdir -p "$TMPROOT/plain" "$TMPROOT/proj/.codex" "$TMPROOT/proj/sub" "$TMPROOT/rules/.codex/rules" "$TMPROOT/rules/sub"
-touch "$TMPROOT/proj/.codex/config.toml" "$TMPROOT/rules/.codex/rules/default.rules"
+FAKE_HOME="$TMPROOT/home"
+GHQ="$FAKE_HOME/ghq"
+mkdir -p "$GHQ/plain" "$GHQ/proj/.codex" "$GHQ/proj/sub" "$GHQ/rules/.codex/rules" "$GHQ/rules/sub" "$TMPROOT/outside"
+touch "$GHQ/proj/.codex/config.toml" "$GHQ/rules/.codex/rules/default.rules"
 
 run_hook() {
-  jq -n --arg cmd "$1" --arg cwd "${2:-$TMPROOT/plain}" '{tool_name:"Bash", cwd:$cwd, tool_input:{command:$cmd}}' | bash "$HOOK" 2>&1 || true
+  jq -n --arg cmd "$1" --arg cwd "${2:-$GHQ/plain}" '{tool_name:"Bash", cwd:$cwd, tool_input:{command:$cmd}}' | HOME="$FAKE_HOME" bash "$HOOK" 2>&1 || true
 }
 
 # run_case <name> <command> <expected: deny|pass> [<cwd>]
@@ -232,9 +235,9 @@ run_case "zsh noglob" 'noglob codex --yolo exec x' "deny"
 run_case "exec builtin" 'exec codex --yolo exec x' "deny"
 run_case "zsh =codex expansion" '=codex --yolo exec x' "deny"
 run_case "backslash-quoted codex name" '\codex --yolo exec x' "deny"
-run_case "exec read-only under project config" 'codex exec -s read-only - < prompt.md' "deny" "$TMPROOT/proj/sub"
-run_case "codex --version under project config" 'codex --version' "pass" "$TMPROOT/proj/sub"
-run_case "exec read-only under project .codex/rules only" 'codex exec -s read-only "x"' "deny" "$TMPROOT/rules/sub"
+run_case "exec read-only under project config" 'codex exec -s read-only - < prompt.md' "deny" "$GHQ/proj/sub"
+run_case "codex --version under project config" 'codex --version' "pass" "$GHQ/proj/sub"
+run_case "exec read-only under project .codex/rules only" 'codex exec -s read-only "x"' "deny" "$GHQ/rules/sub"
 run_case "arithmetic shift is not a heredoc" $': $((1<<2))\ncodex --yolo exec x\n2' "deny"
 run_case "arithmetic command shift is not a heredoc" $'((a<<1))\ncodex --yolo exec x\n1' "deny"
 run_case "codex inside arithmetic expansion" 'echo $(( $(codex --yolo exec x) ))' "deny"
@@ -288,9 +291,29 @@ run_case "codex word in an over-long command" "grep codex ${long_arg}" "deny"
 
 # --- cwd が symlink 越しでも、物理パスの祖先の project config を見る ---
 echo "[Project config via symlinked cwd — should deny]"
-ln -s "$TMPROOT/proj/sub" "$TMPROOT/plain/sublink"
-run_case "exec read-only with symlinked cwd into project" 'codex exec -s read-only "x"' "deny" "$TMPROOT/plain/sublink"
-run_case "exec read-only with missing cwd" 'codex exec -s read-only "x"' "deny" "$TMPROOT/missing"
+ln -s "$GHQ/proj/sub" "$GHQ/plain/sublink"
+run_case "exec read-only with symlinked cwd into project" 'codex exec -s read-only "x"' "deny" "$GHQ/plain/sublink"
+run_case "exec read-only with missing cwd" 'codex exec -s read-only "x"' "deny" "$GHQ/missing"
+
+# --- exec / review は cwd の物理パスが $HOME/ghq/ の下のときだけ通す（外では .codex を後から作れる）---
+echo "[exec / review outside ~/ghq — should deny]"
+ln -s "$TMPROOT/outside" "$GHQ/outlink"
+run_case "exec read-only outside ghq" 'codex exec -s read-only "x"' "deny" "$TMPROOT/outside"
+run_case "review read-only outside ghq" 'codex review -c sandbox_mode=read-only --uncommitted' "deny" "$TMPROOT/outside"
+run_case "exec read-only via symlink from ghq to outside" 'codex exec -s read-only "x"' "deny" "$GHQ/outlink"
+run_case "exec read-only at HOME (not under ghq)" 'codex exec -s read-only "x"' "deny" "$FAKE_HOME"
+run_case "exec read-only above HOME" 'codex exec -s read-only "x"' "deny" "$TMPROOT"
+run_case "codex --version outside ghq" 'codex --version' "pass" "$TMPROOT/outside"
+
+# --- < file は cwd からの相対パスだけ（sandbox の外の shell が読むので作業ツリーの外を指させない）---
+echo "[Stdin file outside the worktree — should deny]"
+run_case "stdin from home ssh key" 'codex exec -s read-only --skip-git-repo-check - < ~/.ssh/id_ed25519' "deny"
+run_case "stdin from absolute path" 'codex exec -s read-only - < /etc/passwd' "deny"
+run_case "stdin from parent dir" 'codex exec -s read-only - < ../secret' "deny"
+run_case "stdin with .. inside" 'codex exec -s read-only - < a/../../secret' "deny"
+run_case "stdin from zsh =cmd expansion" 'codex exec -s read-only - < =ls' "deny"
+run_case "stdin from ~user" 'codex exec -s read-only - <~root/x' "deny"
+run_case "stdin from nested relative path" 'codex exec -s read-only - < docs/prompt.md' "pass"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

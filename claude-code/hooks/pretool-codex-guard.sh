@@ -26,11 +26,15 @@
 #            model_verbosity のもの）、exec の --skip-git-repo-check・--json・--ephemeral・--color、
 #            review の --uncommitted・--base・--commit・--title
 #          位置引数はプロンプト（`-` で stdin）。exec の最初の位置引数が resume・fork・review・help なら
-#          サブコマンドなので deny。プロンプトは末尾の `< file` 1 つで渡せる
+#          サブコマンドなので deny。プロンプトは末尾の `< file` 1 つで渡せる。file は cwd からの相対パスに限り、
+#          `/`・`=` で始まるもの、`~`・`..` を含むものは deny（sandbox の外の shell が読むので、作業ツリーの外の
+#          秘密ファイルを prompt に流させない）
 #        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ
-#      hook の cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層（`.codex` dir。config.toml・rules・
-#      hooks.json 等）があれば、許可形でも deny する（mcp_servers・notify・hooks が sandbox の外で動き、
-#      rules が承認を変える）
+#      exec / review は、hook の cwd の物理パスが $HOME/ghq/ の下にあるときだけ通す。そこは denyWrite の
+#      ~/ghq/**/.codex で sandbox から .codex を作れないので、hook の判定後・codex の起動前に project 層を
+#      作られる窓が無い。その上で cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層
+#      （`.codex` dir。config.toml・rules・hooks.json 等）があれば、許可形でも deny する（mcp_servers・notify・
+#      hooks が sandbox の外で動き、rules が承認を変える）
 #   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
 #
 # 出力:
@@ -66,6 +70,8 @@ if ((${#CMD} > 4096)); then
   deny "$SHAPE_REASON"
 fi
 FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、exec の後ろに -s read-only を明示した codex exec と、review の後ろに -c sandbox_mode=read-only を明示した codex review で、ほかの option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけのもの'
+STDIN_REASON='codex のプロンプトを渡す < file は cwd からの相対パスにする（/・= で始まるもの、~・.. を含むものは不可。sandbox の外の shell が読む）'
+GHQ_REASON='codex exec / review は cwd の物理パスが ~/ghq/ の下のときだけ通す（そこ以外は sandbox から .codex を作れ、hook の判定後に codex の project 層を差し込める）。~/ghq/ 配下の作業ツリーから呼ぶ'
 PROJECT_REASON='cwd の上に codex の project 層（.codex dir。config.toml・rules・hooks.json 等）がある（mcp_servers・notify・hooks が sandbox の外で動き、rules が承認を変える）。.codex の無い dir から codex を呼ぶ'
 
 META_RE=$'[;&|`$(){}<>\n]'
@@ -98,6 +104,11 @@ CONFIG_ALLOW_RE='^(model|model_reasoning_effort|model_reasoning_summary|model_ve
 body=$CMD
 if [[ $body =~ $STDIN_RE ]]; then
   body=${BASH_REMATCH[1]}
+  stdin_file=${BASH_REMATCH[2]}
+  # 作業ツリーの外を指しうる形（絶対パス・zsh の =cmd・~ 展開・親 dir）は受けない
+  if [[ $stdin_file == [/=]* || $stdin_file == *'~'* || $stdin_file == *..* ]]; then
+    deny "$STDIN_REASON"
+  fi
 fi
 if [[ $body =~ $META_RE ]]; then
   deny "$SHAPE_REASON"
@@ -281,7 +292,15 @@ if ! judge "${TOKS[@]:1}"; then
   deny "$FORM_REASON"
 fi
 # project config は exec / review だけが読む（--version 等の情報表示は見ない）
-if [[ -n $SUB ]] && has_project_config; then
-  deny "$PROJECT_REASON"
+if [[ -n $SUB ]]; then
+  # .codex を sandbox から作れない ~/ghq/ の下（物理パス）だけで通す。hook の時点で .codex が無くても、
+  # それ以外の場所では codex が設定を読むまでに作られうる
+  HOME_P=$(cd -- "$HOME" 2>/dev/null && pwd -P) || deny "$GHQ_REASON"
+  if [[ $HOOK_CWD != "$HOME_P"/ghq/* ]]; then
+    deny "$GHQ_REASON"
+  fi
+  if has_project_config; then
+    deny "$PROJECT_REASON"
+  fi
 fi
 exit 0
