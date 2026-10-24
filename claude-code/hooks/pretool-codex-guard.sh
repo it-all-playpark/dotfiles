@@ -19,7 +19,9 @@
 #     - `codex --version` / `codex --help` / `codex features list` / `codex login status`
 #     - `-s read-only` か `--sandbox read-only` を明示した `codex exec` / `codex review`
 #   ただし次を 1 つでも含めば、上の形でも deny する:
-#     - `--dangerously-*`（`--dangerously-bypass-approvals-and-sandbox` / `--dangerously-bypass-hook-trust`）
+#     - `--dangerously-*`（`--dangerously-bypass-approvals-and-sandbox` / `--dangerously-bypass-hook-trust`）と
+#       その隠し alias の `--yolo`
+#     - codex の前の `VAR=x` 前置（`CODEX_HOME=` で書ける場所の config.toml を読ませられる）
 #     - `-s` / `--sandbox` の `workspace-write` / `danger-full-access`
 #     - `--add-dir`
 #     - `--approve-for-me`（workspace-write の sandbox で承認を自動で通す）
@@ -47,11 +49,11 @@ if [[ $CMD != *codex* ]]; then
   exit 0
 fi
 
-# codex 呼び出し 1 つにつき `C`（引数が静的）か `D`（展開を含む）の行、引数ごとに `A<引数>` の行、
+# codex 呼び出し 1 つにつき `C`（引数が静的）か `D`（展開を含む）か `V`（`VAR=x` 前置あり）の行、引数ごとに `A<引数>` の行、
 # 終わりに `E` の行を出す
 # shellcheck disable=SC2016 # 意図的なリテラル: awk のプログラム
 TOKENIZER='
-function init(d) { cstart[d] = 1; iscodex[d] = 0; cn[d] = 0; cdyn[d] = 0; wrap[d] = 0; wrapval[d] = 0 }
+function init(d) { cstart[d] = 1; iscodex[d] = 0; cn[d] = 0; cdyn[d] = 0; cenv[d] = 0; wrap[d] = 0; wrapval[d] = 0 }
 function kw(w) { return w ~ /^(\{|!|if|then|else|elif|do|while|until)$/ }
 function wrapper(w) { return w ~ /^(.*\/)?(timeout|nice|nohup|stdbuf|time)$/ }
 function endword(   w, dy) {
@@ -62,7 +64,9 @@ function endword(   w, dy) {
   if (skipnext) { skipnext = 0; return }
   if (hdnext) { nhd++; hdelim[nhd] = w; hstrip[nhd] = (hdnext == 2); hdnext = 0; return }
   if (cstart[depth]) {
-    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*=/ || kw(w)) return
+    # `VAR=x` 前置は飛ばすが印を付ける（CODEX_HOME 等で書ける場所の config.toml を読ませられる）
+    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { cenv[depth] = 1; return }
+    if (kw(w)) return
     # timeout / nice 等の後ろの codex も sandbox の外で動くので、wrapper とそのオプション・
     # 値（秒数・nice 値・展開を含む語）を飛ばして次の語を先頭として見る
     if (wrapval[depth]) { wrapval[depth] = 0; return }
@@ -84,7 +88,7 @@ function endcmd(   k) {
   endword()
   skipnext = 0; hdnext = 0
   if (iscodex[depth]) {
-    print (cdyn[depth] ? "D" : "C")
+    print (cenv[depth] ? "V" : (cdyn[depth] ? "D" : "C"))
     for (k = 1; k <= cn[depth]; k++) print "A" ca[depth, k]
     print "E"
   }
@@ -214,7 +218,7 @@ judge() {
 
   for ((i = 0; i < n; i++)); do
     case ${a[i]} in
-    --dangerously-* | --add-dir | --add-dir=* | --approve-for-me)
+    --dangerously-* | --yolo | --add-dir | --add-dir=* | --approve-for-me)
       echo danger
       return
       ;;
@@ -284,7 +288,8 @@ deny() {
 }
 
 FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、-s read-only か --sandbox read-only を明示した codex exec / codex review だけ'
-DANGER_REASON='codex の sandbox を外す・広げる指定は使わない（--dangerously-* / -s・--sandbox の workspace-write・danger-full-access / --add-dir / --approve-for-me / sandbox_mode・sandbox_workspace_write・approval_policy・sandbox_permissions・shell_environment_policy・mcp_servers の -c 上書き）。-s read-only で呼ぶ'
+DANGER_REASON='codex の sandbox を外す・広げる指定は使わない（--dangerously-* / --yolo / -s・--sandbox の workspace-write・danger-full-access / --add-dir / --approve-for-me / sandbox_mode・sandbox_workspace_write・approval_policy・sandbox_permissions・shell_environment_policy・mcp_servers の -c 上書き）。-s read-only で呼ぶ'
+ENV_REASON='codex の前に VAR=x の前置（CODEX_HOME 等）を付けない（書ける場所の config で sandbox の設定を上書きできる）'
 DYNAMIC_REASON='codex の引数に $ 展開・コマンド置換・<(…)・クォートしない glob / brace を使わない（hook が展開後の値を確かめられない）。プロンプトは - を付けて stdin（< file かクォートした heredoc）から渡す'
 
 # collect: awk の出力を読み、最初に deny になった呼び出しの理由の種類を出す。awk が SIGPIPE で
@@ -295,7 +300,7 @@ collect() {
   local -a args=()
   while IFS= read -r line; do
     case $line in
-    C | D)
+    C | D | V)
       kind=$line
       args=()
       ;;
@@ -304,7 +309,9 @@ collect() {
       if [[ -n $verdict ]]; then
         continue
       fi
-      if [[ $kind == D ]]; then
+      if [[ $kind == V ]]; then
+        verdict="env"
+      elif [[ $kind == D ]]; then
         verdict=dynamic
       else
         verdict=$(judge ${args[@]+"${args[@]}"})
@@ -318,6 +325,7 @@ collect() {
 VERDICT=$(printf '%s\n' "$CMD" | awk "$TOKENIZER" | collect)
 
 case $VERDICT in
+env) deny "$ENV_REASON" ;;
 dynamic) deny "$DYNAMIC_REASON" ;;
 danger) deny "$DANGER_REASON" ;;
 form) deny "$FORM_REASON" ;;
