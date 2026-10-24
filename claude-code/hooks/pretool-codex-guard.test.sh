@@ -195,6 +195,8 @@ run_case "codex --version under project config" 'codex --version' "pass" "$TMPRO
 run_case "arithmetic shift is not a heredoc" $': $((1<<2))\ncodex --yolo exec x\n2' "deny"
 run_case "arithmetic command shift is not a heredoc" $'((a<<1))\ncodex --yolo exec x\n1' "deny"
 run_case "codex inside arithmetic expansion" 'echo $(( $(codex --yolo exec x) ))' "deny"
+run_case "quoted paren inside arithmetic command" $'(( x[")) \'"] ))\ncodex --yolo exec x\n# \'' "deny"
+run_case "quoted paren inside arithmetic expansion" $': $(( x[")) \'"] ))\ncodex --yolo exec x\n# \'' "deny"
 run_case "command substitution in unquoted heredoc body" $'cat <<EOF\n$(codex --yolo exec x)\nEOF' "deny"
 run_case "backticks in unquoted heredoc body" $'cat <<EOF\n`codex --yolo exec x`\nEOF' "deny"
 run_case "plain unquoted heredoc body" $'gh pr create --body-file - <<EOF\ncodex exec is denied\nEOF' "pass"

@@ -71,7 +71,8 @@ function arith(   j, d, op, cl, ch, s) {
   if (c == "$" && nc == "[") { op = "["; cl = "]"; j = i + 2; d = 1 } else { op = "("; cl = ")"; j = (c == "$") ? i + 3 : i + 2; d = 2 }
   while (j <= n && d > 0) { ch = substr(src, j, 1); if (ch == op) d++; else if (ch == cl) d--; j++ }
   s = substr(src, i, j - i)
-  if (s ~ /codex/) bail()
+  # 括弧はクォートを無視して数えるので、クォート・backtick・\ を含む式は閉じの位置を信用できない
+  if (s ~ /codex/ || s ~ /[\047"`\\]/) bail()
   word = word s; inword = 1; wdyn = 1
   i = j
 }
