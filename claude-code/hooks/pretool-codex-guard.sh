@@ -209,7 +209,8 @@ END {
 '
 
 # `-c` / `--config` で上書きさせないキー（先頭か `.` の直後）
-CONFIG_KEY_RE='(^|\.)(sandbox_mode|sandbox_workspace_write|approval_policy|sandbox_permissions|shell_environment_policy|mcp_servers)'
+# notify は codex 本体が Codex の sandbox の外で起動する外部プログラム
+CONFIG_KEY_RE='(^|\.)(sandbox_mode|sandbox_workspace_write|approval_policy|sandbox_permissions|shell_environment_policy|mcp_servers|notify)'
 
 # judge <codex の引数…>: 通すなら何も出さない。deny なら理由の種類（danger / form）を出す
 judge() {
@@ -218,7 +219,8 @@ judge() {
 
   for ((i = 0; i < n; i++)); do
     case ${a[i]} in
-    --dangerously-* | --yolo | --add-dir | --add-dir=* | --approve-for-me)
+    # -o / --output-last-message は codex 本体が sandbox の外でファイルに書く
+    --dangerously-* | --yolo | --add-dir | --add-dir=* | --approve-for-me | -o | -o?* | --output-last-message | --output-last-message=*)
       echo danger
       return
       ;;
