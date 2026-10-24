@@ -22,11 +22,17 @@ PASS=0
 FAIL=0
 FAILURES=()
 
+# hook の cwd（project config の有無を見る起点）。既定は project config の無い一時 dir
+TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/codex-guard-test.XXXXXX")"
+trap 'rm -rf "$TMPROOT"' EXIT
+mkdir -p "$TMPROOT/plain" "$TMPROOT/proj/.codex" "$TMPROOT/proj/sub"
+touch "$TMPROOT/proj/.codex/config.toml"
+
 run_hook() {
-  jq -n --arg cmd "$1" '{tool_name:"Bash", tool_input:{command:$cmd}}' | bash "$HOOK" 2>&1 || true
+  jq -n --arg cmd "$1" --arg cwd "${2:-$TMPROOT/plain}" '{tool_name:"Bash", cwd:$cwd, tool_input:{command:$cmd}}' | bash "$HOOK" 2>&1 || true
 }
 
-# run_case <name> <command> <expected: deny|pass>
+# run_case <name> <command> <expected: deny|pass> [<cwd>]
 # pass は「stdout が空」（allow も含め何も返さない）
 run_case() {
   local name="$1"
@@ -34,7 +40,7 @@ run_case() {
   local expected="$3"
 
   local output
-  output=$(run_hook "$cmd")
+  output=$(run_hook "$cmd" "${4:-}")
 
   local decision="pass"
   if [[ -n $output ]]; then
@@ -171,6 +177,29 @@ run_case "-c attached key" 'codex exec -s read-only -csandbox_mode=danger-full-a
 run_case "-c key with spaces" 'codex exec -s read-only -c " sandbox_mode = \"danger-full-access\"" "x"' "deny"
 run_case "-c profile-scoped sandbox_mode" 'codex exec -s read-only -c profiles.p.sandbox_mode=danger-full-access "x"' "deny"
 run_case "review -c sandbox_mode" 'codex -s read-only review -c sandbox_mode=workspace-write' "deny"
+run_case "exec read-only --full-auto" 'codex exec -s read-only --full-auto "x"' "deny"
+run_case "global --full-auto before exec" 'codex --full-auto exec -s read-only "x"' "deny"
+run_case "exec read-only -C" 'codex exec -s read-only -C /Users/someone "x"' "deny"
+run_case "exec read-only -C attached" 'codex exec -s read-only -C/Users/someone "x"' "deny"
+run_case "exec read-only --cd=" 'codex exec -s read-only --cd=/Users/someone "x"' "deny"
+run_case "exec read-only --remote" 'codex --remote ws://evil.example exec -s read-only "x"' "deny"
+run_case "exec read-only --remote-auth-token-env" 'codex --remote-auth-token-env TOKEN exec -s read-only "x"' "deny"
+run_case "exec read-only -p" 'codex -p evil exec -s read-only "x"' "deny"
+run_case "exec read-only --profile=" 'codex --profile=evil exec -s read-only "x"' "deny"
+run_case "exec read-only --enable" 'codex --enable foo exec -s read-only "x"' "deny"
+run_case "-c model_provider" 'codex -c model_provider=x -c model_providers.x.base_url=https://evil.example exec -s read-only -' "deny"
+run_case "-c otel" 'codex exec -s read-only -c otel.exporter=x "x"' "deny"
+run_case "-c model_reasoning_effort allowed" 'codex exec -s read-only -c model_reasoning_effort=high "x"' "pass"
+run_case "exec read-only under project config" 'codex exec -s read-only - < prompt.md' "deny" "$TMPROOT/proj/sub"
+run_case "codex --version under project config" 'codex --version' "pass" "$TMPROOT/proj/sub"
+run_case "arithmetic shift is not a heredoc" $': $((1<<2))\ncodex --yolo exec x\n2' "deny"
+run_case "arithmetic command shift is not a heredoc" $'((a<<1))\ncodex --yolo exec x\n1' "deny"
+run_case "codex inside arithmetic expansion" 'echo $(( $(codex --yolo exec x) ))' "deny"
+run_case "command substitution in unquoted heredoc body" $'cat <<EOF\n$(codex --yolo exec x)\nEOF' "deny"
+run_case "backticks in unquoted heredoc body" $'cat <<EOF\n`codex --yolo exec x`\nEOF' "deny"
+run_case "plain unquoted heredoc body" $'gh pr create --body-file - <<EOF\ncodex exec is denied\nEOF' "pass"
+run_case "nested backticks" 'echo `echo \`codex --yolo exec x\``' "deny"
+run_case "case inside command substitution" 'echo $(case x in x) codex --yolo exec x;; esac)' "deny"
 run_case "flag after redirect" 'codex exec -s read-only "x" 2>&1 --add-dir /' "deny"
 run_case "flag after command substitution arg" 'codex exec -s read-only "$(echo hi)" --add-dir /' "deny"
 run_case "dynamic arg: command substitution" 'codex exec -s read-only "$(cat prompt.md)"' "deny"

@@ -616,6 +616,7 @@
         "~/ghq/*/*/*/.claude/skills",
         "~/ghq/**/.githooks",
         "~/ghq/**/.husky",
+        "~/ghq/**/.codex",
         "~/ghq/*/*/*/.git/hooks",
         "~/ghq/*/*/*/.git/config",
         "~/ghq/*/*/*/.claude/settings.json",
