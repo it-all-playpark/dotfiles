@@ -45,6 +45,7 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "- settings_hook_files_exist"
 missing=()
+# shellcheck disable=SC2016 # 意図的なリテラル: settings.json 内の $HOME を文字どおりに照合する
 while IFS= read -r name; do
   [ -n "${name}" ] || continue
   target="${HOOKS_DIR}/${name}"
@@ -66,6 +67,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "- container_hook_files_exist"
 missing=()
+# shellcheck disable=SC2016 # 意図的なリテラル: settings.json 内の $HOME を文字どおりに照合する
 while IFS= read -r name; do
   [ -n "${name}" ] || continue
   target="${HOOKS_DIR}/${name}"
@@ -186,6 +188,28 @@ if [ "${count}" -eq 1 ]; then
   pass "settings_pretool_ps_guard_wired"
 else
   fail "settings_pretool_ps_guard_wired" "Expected 1 unconditional PreToolUse(Bash) entry for pretool-ps-guard.sh, got ${count}"
+fi
+
+# ---------------------------------------------------------------------------
+# settings_pretool_codex_guard_wired
+#
+# 素の codex（excludedCommands の codex:* で sandbox 外）の呼び出しガードも全 Bash
+# コマンドで走らせる（`if` で絞ると `cd x && codex …` を見逃す）。新規の hook ファイルは
+# 次の activation までリンクされないので、無いときだけ exit 0 で抜ける形にする
+# （`|| true` で hook の失敗まで握り潰さない）。
+# ---------------------------------------------------------------------------
+echo "- settings_pretool_codex_guard_wired"
+count="$(jq '
+    [.hooks.PreToolUse // [] | .[]
+      | select(.matcher == "Bash")
+      | .hooks[]
+      | select(.command == "[ ! -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] || bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\"" and (has("if") | not))
+    ] | length
+  ' "${SETTINGS}")"
+if [ "${count}" -eq 1 ] && [ -x "${HOOKS_DIR}/pretool-codex-guard.sh" ]; then
+  pass "settings_pretool_codex_guard_wired"
+else
+  fail "settings_pretool_codex_guard_wired" "Expected 1 unconditional PreToolUse(Bash) entry for an executable pretool-codex-guard.sh, got ${count}"
 fi
 
 # ---------------------------------------------------------------------------

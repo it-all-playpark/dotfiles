@@ -214,6 +214,16 @@
       {
         "hooks": [
           {
+            "command": "[ ! -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] || bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
             "command": "bash \"$HOME/.claude/hooks/pretool-gh-pr-self-approve-guard.sh\"",
             "statusMessage": "PR self-approve チェック中...",
             "timeout": 5,
@@ -602,9 +612,11 @@
       "denyWrite": [
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/bin",
         "~/ghq/github.com/it-all-playpark/dotfiles/claude-code/hooks",
+        "~/ghq/github.com/it-all-playpark/dotfiles/codex",
         "~/ghq/*/*/*/.claude/skills",
         "~/ghq/**/.githooks",
         "~/ghq/**/.husky",
+        "~/ghq/**/.codex",
         "~/ghq/*/*/*/.git/hooks",
         "~/ghq/*/*/*/.git/config",
         "~/ghq/*/*/*/.claude/settings.json",
