@@ -142,6 +142,7 @@ UNREGISTERED_BINS=(
   "sns-announce-get-posting-time|gh も git 書き込みも呼ばない"
   "sns-announce-load-config|gh も git 書き込みも呼ばない"
   "meeting|launchctl / osascript / claude -p を呼ぶので sandbox 外に出さない。setup / install は人間がターミナルで実行する"
+  "security-review-isolated|claude -p を起動するので sandbox 外に出さない。人間がターミナルで実行する CLI（claude-plugins #1083）"
 )
 SKILLS_PLUGINS_DIR="${SKILLS_PLUGINS_DIR:-${HOME}/ghq/github.com/it-all-playpark/claude-plugins/plugins}"
 
