@@ -21,7 +21,8 @@
 #   ただし次を 1 つでも含めば、上の形でも deny する:
 #     - `--dangerously-*`（`--dangerously-bypass-approvals-and-sandbox` / `--dangerously-bypass-hook-trust`）と
 #       その隠し alias の `--yolo`
-#     - codex の前の `VAR=x` 前置（`CODEX_HOME=` で書ける場所の config.toml を読ませられる）
+#     - codex の前の `VAR=x` 前置（`env` の後ろを含む。`CODEX_HOME=` で書ける場所の config.toml を読ませられる）
+#     - `env -S` / `--split-string`（codex の引数を語として追えない）
 #     - `-s` / `--sandbox` の `workspace-write` / `danger-full-access`
 #     - `--add-dir`
 #     - `--approve-for-me`（workspace-write の sandbox で承認を自動で通す）
@@ -55,7 +56,7 @@ fi
 TOKENIZER='
 function init(d) { cstart[d] = 1; iscodex[d] = 0; cn[d] = 0; cdyn[d] = 0; cenv[d] = 0; wrap[d] = 0; wrapval[d] = 0 }
 function kw(w) { return w ~ /^(\{|!|if|then|else|elif|do|while|until)$/ }
-function wrapper(w) { return w ~ /^(.*\/)?(timeout|nice|nohup|stdbuf|time)$/ }
+function wrapper(w) { return w ~ /^(.*\/)?(timeout|nice|nohup|stdbuf|time|env)$/ }
 function endword(   w, dy) {
   if (!inword) return
   w = word; dy = wdyn
@@ -65,14 +66,23 @@ function endword(   w, dy) {
   if (skipnext) { skipnext = 0; if (dy && iscodex[depth]) cdyn[depth] = 1; return }
   if (hdnext) { nhd++; hdelim[nhd] = w; hstrip[nhd] = (hdnext == 2); hdnext = 0; return }
   if (cstart[depth]) {
-    # `VAR=x` 前置は飛ばすが印を付ける（CODEX_HOME 等で書ける場所の config.toml を読ませられる）
-    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { cenv[depth] = 1; return }
-    if (kw(w)) return
-    # timeout / nice 等の後ろの codex も sandbox の外で動くので、wrapper とそのオプション・
+    # timeout / nice / env 等の後ろの codex も sandbox の外で動くので、wrapper とそのオプション・
     # 値（秒数・nice 値・展開を含む語）を飛ばして次の語を先頭として見る
     if (wrapval[depth]) { wrapval[depth] = 0; return }
-    if (!dy && wrapper(w)) { wrap[depth] = 1; return }
-    if (wrap[depth] && (dy || w ~ /^-/ || w ~ /^[0-9.]+[smhd]?$/)) {
+    # `VAR=x` 前置（env の後ろを含む）は飛ばすが印を付ける（CODEX_HOME 等で書ける場所の config.toml を読ませられる）
+    if (w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { cenv[depth] = 1; return }
+    if (kw(w)) return
+    if (!dy && wrapper(w)) { wrap[depth] = w; sub(/.*\//, "", wrap[depth]); return }
+    if (wrap[depth] == "env") {
+      # env -S / --split-string は文字列を分けて実行するので、中の codex 呼び出しを語として追えない
+      if (!dy && w ~ /^(-[^-]*S|--split-string)/) { iscodex[depth] = 1; cdyn[depth] = 1; cstart[depth] = 0; return }
+      # env の後ろの展開は VAR=x に展開されうる
+      if (dy) { cenv[depth] = 1; return }
+      if (w ~ /^-/) {
+        if (w ~ /^(-[^-]*[uCP]|--unset|--chdir)$/) wrapval[depth] = 1
+        return
+      }
+    } else if (wrap[depth] && (dy || w ~ /^-/ || w ~ /^[0-9.]+[smhd]?$/)) {
       if (w ~ /^(-n|-k|-s|-i|-o|-e|--signal|--kill-after|--adjustment|--input|--output|--error)$/) wrapval[depth] = 1
       return
     }
