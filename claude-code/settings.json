@@ -214,6 +214,16 @@
       {
         "hooks": [
           {
+            "command": "[ -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] && bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\" || true",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
             "command": "bash \"$HOME/.claude/hooks/pretool-gh-pr-self-approve-guard.sh\"",
             "statusMessage": "PR self-approve チェック中...",
             "timeout": 5,
