@@ -61,7 +61,8 @@ function endword(   w, dy) {
   w = word; dy = wdyn
   word = ""; inword = 0; wdyn = 0
   gsub(/\n/, " ", w)
-  if (skipnext) { skipnext = 0; return }
+  # `<<<` やリダイレクト先の語も、展開を含めば codex の呼び出しを動的として扱う
+  if (skipnext) { skipnext = 0; if (dy && iscodex[depth]) cdyn[depth] = 1; return }
   if (hdnext) { nhd++; hdelim[nhd] = w; hstrip[nhd] = (hdnext == 2); hdnext = 0; return }
   if (cstart[depth]) {
     # `VAR=x` 前置は飛ばすが印を付ける（CODEX_HOME 等で書ける場所の config.toml を読ませられる）
@@ -123,6 +124,13 @@ END {
       if (e == 0) { word = word substr(src, i); i = n + 1; continue }
       word = word substr(src, i, e - 1); i += e; mode = "N"; continue
     }
+    # ANSI-C クォート（$ の直後のシングルクォート）: バックスラッシュは次の 1 文字（エスケープしたシングルクォートや
+    # バックスラッシュを含む）とまとめて読み、エスケープしていないシングルクォートで閉じる
+    if (mode == "A") {
+      if (c == "\\") { word = word c nc; i += 2; continue }
+      if (c == "\047") { mode = "N"; i++; continue }
+      word = word c; i++; continue
+    }
     if (mode == "D") {
       if (c == "\\") {
         if (nc == "\n") { i += 2; continue }
@@ -145,7 +153,8 @@ END {
     if (c == "$") {
       if (nc == "(") { pushsub("S"); i += 2; continue }
       if (nc ~ /[A-Za-z0-9_{@*#?$!\047"-]/) wdyn = 1
-      if (nc == "\047" || nc == "\"") { inword = 1; i++; continue }
+      if (nc == "\047") { mode = "A"; inword = 1; i += 2; continue }
+      if (nc == "\"") { inword = 1; i++; continue }
       word = word c; inword = 1; i++; continue
     }
     if (c == "`") {
