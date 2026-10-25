@@ -22,19 +22,28 @@ PASS=0
 FAIL=0
 FAILURES=()
 
+# dev-flow の Codex security review の出力先を決める user 設定（hook は $SKILL_CONFIG_PATH → $HOME の下の順で読む）
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/codex-guard-test.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT
+RELAY_HOME="${WORK}/home"
+RELAY_CONFIG="${WORK}/skill-config.json"
+
+# run_hook <command> [agent_type]: agent_type を渡すと hook 入力に入れる（無ければメインセッション）
 run_hook() {
-  jq -n --arg cmd "$1" '{tool_name:"Bash", tool_input:{command:$cmd}}' | bash "$HOOK" 2>&1 || true
+  jq -n --arg cmd "$1" --arg agent "${2:-}" '{tool_name:"Bash", tool_input:{command:$cmd}} + (if $agent == "" then {} else {agent_type:$agent} end)' |
+    SKILL_CONFIG_PATH="$RELAY_CONFIG" HOME="$RELAY_HOME" bash "$HOOK" 2>&1 || true
 }
 
-# run_case <name> <command> <expected: deny|pass>
+# run_case <name> <command> <expected: deny|pass> [agent_type]
 # pass は「stdout が空」（allow も含め何も返さない）
 run_case() {
   local name="$1"
   local cmd="$2"
   local expected="$3"
+  local agent="${4:-}"
 
   local output
-  output=$(run_hook "$cmd")
+  output=$(run_hook "$cmd" "$agent")
 
   local decision="pass"
   if [[ -n $output ]]; then
@@ -290,6 +299,92 @@ run_case "stdin with .. inside" 'codex exec -s read-only - < a/../../secret' "de
 run_case "stdin from zsh =cmd expansion" 'codex exec -s read-only - < =ls' "deny"
 run_case "stdin from ~user" 'codex exec -s read-only - <~root/x' "deny"
 run_case "stdin from nested relative path" 'codex exec -s read-only - < docs/prompt.md' "deny"
+
+# --- dev-flow の Codex security review（claude-plugins #1091・#1097）の固定形 ---
+RELAY='dev-flow:security-codex-relay'
+R_OUT=/Users/someone/dev-flow-codex-out
+R_DIR=/private/tmp/claude-502/dev-flow-security-review-Ab12Cd
+R_NONCE=0123456789abcdef0123456789abcdef
+R_BIND=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+R_PROMPT='Run the security review described in your instructions and reply only with the JSON object defined by the output schema. Set its nonce field to'
+
+# relay_cmd <O> <D> <N> <B> [<prompt の nonce>]: _lib/security-review.mjs の codexSecurityReviewCommand と同じ形
+relay_cmd() {
+  local o="$1" d="$2" n="$3" b="$4" pn="${5:-$3}"
+  printf '%s' "codex exec -s read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -C ${o}/dev-flow-codex-cwd-${n}-${b} -c dev_flow_review_dir=\"${d}\" -c web_search=\"disabled\" --disable shell_tool --disable unified_exec --disable apps --disable browser_use --disable computer_use -c model_instructions_file=${o}/dev-flow-codex-prompt-${n}-${b}.md --output-schema ${o}/dev-flow-codex-schema-${n}-${b}.json -o ${o}/dev-flow-codex-result-${n}-${b}.json \"${R_PROMPT} ${pn}\""
+}
+
+# write_config <codex_output_dir の JSON 値>
+write_config() {
+  printf '{"dev-flow":{"codex_output_dir":%s}}\n' "$1" >"$RELAY_CONFIG"
+}
+
+write_config "\"${R_OUT}\""
+R_CMD=$(relay_cmd "$R_OUT" "$R_DIR" "$R_NONCE" "$R_BIND")
+
+echo "[dev-flow Codex security review form — relay agent only]"
+run_case "relay: fixed form" "$R_CMD" "pass" "$RELAY"
+run_case "relay: fixed form with another mkdtemp dir" "$(relay_cmd "$R_OUT" /var/folders/ab/T/dev-flow-security-review-zZ9yX8 fedcba9876543210fedcba9876543210 "$R_BIND")" "pass" "$RELAY"
+run_case "relay form from main session (no agent_type)" "$R_CMD" "deny"
+run_case "relay form from another dev-flow agent" "$R_CMD" "deny" "dev-flow:security-codex-verdict"
+run_case "relay form from general-purpose agent" "$R_CMD" "deny" "general-purpose"
+run_case "relay form with agent_type suffix" "$R_CMD" "deny" "${RELAY}x"
+run_case "relay: other codex exec" 'codex exec -s read-only "review the diff"' "deny" "$RELAY"
+run_case "relay: codex review" 'codex review -c sandbox_mode=read-only --uncommitted' "deny" "$RELAY"
+run_case "relay: codex --version still passes" 'codex --version' "pass" "$RELAY"
+
+echo "[dev-flow Codex security review form — flag removed / added / changed]"
+run_case "relay: without --ephemeral" "${R_CMD/ --ephemeral/}" "deny" "$RELAY"
+run_case "relay: without --ignore-user-config" "${R_CMD/ --ignore-user-config/}" "deny" "$RELAY"
+run_case "relay: without --ignore-rules" "${R_CMD/ --ignore-rules/}" "deny" "$RELAY"
+run_case "relay: without --skip-git-repo-check" "${R_CMD/ --skip-git-repo-check/}" "deny" "$RELAY"
+run_case "relay: without -s read-only" "${R_CMD/ -s read-only/}" "deny" "$RELAY"
+run_case "relay: without web_search" "${R_CMD/ -c web_search=\"disabled\"/}" "deny" "$RELAY"
+run_case "relay: without --disable shell_tool" "${R_CMD/ --disable shell_tool/}" "deny" "$RELAY"
+run_case "relay: without --disable computer_use" "${R_CMD/ --disable computer_use/}" "deny" "$RELAY"
+run_case "relay: without -o" "${R_CMD/ -o ${R_OUT}\/dev-flow-codex-result-${R_NONCE}-${R_BIND}.json/}" "deny" "$RELAY"
+run_case "relay: without --output-schema" "${R_CMD/ --output-schema ${R_OUT}\/dev-flow-codex-schema-${R_NONCE}-${R_BIND}.json/}" "deny" "$RELAY"
+run_case "relay: with bypass appended" "${R_CMD} --dangerously-bypass-approvals-and-sandbox" "deny" "$RELAY"
+run_case "relay: with --add-dir inserted" "${R_CMD/ --ephemeral/ --ephemeral --add-dir /}" "deny" "$RELAY"
+run_case "relay: with -c sandbox_mode inserted" "${R_CMD/ --ephemeral/ --ephemeral -c sandbox_mode=danger-full-access}" "deny" "$RELAY"
+run_case "relay: with --disable shell_tool duplicated" "${R_CMD/ --disable shell_tool/ --disable shell_tool --disable shell_tool}" "deny" "$RELAY"
+run_case "relay: with global --yolo" "${R_CMD/codex exec/codex --yolo exec}" "deny" "$RELAY"
+run_case "relay: -s workspace-write" "${R_CMD/-s read-only/-s workspace-write}" "deny" "$RELAY"
+run_case "relay: web_search live" "${R_CMD/web_search=\"disabled\"/web_search=\"live\"}" "deny" "$RELAY"
+run_case "relay: --enable shell_tool" "${R_CMD/--disable shell_tool/--enable shell_tool}" "deny" "$RELAY"
+run_case "relay: prompt text changed" "${R_CMD/reply only with/reply with}" "deny" "$RELAY"
+run_case "relay: -o outside the output dir" "${R_CMD/-o ${R_OUT}/-o /tmp}" "deny" "$RELAY"
+run_case "relay: -C outside the output dir" "${R_CMD/-C ${R_OUT}/-C /tmp}" "deny" "$RELAY"
+run_case "relay: model_instructions_file in the review dir" "${R_CMD/model_instructions_file=${R_OUT}\/dev-flow-codex-prompt-${R_NONCE}-${R_BIND}.md/model_instructions_file=${R_DIR}/prompt.md}" "deny" "$RELAY"
+run_case "relay: prompt nonce differs" "$(relay_cmd "$R_OUT" "$R_DIR" "$R_NONCE" "$R_BIND" fedcba9876543210fedcba9876543210)" "deny" "$RELAY"
+run_case "relay: double space" "${R_CMD/ --ephemeral/  --ephemeral}" "deny" "$RELAY"
+run_case "relay: trailing space" "${R_CMD} " "deny" "$RELAY"
+run_case "relay: absolute path codex" "/opt/homebrew/bin/${R_CMD}" "deny" "$RELAY"
+run_case "relay: followed by a second command" "${R_CMD}; codex --yolo exec x" "deny" "$RELAY"
+
+echo "[dev-flow Codex security review form — variable parts out of shape]"
+run_case "relay: review dir with .. element" "$(relay_cmd "$R_OUT" /private/tmp/../Users/someone/dev-flow-security-review-Ab12Cd "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: review dir with . element" "$(relay_cmd "$R_OUT" /private/tmp/./dev-flow-security-review-Ab12Cd "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: review dir not mkdtemp form (5 chars)" "$(relay_cmd "$R_OUT" /private/tmp/dev-flow-security-review-Ab12C "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: review dir not mkdtemp form (other name)" "$(relay_cmd "$R_OUT" /Users/someone/.ssh "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: review dir relative" "$(relay_cmd "$R_OUT" dev-flow-security-review-Ab12Cd "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: nonce 31 digits" "$(relay_cmd "$R_OUT" "$R_DIR" "${R_NONCE:1}" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: nonce 33 digits" "$(relay_cmd "$R_OUT" "$R_DIR" "0${R_NONCE}" "$R_BIND")" "deny" "$RELAY"
+run_case "relay: nonce uppercase hex" "$(relay_cmd "$R_OUT" "$R_DIR" 0123456789ABCDEF0123456789ABCDEF "$R_BIND")" "deny" "$RELAY"
+run_case "relay: binding 63 digits" "$(relay_cmd "$R_OUT" "$R_DIR" "$R_NONCE" "${R_BIND:1}")" "deny" "$RELAY"
+run_case "relay: output dir not the configured one" "$(relay_cmd /private/tmp/claude-502/out "$R_DIR" "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+write_config '"/Users/someone/../someone/dev-flow-codex-out"'
+run_case "relay: output dir with .. element (configured)" "$(relay_cmd /Users/someone/../someone/dev-flow-codex-out "$R_DIR" "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+write_config '"/Users/someone/./dev-flow-codex-out"'
+run_case "relay: output dir with . element (configured)" "$(relay_cmd /Users/someone/./dev-flow-codex-out "$R_DIR" "$R_NONCE" "$R_BIND")" "deny" "$RELAY"
+write_config '["/Users/someone/dev-flow-codex-out"]'
+run_case "relay: configured output dir not a string" "$R_CMD" "deny" "$RELAY"
+write_config 'null'
+run_case "relay: output dir not configured" "$R_CMD" "deny" "$RELAY"
+# $SKILL_CONFIG_PATH に値が無ければ ~/.config/skills/config.json を読む
+mkdir -p "${RELAY_HOME}/.config/skills"
+printf '{"dev-flow":{"codex_output_dir":"%s"}}\n' "$R_OUT" >"${RELAY_HOME}/.config/skills/config.json"
+run_case "relay: output dir from ~/.config/skills/config.json" "$R_CMD" "pass" "$RELAY"
 
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="

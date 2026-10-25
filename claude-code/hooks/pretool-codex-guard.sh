@@ -24,6 +24,21 @@
 #      対象（~/.ssh・資格情報など）を読み、stdout と model API へ返せる。読み取りを作業ツリーに限る
 #      Codex の設定が実際に効くことを確かめられていないので、許可形に入れない。sandbox の外で Codex を
 #      使う道具（generate-thumbnail 等）は script の中から codex を呼ぶので、この hook の対象にならない
+#      例外は dev-flow の Codex security review（claude-plugins #1091・#1097）の 1 形だけ（issue #411）。hook 入力の
+#      agent_type が dev-flow:security-codex-relay で、command が _lib/security-review.mjs の codexSecurityReviewCommand
+#      の出力と一字一句一致するときだけ通す:
+#        codex exec -s read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check
+#          -C <O>/dev-flow-codex-cwd-<N>-<B> -c dev_flow_review_dir="<D>" -c web_search="disabled" --disable shell_tool
+#          --disable unified_exec --disable apps --disable browser_use --disable computer_use
+#          -c model_instructions_file=<O>/dev-flow-codex-prompt-<N>-<B>.md --output-schema <O>/dev-flow-codex-schema-<N>-<B>.json
+#          -o <O>/dev-flow-codex-result-<N>-<B>.json "<固定文> <N>"
+#        （実際は 1 行）
+#      <D> は basename が dev-flow-security-review-XXXXXX（mkdtemp の形）の、<O> は user 設定の "dev-flow".codex_output_dir
+#      （$SKILL_CONFIG_PATH → ~/.config/skills/config.json → ~/.claude/skill-config.json の順で最初に値を持つもの。plugin の
+#      pr-iterate-prerun と同じ）と完全に一致する、`.` / `..` の要素を持たない [A-Za-z0-9._-] だけの絶対パス。<N> は 32 桁・
+#      <B> は 64 桁の小文字 hex。-o は sandbox から書けない <O> に書くので（#1097）、<O> を設定値に縛り、中継が sandbox から
+#      書ける場所を -o にした codex を起動できないようにする。パスの実体の確認は plugin の hook と prep が行う
+#      （plugin の起動形を変えたら、ここも同時に変える）
 #   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
 #
 # 出力:
@@ -136,6 +151,53 @@ if ((${#TOKS[@]} == 2)) && [[ ${TOKS[1]} == --version || ${TOKS[1]} == --help ]]
   exit 0
 fi
 if ((${#TOKS[@]} == 3)) && [[ $ARGS == "features list" || $ARGS == "login status" ]]; then
+  exit 0
+fi
+
+# dev-flow の Codex security review の中継が起動する固定形（claude-plugins の _lib/security-review.mjs の
+# codexSecurityReviewCommand。起動形を変えるときは plugin の hooks/pretool-codex-invocation-guard.sh と同時に変える）
+RELAY_AGENT='dev-flow:security-codex-relay'
+RELAY_PROMPT='Run the security review described in your instructions and reply only with the JSON object defined by the output schema. Set its nonce field to'
+RELAY_PATH_RE='(/[A-Za-z0-9._-]+)+'
+RELAY_CWD_RE="^(${RELAY_PATH_RE})/dev-flow-codex-cwd-([0-9a-f]{32})-([0-9a-f]{64})$"
+RELAY_DIR_RE="^dev_flow_review_dir=\"((/[A-Za-z0-9._-]+)*/dev-flow-security-review-[A-Za-z0-9]{6})\"$"
+RELAY_CONF_RE="^\"(${RELAY_PATH_RE})\"$"
+
+# relay_output_dir: user 設定の "dev-flow".codex_output_dir を RELAY_OUT に入れる。無い・パスの形の文字列でなければ 1 を返す
+relay_output_dir() {
+  local cfg v
+  for cfg in "${SKILL_CONFIG_PATH:-}" "${HOME:-}/.config/skills/config.json" "${HOME:-}/.claude/skill-config.json"; do
+    [[ -n $cfg && -f $cfg ]] || continue
+    v=$(jq -c 'if type == "object" and (.["dev-flow"] | type) == "object" then .["dev-flow"].codex_output_dir else null end' <"$cfg" 2>/dev/null) || v=''
+    [[ -n $v && $v != null ]] || continue
+    [[ $v =~ $RELAY_CONF_RE ]] || return 1
+    RELAY_OUT=${BASH_REMATCH[1]}
+    return 0
+  done
+  return 1
+}
+
+# relay_review_form: command が中継の固定形と一字一句一致し、可変部（<O>・<D>・<N>・<B>）が形に合うか
+relay_review_form() {
+  local o n b d p expected
+  ((${#RAW[@]} == 31)) || return 1
+  [[ ${RAW[9]} =~ $RELAY_CWD_RE ]] || return 1
+  o=${BASH_REMATCH[1]}
+  n=${BASH_REMATCH[3]}
+  b=${BASH_REMATCH[4]}
+  [[ ${RAW[11]} =~ $RELAY_DIR_RE ]] || return 1
+  d=${BASH_REMATCH[1]}
+  expected="codex exec -s read-only --ephemeral --ignore-user-config --ignore-rules --skip-git-repo-check -C ${o}/dev-flow-codex-cwd-${n}-${b} -c dev_flow_review_dir=\"${d}\" -c web_search=\"disabled\" --disable shell_tool --disable unified_exec --disable apps --disable browser_use --disable computer_use -c model_instructions_file=${o}/dev-flow-codex-prompt-${n}-${b}.md --output-schema ${o}/dev-flow-codex-schema-${n}-${b}.json -o ${o}/dev-flow-codex-result-${n}-${b}.json \"${RELAY_PROMPT} ${n}\""
+  [[ $CMD == "$expected" ]] || return 1
+  for p in "$o" "$d"; do
+    [[ $p/ != */./* && $p/ != */../* ]] || return 1
+  done
+  relay_output_dir || return 1
+  [[ $o == "$RELAY_OUT" ]]
+}
+
+AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty')
+if [[ $AGENT_TYPE == "$RELAY_AGENT" ]] && relay_review_form; then
   exit 0
 fi
 deny "$FORM_REASON"
