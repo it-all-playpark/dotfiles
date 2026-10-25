@@ -14,3 +14,22 @@ sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 # Allow git push / gh / package installs without escalating outside sandbox.
 network_access = true
+
+# Read-only profile for codex exec / review launched from Claude Code's Bash
+# (claude-code/hooks/pretool-codex-guard.sh requires
+# `-c default_permissions="claude-readonly" -c sandbox_mode=read-only`).
+# The read-only sandbox_mode alone can read the whole disk, so every
+# sandbox.filesystem.denyRead entry of claude-code/settings.json is "none" here
+# (tests/codex-permissions.test.sh keeps the two in sync).
+# Do not set default_permissions in this file: normal sessions keep the
+# workspace-write sandbox_mode above.
+[permissions.claude-readonly.filesystem]
+":root" = "read"
+"~/.aws" = "none"
+"~/.ssh" = "none"
+"~/.gnupg" = "none"
+"~/.config/gh" = "none"
+"~/.config/gh-*" = "none"
+"~/.agent-vault" = "none"
+"~/.orbstack" = "none"
+"/Library/Application Support/ClaudeCode/managed-settings.d" = "none"
