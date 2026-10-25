@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # tests/codex-permissions.test.sh
 # codex/config.base.toml の permissions profile（claude-readonly）が、claude-code/settings.json の
-# sandbox.filesystem.denyRead の各エントリを "none" にしているかを確かめる。
+# sandbox.filesystem.denyRead と permissions.deny の Read(<path>)（どちらも Claude の sandbox の読み取り拒否に
+# 入る）の各エントリを "none" にしているかを確かめる。
 # codex-guard（claude-code/hooks/pretool-codex-guard.sh）は、この profile を
 # -c default_permissions="claude-readonly" で選んだ codex exec / review だけを通す。Codex の
 # read-only sandbox はディスク全体を読めるので、denyRead にだけエントリを足すと、Claude の sandbox が
@@ -45,12 +46,19 @@ fail() {
   ERRORS+=("$1: $2")
 }
 
-# missing_entries <settings.json> <config.json>: profile に "none" で無い denyRead のエントリを 1 行ずつ出す
+# missing_entries <settings.json> <config.json>: profile に "none" で無い、denyRead と permissions.deny の
+# Read(<path>) のエントリを 1 行ずつ出す。Read(./<path>) は Claude の project root からの相対パスなので
+# profile の ":project_roots" の <path> に当たる。Read(!…) は読み取り拒否からの除外なので見ない
 missing_entries() {
   jq -r --arg profile "${PROFILE}" --slurpfile codex "$2" '
     ($codex[0].permissions[$profile].filesystem // {}) as $fs
-    | .sandbox.filesystem.denyRead[]
-    | select(($fs[sub("/\\*\\*$"; "")] // "") != "none")
+    | (.sandbox.filesystem.denyRead[]),
+      (.permissions.deny[] | select(test("^Read\\([^!]")))
+    | . as $entry
+    | (if startswith("Read(") then .[5:-1] else . end | sub("/\\*\\*$"; "")) as $path
+    | (if ($path | startswith("./")) then ($fs[":project_roots"] // {})[$path[2:]] else $fs[$path] end) as $access
+    | select(($access // "") != "none")
+    | $entry
   ' "$1"
 }
 
@@ -67,7 +75,10 @@ else
 fi
 
 writable="$(jq -r --arg profile "${PROFILE}" '
-  .permissions[$profile].filesystem // {} | to_entries[] | select(.value != "read" and .value != "none") | "\(.key) = \(.value)"
+  .permissions[$profile].filesystem // {}
+  | to_entries[]
+  | if (.value | type) == "object" then .key as $k | (.value | to_entries[] | .key |= "\($k).\(.)") else . end
+  | select(.value != "read" and .value != "none") | "\(.key) = \(.value)"
 ' "${TMPROOT}/codex.json")"
 if [[ -z ${writable} ]]; then
   pass "${PROFILE} has no writable entry"
@@ -75,13 +86,23 @@ else
   fail "${PROFILE} has no writable entry" "${writable//$'\n'/, }"
 fi
 
-# --- AC-1: denyRead の各エントリが profile で "none" ---
+# --- AC-1: denyRead と permissions.deny の Read(…) の各エントリが profile で "none" ---
 missing="$(missing_entries "${SETTINGS}" "${TMPROOT}/codex.json")"
 if [[ -z ${missing} ]]; then
-  pass "every denyRead entry is \"none\" in ${PROFILE}"
+  pass "every denyRead / Read() deny entry is \"none\" in ${PROFILE}"
 else
-  fail "every denyRead entry is \"none\" in ${PROFILE}" "missing in codex/config.base.toml: ${missing//$'\n'/, }"
+  fail "every denyRead / Read() deny entry is \"none\" in ${PROFILE}" "missing in codex/config.base.toml: ${missing//$'\n'/, }"
 fi
+
+# permissions.deny にだけ Read(./…) / Read(~/…) を足しても、上の検査が拾う
+for extra in 'Read(./.npmrc)' 'Read(~/.kube/**)'; do
+  jq --arg extra "${extra}" '.permissions.deny += [$extra]' "${SETTINGS}" >"${TMPROOT}/settings.json"
+  if [[ "$(missing_entries "${TMPROOT}/settings.json" "${TMPROOT}/codex.json")" == "${extra}" ]]; then
+    pass "a permissions.deny-only ${extra} is reported"
+  else
+    fail "a permissions.deny-only ${extra} is reported" "${extra} added to permissions.deny was not reported"
+  fi
+done
 
 # denyRead にだけエントリを足すと、上の検査が拾う
 # shellcheck disable=SC2088 # denyRead のエントリと同じく ~ を展開しない文字列

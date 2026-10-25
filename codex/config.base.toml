@@ -17,10 +17,12 @@ network_access = true
 
 # Read-only profile for codex exec / review launched from Claude Code's Bash
 # (claude-code/hooks/pretool-codex-guard.sh requires
-# `-c default_permissions="claude-readonly" -c sandbox_mode=read-only`).
-# The read-only sandbox_mode alone can read the whole disk, so every
-# sandbox.filesystem.denyRead entry of claude-code/settings.json is "none" here
-# (tests/codex-permissions.test.sh keeps the two in sync).
+# `-c default_permissions="claude-readonly" -c sandbox_mode=read-only -c 'projects={}'`).
+# The read-only sandbox_mode alone can read the whole disk, so every path Claude's
+# sandbox hides from reads is "none" here: each sandbox.filesystem.denyRead entry
+# and each Read(...) entry of permissions.deny in claude-code/settings.json
+# (`./<path>` entries go under ":project_roots"; tests/codex-permissions.test.sh
+# keeps them in sync).
 # Do not set default_permissions in this file: normal sessions keep the
 # workspace-write sandbox_mode above.
 [permissions.claude-readonly.filesystem]
@@ -33,3 +35,13 @@ network_access = true
 "~/.agent-vault" = "none"
 "~/.orbstack" = "none"
 "/Library/Application Support/ClaudeCode/managed-settings.d" = "none"
+
+# Read(./<path>) entries of permissions.deny (relative to the project root)
+[permissions.claude-readonly.filesystem.":project_roots"]
+".env" = "none"
+".env.*" = "none"
+"secrets" = "none"
+".ssh" = "none"
+".gnupg" = "none"
+".aws" = "none"
+".config/gh" = "none"
