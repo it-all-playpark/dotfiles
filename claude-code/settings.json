@@ -215,7 +215,7 @@
         "hooks": [
           {
             "command": "[ ! -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] || bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\"",
-            "timeout": 5,
+            "timeout": 10,
             "type": "command"
           }
         ],

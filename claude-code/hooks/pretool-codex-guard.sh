@@ -25,10 +25,9 @@
 #            -m / --model、-c / --config（キーが model・model_reasoning_effort・model_reasoning_summary・
 #            model_verbosity のもの）、exec の --skip-git-repo-check・--json・--ephemeral・--color、
 #            review の --uncommitted・--base・--commit・--title
-#          位置引数はプロンプト（`-` で stdin）。exec の最初の位置引数が resume・fork・review・help なら
-#          サブコマンドなので deny。プロンプトは末尾の `< file` 1 つで渡せる。file は cwd からの相対パスに限り、
-#          `/`・`=` で始まるもの、`~`・`..` を含むものは deny（sandbox の外の shell が読むので、作業ツリーの外の
-#          秘密ファイルを prompt に流させない）
+#          位置引数はプロンプト。exec の最初の位置引数が resume・fork・review・help なら
+#          サブコマンドなので deny。`< file` などのリダイレクトは受けない（sandbox の外の shell が開くので、
+#          作業ツリーに置いた symlink 越しに denyRead の対象を prompt に流せる）
 #        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ
 #      exec / review は、hook の cwd の物理パスが $HOME/ghq/ の下にあるときだけ通す。そこは denyWrite の
 #      ~/ghq/**/.codex で sandbox から .codex を作れないので、hook の判定後・codex の起動前に project 層を
@@ -53,7 +52,7 @@ deny() {
   exit 0
 }
 
-SHAPE_REASON='codex の語を含むコマンドは、; & | ` $ ( ) { } < > 改行と非 ASCII を含まない 4096 バイト以下の単純コマンドにする（codex が引数に現れるだけのものか、codex の許可形）。codex を wrapper（timeout・env 等）や VAR=x 前置の後ろに置かない。プロンプトや非 ASCII の文面は - を付けて末尾の < file（git commit は -F file）で渡す'
+SHAPE_REASON='codex の語を含むコマンドは、; & | ` $ ( ) { } < > 改行と非 ASCII を含まない 4096 バイト以下の単純コマンドにする（codex が引数に現れるだけのものか、codex の許可形）。codex を wrapper（timeout・env 等）や VAR=x 前置の後ろに置かない。codex のプロンプトは ASCII の引数で渡す（< file は使えない）。git commit の非 ASCII の文面は -F file で渡す'
 # 途中で失敗したら deny に倒す（hook の非 0 終了は Claude にとって非ブロックで、素通しになる）
 trap 'deny "$SHAPE_REASON"' ERR
 
@@ -70,7 +69,6 @@ if ((${#CMD} > 4096)); then
   deny "$SHAPE_REASON"
 fi
 FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、exec の後ろに -s read-only を明示した codex exec と、review の後ろに -c sandbox_mode=read-only を明示した codex review で、ほかの option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけのもの'
-STDIN_REASON='codex のプロンプトを渡す < file は cwd からの相対パスにする（/・= で始まるもの、~・.. を含むものは不可。sandbox の外の shell が読む）'
 GHQ_REASON='codex exec / review は cwd の物理パスが ~/ghq/ の下のときだけ通す（そこ以外は sandbox から .codex を作れ、hook の判定後に codex の project 層を差し込める）。~/ghq/ 配下の作業ツリーから呼ぶ'
 PROJECT_REASON='cwd の上に codex の project 層（.codex dir。config.toml・rules・hooks.json 等）がある（mcp_servers・notify・hooks が sandbox の外で動き、rules が承認を変える）。.codex の無い dir から codex を呼ぶ'
 
@@ -97,19 +95,9 @@ WORD_RE="^(${BARE}|${SQ}|${DQ})+"
 BARE_CAP="^(${BARE})"
 SQ_CAP="^'([^']*)'"
 DQ_CAP='^"([^"\]*)"'
-# 末尾の `< file`（プロンプトを stdin で渡す）
-STDIN_RE="^(.*[^[:blank:]<])[[:blank:]]+<[[:blank:]]*(${BARE})[[:blank:]]*$"
 CONFIG_ALLOW_RE='^(model|model_reasoning_effort|model_reasoning_summary|model_verbosity)$'
 
 body=$CMD
-if [[ $body =~ $STDIN_RE ]]; then
-  body=${BASH_REMATCH[1]}
-  stdin_file=${BASH_REMATCH[2]}
-  # 作業ツリーの外を指しうる形（絶対パス・zsh の =cmd・~ 展開・親 dir）は受けない
-  if [[ $stdin_file == [/=]* || $stdin_file == *'~'* || $stdin_file == *..* ]]; then
-    deny "$STDIN_REASON"
-  fi
-fi
 if [[ $body =~ $META_RE ]]; then
   deny "$SHAPE_REASON"
 fi
