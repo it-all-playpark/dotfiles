@@ -27,7 +27,8 @@
 #          （tests/codex-permissions.test.sh）。
 #          `projects={}` は user 設定の trust（[projects."<path>"] trust_level）を空にし、どの dir も trusted で
 #          なくする。codex は trusted な project の .codex（config.toml・rules・hooks.json 等）しか読まないので、
-#          hook の判定後・codex の起動前に cwd へ .codex を出されても（dir の rename 等）project 層は効かない。
+#          hook の判定後・codex の起動前に cwd へ .codex を出されても（dir の rename 等）project 層は効かない
+#          （ただし設定 layer の merge が空の table で trust を消すことは未実測なので、下の ~/ghq 判定の追加の防御）。
 #          profile は sandbox_mode=read-only より優先されるが、`-s` / `--sandbox` は profile を外すので
 #          値を問わず受けない（codex 0.164 で実測）。それ以外の option はサブコマンドの後ろの次の許可リストにある
 #          ものだけ（値が - で始まるものは受けない。review の --base= 等が git の option として渡る）:
@@ -39,9 +40,11 @@
 #          作業ツリーに置いた symlink 越しに denyRead の対象を prompt に流せる）
 #        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ。
 #          { } はクォートの中でだけ受ける（クォートの外は素の文字に無いので deny。クォートの中では展開されない）
-#      加えて、cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層
+#      exec / review は、hook の cwd の物理パスが $HOME/ghq/ の下にあるときだけ通す。そこは denyWrite の
+#      ~/ghq/**/.codex で sandbox から .codex を作れないので、hook の判定後・codex の起動前に project 層を
+#      作られる窓が無い。その上で cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層
 #      （`.codex` dir。config.toml・rules・hooks.json 等）があれば、許可形でも deny する（mcp_servers・notify・
-#      hooks が sandbox の外で動き、rules が承認を変える）。判定後に作られる .codex は上の projects={} で防ぐ
+#      hooks が sandbox の外で動き、rules が承認を変える）
 #      sandbox の外で Codex を使う道具（generate-thumbnail 等）は script の中から codex を呼ぶので、
 #      この hook の対象にならない
 #   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
@@ -79,6 +82,7 @@ if ((${#CMD} > 4096)); then
   deny "$SHAPE_REASON"
 fi
 FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、exec / review の後ろに -c default_permissions="claude-readonly" と -c sandbox_mode=read-only と -c '"'"'projects={}'"'"' を明示した codex exec / review で、ほかの option が model 系の -c と、exec は -m・--skip-git-repo-check・--json・--ephemeral・--color、review は --uncommitted・--base・--commit・--title だけのもの（-s / --sandbox は profile を外すので通さない）'
+GHQ_REASON='codex exec / review は cwd の物理パスが ~/ghq/ の下のときだけ通す（そこ以外は sandbox から .codex を作れ、hook の判定後に codex の project 層を差し込める）。~/ghq/ 配下の作業ツリーから呼ぶ'
 PROJECT_REASON='cwd の上に codex の project 層（.codex dir。config.toml・rules・hooks.json 等）がある（mcp_servers・notify・hooks が sandbox の外で動き、rules が承認を変える）。.codex の無い dir から codex を呼ぶ'
 
 META_RE=$'[;&|`$(){}<>\n]'
@@ -293,6 +297,12 @@ if [[ -n $SUB ]]; then
   LOGICAL_CWD=${LOGICAL_CWD:-$PWD}
   # codex は物理パス（getcwd）から project root を探すので、symlink を解いた cwd でも見る
   HOOK_CWD=$(cd -- "$LOGICAL_CWD" 2>/dev/null && pwd -P) || deny "$PROJECT_REASON"
+  # .codex を sandbox から作れない ~/ghq/ の下（物理パス）だけで通す。hook の時点で .codex が無くても、
+  # それ以外の場所では codex が設定を読むまでに作られうる（projects={} は追加の防御で、これに代えない）
+  HOME_P=$(cd -- "$HOME" 2>/dev/null && pwd -P) || deny "$GHQ_REASON"
+  if [[ $HOOK_CWD != "$HOME_P"/ghq/* ]]; then
+    deny "$GHQ_REASON"
+  fi
   if has_project_config; then
     deny "$PROJECT_REASON"
   fi

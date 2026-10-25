@@ -363,10 +363,10 @@ ln -s "$GHQ/proj/sub" "$GHQ/plain/sublink"
 run_case "exec profile with symlinked cwd into project" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c projects="{}" "x"' "deny" "$GHQ/plain/sublink"
 run_case "exec profile with missing cwd" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c projects="{}" "x"' "deny" "$GHQ/missing"
 
-# --- cwd の位置は問わない（判定後に作られる .codex は projects={} で読ませない）---
-echo "[exec / review outside ~/ghq — should pass]"
-run_case "exec profile outside ghq" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c projects="{}" "x"' "pass" "$TMPROOT/outside"
-run_case "review profile outside ghq" 'codex review -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c projects="{}" --uncommitted' "pass" "$TMPROOT/outside"
+# --- exec / review は cwd の物理パスが ~/ghq/ の下のときだけ（それ以外は判定後に .codex を作れる）---
+echo "[exec / review outside ~/ghq — should deny]"
+run_case "exec profile outside ghq" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c projects="{}" "x"' "deny" "$TMPROOT/outside"
+run_case "review profile outside ghq" 'codex review -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c projects="{}" --uncommitted' "deny" "$TMPROOT/outside"
 
 # --- < file は受けない（sandbox の外の shell が開くので、作業ツリーに置いた symlink 越しに外を読める）---
 echo "[Stdin redirect — should deny]"
