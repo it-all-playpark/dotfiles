@@ -18,22 +18,12 @@
 #   3. それ以外は、次の許可形に完全一致するものだけ通し、残りはすべて deny する
 #      （複合コマンド・置換・算術式・heredoc・VAR=x 前置・wrapper 越しの codex は、中身を問わず deny）
 #        - `codex --version` / `codex --help` / `codex features list` / `codex login status`
-#        - `codex exec`（`e`）の後ろに `-s read-only` / `--sandbox read-only` / `--sandbox=read-only` を
-#          明示したもの、`codex review` の後ろに `-c sandbox_mode=read-only` を明示したもの
-#          （codex 0.164.0 の review は -s を受けず、root の -s が review に効く裏付けも無いので、
-#          root の -s は受けない）で、それ以外の option が次の許可リストにあるもの:
-#            -m / --model、-c / --config（キーが model・model_reasoning_effort・model_reasoning_summary・
-#            model_verbosity のもの）、exec の --skip-git-repo-check・--json・--ephemeral・--color、
-#            review の --uncommitted・--base・--commit・--title
-#          位置引数はプロンプト。exec の最初の位置引数が resume・fork・review・help なら
-#          サブコマンドなので deny。`< file` などのリダイレクトは受けない（sandbox の外の shell が開くので、
-#          作業ツリーに置いた symlink 越しに denyRead の対象を prompt に流せる）
 #        - 語は素の文字（英数字と _ . / = : , + @ % ~ -）・'…'・"…"（中に \ を含まない）の連結だけ
-#      exec / review は、hook の cwd の物理パスが $HOME/ghq/ の下にあるときだけ通す。そこは denyWrite の
-#      ~/ghq/**/.codex で sandbox から .codex を作れないので、hook の判定後・codex の起動前に project 層を
-#      作られる窓が無い。その上で cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層
-#      （`.codex` dir。config.toml・rules・hooks.json 等）があれば、許可形でも deny する（mcp_servers・notify・
-#      hooks が sandbox の外で動き、rules が承認を変える）
+#      `codex exec` / `codex review` は `-s read-only` を明示しても通さない。Codex の read-only sandbox は
+#      ディスク全体の読み取りを許すので、prompt（PR の文面などで注入された指示を含む）に従って denyRead の
+#      対象（~/.ssh・資格情報など）を読み、stdout と model API へ返せる。読み取りを作業ツリーに限る
+#      Codex の設定が実際に効くことを確かめられていないので、許可形に入れない。sandbox の外で Codex を
+#      使う道具（generate-thumbnail 等）は script の中から codex を呼ぶので、この hook の対象にならない
 #   zsh の global alias（alias -g）で語を書き換える呼び出しは追えない。
 #
 # 出力:
@@ -68,9 +58,7 @@ fi
 if ((${#CMD} > 4096)); then
   deny "$SHAPE_REASON"
 fi
-FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status と、exec の後ろに -s read-only を明示した codex exec と、review の後ろに -c sandbox_mode=read-only を明示した codex review で、ほかの option が -m・model 系の -c・--skip-git-repo-check・--json・--ephemeral・--color（review は --uncommitted・--base・--commit・--title）だけのもの'
-GHQ_REASON='codex exec / review は cwd の物理パスが ~/ghq/ の下のときだけ通す（そこ以外は sandbox から .codex を作れ、hook の判定後に codex の project 層を差し込める）。~/ghq/ 配下の作業ツリーから呼ぶ'
-PROJECT_REASON='cwd の上に codex の project 層（.codex dir。config.toml・rules・hooks.json 等）がある（mcp_servers・notify・hooks が sandbox の外で動き、rules が承認を変える）。.codex の無い dir から codex を呼ぶ'
+FORM_REASON='codex は sandbox の外で動く（excludedCommands の codex:*）。通すのは codex --version / --help / features list / login status だけ。codex exec / review は -s read-only でもディスク全体を読めるので通さない'
 
 META_RE=$'[;&|`$(){}<>\n]'
 PLAIN_HEAD_RE='^[A-Za-z0-9_./~+#-]+$'
@@ -95,7 +83,6 @@ WORD_RE="^(${BARE}|${SQ}|${DQ})+"
 BARE_CAP="^(${BARE})"
 SQ_CAP="^'([^']*)'"
 DQ_CAP='^"([^"\]*)"'
-CONFIG_ALLOW_RE='^(model|model_reasoning_effort|model_reasoning_summary|model_verbosity)$'
 
 body=$CMD
 if [[ $body =~ $META_RE ]]; then
@@ -143,152 +130,12 @@ if ((${#RAW[@]} == 0)) || [[ ${RAW[0]} != codex && ${RAW[0]} != */codex ]] || [[
   deny "$SHAPE_REASON"
 fi
 
-LOGICAL_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
-LOGICAL_CWD=${LOGICAL_CWD:-$PWD}
-# codex は物理パス（getcwd）から project root を探すので、symlink を解いた cwd でも見る
-HOOK_CWD=$(cd -- "$LOGICAL_CWD" 2>/dev/null && pwd -P) || deny "$PROJECT_REASON"
-
-# has_project_config: cwd（論理パスと物理パスの両方）から $HOME の手前までに codex の project 層
-# （.codex dir）があるか（config.toml の mcp_servers・notify や hooks.json は Codex の sandbox の外で
-#  起動し、rules は承認を変える。$HOME/.codex は user 設定なので見ない）
-has_project_config() {
-  local d
-  for d in "$LOGICAL_CWD" "$HOOK_CWD"; do
-    while [[ -n $d && $d != / && $d != "$HOME" ]]; do
-      if [[ -e $d/.codex ]]; then
-        return 0
-      fi
-      d=${d%/*}
-    done
-  done
-  return 1
-}
-
-# judge <codex の引数…>: 許可形なら 0
-judge() {
-  local n=$# i=0 np=0 t v key val ro=0 sub=""
-  local -a a=("$@")
-
-  if ((n == 1)) && [[ ${a[0]} == --version || ${a[0]} == --help ]]; then
-    return 0
-  fi
-  if ((n == 2)) && [[ "${a[0]} ${a[1]}" == "features list" || "${a[0]} ${a[1]}" == "login status" ]]; then
-    return 0
-  fi
-
-  while ((i < n)); do
-    t=${a[i]}
-    v=""
-    case $t in
-    -s | --sandbox | -m | --model | -c | --config | --color | --base | --commit | --title)
-      # 値の位置にフラグを置いて紛れ込ませる形（-m --yolo 等）も許可しない
-      if ((i + 1 >= n)) || [[ ${a[i + 1]} == -* ]]; then
-        return 1
-      fi
-      v=${a[i + 1]}
-      i=$((i + 2))
-      ;;
-    --sandbox=* | --model=* | --config=* | --color=* | --base=* | --commit=* | --title=*)
-      v=${t#*=}
-      t=${t%%=*}
-      i=$((i + 1))
-      ;;
-    -*)
-      # 値を取らない option（サブコマンドごとの許可は下で見る）
-      i=$((i + 1))
-      ;;
-    *)
-      # 位置引数: 最初の 1 つがサブコマンド、以降はプロンプト
-      if [[ -z $sub ]]; then
-        case $t in
-        exec | e | review) sub=$t ;;
-        *) return 1 ;;
-        esac
-      elif ((np == 0)) && [[ $sub != review && ($t == resume || $t == fork || $t == review || $t == help) ]]; then
-        # codex exec resume / fork / review / help はサブコマンド
-        return 1
-      else
-        np=$((np + 1))
-      fi
-      i=$((i + 1))
-      continue
-      ;;
-    esac
-
-    case $t in
-    -s | --sandbox)
-      # -s を受けるのは exec の後ろだけ（review は -s を受けず、root の -s が review に効く裏付けが無い）
-      if [[ $v != read-only || ($sub != exec && $sub != e) ]]; then
-        return 1
-      fi
-      ro=1
-      ;;
-    -c | --config)
-      key=${v%%=*}
-      key=${key//[[:blank:]]/}
-      if [[ $v != *=* ]]; then
-        return 1
-      fi
-      if [[ $key == sandbox_mode ]]; then
-        # review の read-only の証明は review の後ろの -c sandbox_mode=read-only（TOML の文字列も可）
-        val=${v#*=}
-        val=${val//[[:blank:]]/}
-        if [[ $sub != review || ($val != read-only && $val != '"read-only"' && $val != "'read-only'") ]]; then
-          return 1
-        fi
-        ro=1
-      elif [[ ! $key =~ $CONFIG_ALLOW_RE ]]; then
-        return 1
-      fi
-      ;;
-    -m | --model) ;;
-    --color)
-      if [[ $sub != exec && $sub != e ]]; then
-        return 1
-      fi
-      ;;
-    --base | --commit | --title)
-      if [[ $sub != review ]]; then
-        return 1
-      fi
-      ;;
-    --skip-git-repo-check | --json | --ephemeral)
-      if [[ $sub != exec && $sub != e ]]; then
-        return 1
-      fi
-      ;;
-    --uncommitted)
-      if [[ $sub != review ]]; then
-        return 1
-      fi
-      ;;
-    -)
-      if [[ -z $sub ]]; then
-        return 1
-      fi
-      ;;
-    *) return 1 ;;
-    esac
-  done
-
-  SUB=$sub
-  [[ -n $sub ]] && ((ro))
-}
-
-SUB=""
-if ! judge "${TOKS[@]:1}"; then
-  deny "$FORM_REASON"
+# 情報表示の 4 形だけを通す（exec / review は read-only でもディスク全体を読めるので通さない）
+ARGS="${TOKS[*]:1}"
+if ((${#TOKS[@]} == 2)) && [[ ${TOKS[1]} == --version || ${TOKS[1]} == --help ]]; then
+  exit 0
 fi
-# project config は exec / review だけが読む（--version 等の情報表示は見ない）
-if [[ -n $SUB ]]; then
-  # .codex を sandbox から作れない ~/ghq/ の下（物理パス）だけで通す。hook の時点で .codex が無くても、
-  # それ以外の場所では codex が設定を読むまでに作られうる
-  HOME_P=$(cd -- "$HOME" 2>/dev/null && pwd -P) || deny "$GHQ_REASON"
-  if [[ $HOOK_CWD != "$HOME_P"/ghq/* ]]; then
-    deny "$GHQ_REASON"
-  fi
-  if has_project_config; then
-    deny "$PROJECT_REASON"
-  fi
+if ((${#TOKS[@]} == 3)) && [[ $ARGS == "features list" || $ARGS == "login status" ]]; then
+  exit 0
 fi
-exit 0
+deny "$FORM_REASON"
