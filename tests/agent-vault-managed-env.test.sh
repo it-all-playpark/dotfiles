@@ -308,7 +308,8 @@ SETTINGS_SRC="${TMPROOT}/repo/claude-code/settings.json"
 mkdir -p "$(dirname "${SETTINGS_SRC}")" "${HOME_T}/.claude"
 ln -s "${SETTINGS_SRC}" "${HOME_T}/.claude/settings.json"
 cat >"${SETTINGS_SRC}" <<'EOF'
-{"sandbox": {"excludedCommands": [
+{"env": {"TOOL_HOME": "~/.local/state/tool", "UV_CACHE_DIR": "/private/tmp/x", "OTHER": "a ~/b", "NUM": 1},
+ "sandbox": {"excludedCommands": [
   "~/.claude/plugins/cache/playpark/*",
   "bash ~/.claude/plugins/cache/playpark/*",
   "python3 $HOME/.claude/plugins/cache/playpark/*",
@@ -321,15 +322,16 @@ HP_OUT="${HP_DIR}/60-home-paths.json"
 HP_LISTING="$(printf '50-agent-vault.json\n60-home-paths.json')"
 
 # ---------------------------------------------------------------------------
-# tilde_entries_are_expanded_to_home: ~/ で始まるエントリ（コマンド名の後ろの ~/ も）だけを対象ユーザーの
-# ホームに置き換えて書く。$HOME 形式・他のエントリは settings.json 側でそのまま効くので書かない。
+# tilde_entries_are_expanded_to_home: ~/ で始まるエントリ（コマンド名の後ろの ~/ も）と、値が ~/ で始まる env だけを
+# 対象ユーザーのホームに置き換えて書く。$HOME 形式・他のエントリ・他の env は settings.json 側でそのまま効くので書かない。
 # 50-agent-vault.json と同じ書き方（root:wheel 0640 + 実行ユーザーだけの読み取り ACL）
 # ---------------------------------------------------------------------------
 echo "- tilde_entries_are_expanded_to_home"
 rm -f "${STUB_OUT}/chown"
 run_script "${HP_DIR}/50-agent-vault.json"
 want="$(jq -n --arg h "${HOME_T}" '{sandbox: {excludedCommands: [
-  "\($h)/.claude/plugins/cache/playpark/*", "bash \($h)/.claude/plugins/cache/playpark/*"]}}')"
+  "\($h)/.claude/plugins/cache/playpark/*", "bash \($h)/.claude/plugins/cache/playpark/*"]},
+  env: {TOOL_HOME: "\($h)/.local/state/tool"}}')"
 acl="$(/bin/ls -le "${HP_OUT}" 2>/dev/null | sed -n '2,$p' || true)"
 if [ "${RC}" -eq 0 ] && jq -e --argjson want "${want}" '. == $want' "${HP_OUT}" >/dev/null 2>&1 &&
   [ "$(mode_of "${HP_OUT}")" = 0o640 ] &&
@@ -402,9 +404,10 @@ echo "- repo_settings_have_no_unexpanded_home"
 cp "${REPO_ROOT}/claude-code/settings.json" "${SETTINGS_SRC}"
 out_dir="${TMPROOT}/home-paths-repo/managed-settings.d"
 run_script "${out_dir}/50-agent-vault.json"
-got="$(jq -c '.sandbox.excludedCommands | sort' "${out_dir}/60-home-paths.json" 2>/dev/null || true)"
+got="$(jq -c '[(.sandbox.excludedCommands | sort), (.env // {})]' "${out_dir}/60-home-paths.json" 2>/dev/null || true)"
 want="$(jq -c --arg h "${HOME_T}" \
-  '[.sandbox.excludedCommands[] | select(test("(^| )~/")) | sub("~/"; "\($h)/")] | sort' \
+  '[([.sandbox.excludedCommands[] | select(test("(^| )~/")) | sub("~/"; "\($h)/")] | sort),
+    (.env | with_entries(select(.value | startswith("~/")) | .value |= sub("^~/"; "\($h)/")))]' \
   "${REPO_ROOT}/claude-code/settings.json")"
 if [ "${RC}" -eq 0 ] && [ -n "${got}" ] && [ "${got}" = "${want}" ]; then
   pass "repo_settings_have_no_unexpanded_home"

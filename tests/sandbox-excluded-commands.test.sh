@@ -10,7 +10,7 @@
 # form (`<name>`) and argument-taking form (`<name> *`), that every bin in
 # the skills checkout's plugins/*/bin/ is registered or listed in
 # UNREGISTERED_BINS with a reason (issue #238), and that the
-# pre-existing entries (codex / zernio, etc.) are preserved
+# pre-existing entries (zernio, etc.) are preserved
 # unchanged. The .claude/skills 系 9 件は issue #179 で削除済み
 # （skills#584 の 3 plugin 化に追従）。
 # gh / git は issue #249 で削除済み（sandbox 内で agent-vault 経由で認証する）。
@@ -129,8 +129,8 @@ UNREGISTERED_BINS=(
   "conflict-autoresolve|worktree 内のローカル merge だけで push / fetch / gh を呼ばない"
   "secfloor-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "security-review-scope|worktree の git diff を node で判定するだけで、.git/config を書かず ssh / Keychain / ソケットも使わない"
-  "security-review-codex-prep|保存先に prompt.md・schema.json を node で書き、出力先とその祖先に sandbox 内からファイルを作れないことを確かめる。sandbox 外に出すとこの確認の意味がなくなる。git / gh・ssh・Keychain は使わない"
-  "security-review-codex-result|出力先の結果ファイルと複製を node で読んで binding・nonce を照合し判定するだけで、git / gh・ssh・Keychain を使わない"
+  "security-review-codex-prep|保存先（TMPDIR の配下）に prompt.md・schema.json・cwd/ を node で書くだけで、git / gh・ssh・Keychain を使わない"
+  "security-review-codex-result|保存先の result.json を node で読んで判定するだけで、git / gh・ssh・Keychain を使わない"
   "structural-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "veridelta-archive|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "worktree-diff-hash|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
@@ -277,7 +277,6 @@ fi
 # ---------------------------------------------------------------------------
 echo "- other_existing_entries_preserved"
 OTHER_ENTRIES=(
-  "codex:*"
   "zernio:*"
   "meeting play *"
   "meeting set-names *"
@@ -346,10 +345,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 13 ]; then
+if [ "${total_len}" -eq 12 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 13 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 12 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------

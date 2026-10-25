@@ -39,6 +39,7 @@
     "CHOKIDAR_USEPOLLING": "true",
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/moshi-plugin",
+    "CODEX_HOME": "~/.local/state/codex-sandbox",
     "DISABLE_AUTOUPDATER": "1",
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NODE_USE_ENV_PROXY": "1",
@@ -206,16 +207,6 @@
         "hooks": [
           {
             "command": "bash \"$HOME/.claude/hooks/pretool-ps-guard.sh\"",
-            "type": "command"
-          }
-        ],
-        "matcher": "Bash"
-      },
-      {
-        "hooks": [
-          {
-            "command": "[ ! -f \"$HOME/.claude/hooks/pretool-codex-guard.sh\" ] || bash \"$HOME/.claude/hooks/pretool-codex-guard.sh\"",
-            "timeout": 10,
             "type": "command"
           }
         ],
@@ -566,7 +557,6 @@
       "mem-triage *",
       "generate-thumbnail",
       "generate-thumbnail *",
-      "codex:*",
       "zernio:*",
       "meeting play *",
       "meeting set-names *",
@@ -580,6 +570,7 @@
         "~/.cache/nix",
         "~/.cache/gh",
         "~/.local/state/nix",
+        "~/.local/state/codex-sandbox",
         "~/.claude/journal",
         "~/.claude/logs",
         "~/.claude/memory",
@@ -698,7 +689,9 @@
         "sales-prod-playpark-llc.aws-ap-northeast-1.turso.io",
         "api.biz.moneyforward.com",
         "api-accounting.moneyforward.com",
-        "api.box.moneyforward.com"
+        "api.box.moneyforward.com",
+        "chatgpt.com",
+        "api.openai.com"
       ],
       "strictAllowlist": true
     }

@@ -23,6 +23,8 @@
 # そのまま照合する（~ / $HOME を展開しない）ので、絶対パスで呼ばれるスクリプトには絶対パスのエントリが要る。
 # settings.json は全ユーザー共通なので ~/ で書き、ユーザーごとの絶対パスはここで作る。excludedCommands は設定元を
 # またいで連結され、managed は信頼される設定元なので、settings.json に直書きしたのと同じに効く。
+# env のうち値が ~/ で始まるもの（CODEX_HOME 等。Claude Code は env の値を展開しない）も同じ drop-in に展開して書く。
+# managed の env は settings.json の同じキーより優先される。この drop-in が無い間は ~/ のまま渡る（codex は無いパスとして止まる）。
 # settings.json はユーザーが書けるので、開いたファイルが対象ユーザーの通常ファイルのときだけ読む（token と同じ）。
 # JSON として壊れている（git 操作の途中など）ときは前回の drop-in を残し、settings.json が無い・対象ユーザーの
 # ファイルでないときは drop-in を消す（sandbox 外で動かす許可を settings.json の実態より長く残さない）。
@@ -162,10 +164,13 @@ if [ -f "$settings" ] && exec 4<"$settings"; then
   if [ "$(/usr/bin/stat -f '%u %HT' /dev/fd/4)" = "$owner_uid Regular File" ]; then
     new_tmp "$paths_out"
     # shellcheck disable=SC2016 # 意図的: jq の式（$home は jq の変数）
-    if jq --arg home "$user_home" '{sandbox: {excludedCommands: [
+    if jq --arg home "$user_home" '((.env // {}) | with_entries(select((.value | type) == "string" and (.value | startswith("~/")))
+      | .value |= "\($home)/\(.[2:])")) as $env
+      | {sandbox: {excludedCommands: [
       .sandbox.excludedCommands[]? | strings | select(test("(^| )~/"))
-      | sub("(?<p>^| )~/"; "\(.p)\($home)/")]}}' <&4 >"$TMP"; then
-      install_dropin "$TMP" "$paths_out" "excludedCommands from $settings"
+      | sub("(?<p>^| )~/"; "\(.p)\($home)/")]}}
+      + (if ($env | length) > 0 then {env: $env} else {} end)' <&4 >"$TMP"; then
+      install_dropin "$TMP" "$paths_out" "excludedCommands and env from $settings"
     else
       log "skipped $paths_out: $settings is not valid JSON"
     fi
