@@ -1,7 +1,7 @@
 # Shared Codex settings managed in dotfiles.
 # This file is symlinked to ~/.codex/config.base.toml and merged into ~/.codex/config.toml.
 
-model = "gpt-5.5"
+model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 personality = "pragmatic"
 
