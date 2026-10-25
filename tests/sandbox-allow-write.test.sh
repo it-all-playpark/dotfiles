@@ -252,6 +252,9 @@ expected_denied=(
   "${R}/.claude/settings.json"
   "${R}/.claude/settings.local.json"
   "${R}/.claude/hooks/x.sh"
+  # issue #409: codex（sandbox の外）が読む project config。mcp_servers・notify を書けるので worktree 側も塞ぐ
+  "${R}/.codex/config.toml"
+  "${WT}/.codex/config.toml"
 )
 not_denied=(
   "${WT}/.claude/settings.json"
