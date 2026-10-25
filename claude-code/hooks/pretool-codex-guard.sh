@@ -205,8 +205,9 @@ judge() {
         exec | e | review) sub=$t ;;
         *) return 1 ;;
         esac
-      elif ((np == 0)) && [[ $sub != review && ($t == resume || $t == fork || $t == review || $t == help) ]]; then
-        # codex exec resume / fork / review / help はサブコマンド
+      elif [[ $sub != review && ($t == resume || $t == fork || $t == review || $t == help) ]]; then
+        # codex exec resume / fork / review / help はサブコマンド。clap は位置引数の後ろの
+        # サブコマンドも受け得るので、位置を問わず拒否する
         return 1
       else
         np=$((np + 1))

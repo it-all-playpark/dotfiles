@@ -100,7 +100,6 @@ run_case "exec profile with --model= and model -c keys" 'codex exec -c default_p
 run_case "review profile with -c model" 'codex review -c default_permissions="claude-readonly" -c sandbox_mode=read-only -c model="gpt-5" --base main --title "t"' "pass"
 run_case "review profile --commit" 'codex review -c default_permissions="claude-readonly" -c sandbox_mode=read-only --commit abc123' "pass"
 run_case "review profile with prompt" 'codex review -c default_permissions="claude-readonly" -c sandbox_mode=read-only --uncommitted "focus on tests"' "pass"
-run_case "exec profile prompt word resume" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only "x" resume' "pass"
 run_case "exec profile single-quoted prompt with double quote" "codex exec -c default_permissions=claude-readonly -c sandbox_mode=read-only 'say \"hi\"'" "pass"
 
 # --- AC-2: profile と read-only の両方を exec / review の後ろに明示しないもの・別の値のもの → deny ---
@@ -284,6 +283,11 @@ run_case "exec resume subcommand" 'codex exec -c default_permissions=claude-read
 run_case "exec help subcommand" 'codex exec -c default_permissions=claude-readonly -c sandbox_mode=read-only help' "deny"
 run_case "exec fork subcommand" 'codex exec -c default_permissions=claude-readonly -c sandbox_mode=read-only fork x' "deny"
 run_case "exec review subcommand" 'codex exec -c default_permissions=claude-readonly -c sandbox_mode=read-only review' "deny"
+# clap は位置引数の後ろのサブコマンドも受け得るので、プロンプトの後ろの resume / fork / review / help も deny
+run_case "exec prompt then resume" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only "x" resume' "deny"
+run_case "exec prompt then resume id" 'codex exec -c default_permissions="claude-readonly" -c sandbox_mode=read-only "x" resume abc123' "deny"
+run_case "exec prompt then fork" 'codex exec -c default_permissions=claude-readonly -c sandbox_mode=read-only "x" fork abc123' "deny"
+run_case "exec prompt then help" 'codex exec -c default_permissions=claude-readonly -c sandbox_mode=read-only "x" help' "deny"
 run_case "zsh precommand modifier -" '- codex --yolo exec x' "deny"
 run_case "command builtin" 'command codex --yolo exec x' "deny"
 run_case "zsh noglob" 'noglob codex --yolo exec x' "deny"
