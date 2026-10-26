@@ -138,6 +138,7 @@ UNREGISTERED_BINS=(
   "gmail-cleanup|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "gmail-receipts|gws の資格情報（~/.config/gws）は sandbox 内で読める"
   "ga-analyzer-fetch|GA4 API（*.googleapis.com）は sandbox 内から届く"
+  "generate-thumbnail|codex を shell なし read-only で sandbox 用の CODEX_HOME から起動し、画像の書き込みは script だけが行う（claude-plugins #1115）"
   "skill-creator-init|gh も git 書き込みも呼ばない"
   "sns-announce-check-length|gh も git 書き込みも呼ばない"
   "sns-announce-extract-metadata|gh も git 書き込みも呼ばない"
@@ -345,10 +346,10 @@ fi
 # total_entry_count
 # ---------------------------------------------------------------------------
 echo "- total_entry_count"
-if [ "${total_len}" -eq 12 ]; then
+if [ "${total_len}" -eq 10 ]; then
   pass "total_entry_count"
 else
-  fail "total_entry_count" "Expected 12 entries, got ${total_len}"
+  fail "total_entry_count" "Expected 10 entries, got ${total_len}"
 fi
 
 # ---------------------------------------------------------------------------

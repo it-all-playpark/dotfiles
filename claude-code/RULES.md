@@ -124,7 +124,8 @@ sandbox に塞がれたら:
   `bash ~/.claude/plugins/cache/playpark/../../../../../../private/tmp/claude-501/x.sh` で $TMPDIR のスクリプトが sandbox 外で
   走ることを実測した。cache 内にも local-verify / run-tests / pr-push など作業ツリーのコードを実行する bin があり、bare 名では
   UNREGISTERED_BINS にしているのにフルパスで素通りしていた。30 日の transcript でフルパス実行は 3,481 回中 1 回（mem-triage）。
-  sandbox 外が要る mem-triage（/bin/ps）と generate-thumbnail（codex）は plugin の bin/ に足して bare 名で登録した。
+  sandbox 外が要る mem-triage（/bin/ps）は plugin の bin/ に足して bare 名で登録した（同じく登録した generate-thumbnail は、
+  2026-10-26 に Codex を shell なし read-only で起動する形にして sandbox 内で動くようにし、除外を撤去した）。
   同日、corporate-site の daily-blog-factory/scripts/*（bare / bash / bash $HOME、worktrees/** 版の 6 行）も同じ形なので撤去し、
   SKILL.md が sandbox 外を要すると挙げる preflight / harvest_topics / seed_harvest / format_gate / premise_gate の 5 本だけを
   `bash ~/…/scripts/<name>.sh` の絶対パスで登録した（.claude/skills は Bash から書けない）。worktree 版は glob なしでは書けないので外し、

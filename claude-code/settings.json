@@ -555,8 +555,6 @@
       "journal *",
       "mem-triage",
       "mem-triage *",
-      "generate-thumbnail",
-      "generate-thumbnail *",
       "zernio:*",
       "meeting play *",
       "meeting set-names *",
