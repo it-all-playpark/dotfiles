@@ -14,6 +14,12 @@
 - issue は実測できる事実を実測してから立てる（再現・数値・どの経路を通るか）。測れなかった部分は「未検証の仮説」と明記して事実と分ける
 - レポート・分析の成果物は `claudedocs/` に置く
 - 削除は `rip`（復元できる）
+- 環境固有（sandbox・マシン固有のパス）の問題は環境側の設定で直す。git 管理の repo の規約に絶対パスや作者の環境を持ち込まない（repo に書くのはパスではなく要件）
+
+## 報告・issue
+- 機械判定（HOLD・test red 等）を自分の実測で否定したら、結論行には検証後の状態だけを書き、判定の出自と解消根拠は本文に降ろす。否定できていない判定は結論行に残す
+- issue には実装を変える情報だけを書き、それは body に書く（dev-flow は body だけを読む）。受入条件も変更内容も動かさない相互参照・注意書きは body にもコメントにも書かない
+- 人に手で実行してもらうコマンドは fish 文法で渡す（ターミナルは fish。`set` / `(cmd)` / `; and`）
 
 <!--
 テスト・スコープの 2 行は dev-flow の dev-implementer（skills repo plugins/dev-flow/agents/dev-implementer.md）の
@@ -25,10 +31,16 @@
 - 各ステージは作業の重さでモデルを選ぶ。検索・grep 集約・機械的編集は haiku、判断（verify / judge / synthesize）だけ opus
 - 指定しないとセッションのモデルと effort を継承するので、軽いステージほど明示する。effort は agent 定義の frontmatter でしか効かない（`agent()` の opts は無視される）
 - 単発で済む作業は Workflow にせず直接ツールを叩く（ultracode でも同じ）
+- agent 定義を再現したい Agent の spawn には `name` を付けない（teammate 扱いになり、`subagent_type` の定義・effort が黙って無視される）
+- Agent の prompt の Output format に「最終レポートは SendMessage で `to: "main"` に本文で送る」と書く（書かないと idle 通知だけで終わることがある）
+- 報告だけの発言（「mergeした」等）のターンでは Workflow を起動しない（起動ターンの発言が subagent に最優先の user request として中継され、作業を拒否する）
+- 2 本目の dev-flow は host-exec で `claude --bg "/dev-flow <N>"`（cwd はメイン checkout）を起動して並列に回す。人間に起動を頼まない
 
 ## Tool routing
 20KB 超の構造化ファイルや 100KB 超の全読みは `playpark-core` の hook が止めて代替を示す。以下は hook が検知できないので自分で選ぶ:
 - コードベースの概観 → `tokei`
+- skill・script の呼び出し元・依存の調査 → `rg --hidden --glob '!.git'`（付けないと `.claude/` 配下が 0 件に見え「未使用」と誤答する）
+- 調査の Bash は 1 呼び出し 1 コマンド。独立なら tool call を並べる（`;` / `&&` で束ねた複文は auto mode の permission 確認を招く）
 - 同じパターンを 3 箇所以上書き換える（rename・API 移行）/ grep に偽陽性が混ざる → `ast-grep`
 - 機械的な文字列置換 → `sd`
 - フォーマッタ適用前後で挙動が変わらないことの確認 → `difft --exit-code old new`
@@ -37,7 +49,7 @@
 - ローカル依存の CLI は `pnpm exec <bin>` か `./node_modules/.bin/<bin>` で実行し、npx は使わない（`pretool-npx-guard.sh` が止める）。npx という語が引数に入るだけでも（grep / jq の検索語など）hook が拒否するので、検索語はファイルに書いて `grep -f <file>` のように渡す
 
 ## Git
-- 保護ブランチ（main / dev / production 等）には push せず、feature branch から PR を出す。`保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなく `allow-feature-push.sh` hook
+- 保護ブランチ（main / dev / production 等）には push せず、feature branch から PR を出す。`保護/デプロイブランチ (...) への push は禁止` で止まったら sandbox ではなく `allow-feature-push.sh` hook。push は単体コマンドで叩く（hook は複文の別セグメントにある保護ブランチ名にも反応する）
 - PR / issue コメントの編集は `gh api -X PATCH` ではなく `gh pr comment <N> --edit-last --body-file <file>` / `gh issue comment <N> --edit-last --body-file <file>` を使う（`gh api -X PATCH` は permissions.deny で止まる）
 - dotfiles の PR を merge したあとメイン checkout に取り込むときは、host-exec で `dotfiles-sync` だけを実行する。止まったら人間に判断を渡す
 - 取り込んだ nix の設定（home-manager / nix-darwin）の反映は人間に頼まず、`dotfiles-sync` のあと host-exec で `dotfiles-apply` を実行する（timeoutSec 600。nix-darwin の sudo は Touch ID で人間が通す）。sudo を host-exec で直接組み立てない。入力の更新（`nix run .#update`）は人間が行う
@@ -67,6 +79,7 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガードが「git に届かないと証明できない」コマンドを拒否する（設定では外せない）。拒否されない形で書く:
 - cwd はもう自分の worktree。`cd <worktree> &&` や `git -C` を付けず相対パスで叩く。git は素の形で 1 呼び出し 1 コマンド（`&&` 連結・`$(git …)` も拒否）
 - ファイル作成は heredoc（`cat > f <<'EOF'`）ではなく Write ツール
+- worktree の名前（EnterWorktree の `name`）を `git-` で始めない（引数のパス要素が `git-` で始まると git サブコマンドとみなされ、worktree パスを引数に取る `security-review-scope` 等が拒否される）
 - 変数は必ずダブルクォート（`"$TMPDIR/x"`）。`$(…)` の結果を変数に入れて渡す形、`HOME=` 前置、`source` / `eval` を含む形も拒否される。`nix eval` も名前だけで拒否されるので、隔離中は `nix flake check` / `nix build` で確かめる
 
 使えるもの:
