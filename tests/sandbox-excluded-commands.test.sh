@@ -123,6 +123,7 @@ UNREGISTERED_BINS=(
   "dev-flow-prerun|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "dev-flow-ready-set|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "diff-risk-classify|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
+  "diff-triage|worktree の git status / git diff --numstat を読むだけで、push / fetch / gh を呼ばず .git/config を書かない"
   "merge-tier-facts|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "pr-iterate-prerun|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
   "pr-push|push と pre-push hook（repo の任意コード）を sandbox 内で走らせる（skills #871）"
