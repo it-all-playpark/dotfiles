@@ -76,6 +76,114 @@
     {
       "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.mcp.json",
       "reason": "作業中の repo の .mcp.json は Claude Code の組み込み保護で設定では外せない"
+    },
+    {
+      "id": "host_exec:ran:claude",
+      "reason": "RULES: 2 本目の dev-flow は host-exec で claude --bg を起動する。子セッションの実測（claude -p）も sandbox 外の認証・MCP が要るので host-exec で行う"
+    },
+    {
+      "id": "host_exec:ran:rip",
+      "reason": "allowWrite の外（/tmp 直下・~/.codex・~/.agents 等）の掃除。設定で書き込みを広げず、人間の承認付きの host-exec で rip する"
+    },
+    {
+      "id": "permission:hook:Bash npx biome",
+      "reason": "pretool-npx-guard.sh が止めて代替（pnpm exec / ./node_modules/.bin）を示す意図した拒否。RULES の Tool routing に記載"
+    },
+    {
+      "id": "request:request:Closes",
+      "reason": "誤検知（PR 本文の `Closes #N` を実行依頼として拾っている）"
+    },
+    {
+      "id": "request:request:important",
+      "reason": "誤検知（文中の単語を実行依頼として拾っている）"
+    },
+    {
+      "id": "request:request:nix run",
+      "reason": "RULES: 入力の更新（nix run .#update）は人間が行う"
+    },
+    {
+      "id": "request:request:codex login",
+      "reason": "codex のログインは対話的な認証なので人間が行う"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.githooks",
+      "reason": "denyWrite の .githooks。RULES: .githooks を追跡する repo の worktree は git worktree add ではなく wt-add で作る"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/corporate-site/.claude/worktrees/*/node_modules/iconv-lite/.idea/vcs.xml",
+      "reason": "組み込み保護（.idea）。npm の展開警告だけで install は続く"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-video/SKILL.md",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-video/scripts/box.py",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-video/tests/mock_box.py",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-video/tests/test-box.sh",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/SKILL.md",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/scripts/accounting.py",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/scripts/candidates.py",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/fixtures/journals.json",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/fixtures/match-2026-09.json",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/fixtures/receipts.json",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/mock_accounting.py",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/test-accounting.sh",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/test-candidates.sh",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills/receipt-attach/tests/test-skill-md.sh",
+      "reason": "作業中の repo の .claude/skills は組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write、取り出せないパスは wt-add"
+    },
+    {
+      "kind": "automode-blocked",
+      "reason": "auto mode classifier の判定による拒否。RULES: classifier が止めたら回避しない"
+    },
+    {
+      "kind": "automode-unavailable",
+      "reason": "auto mode classifier の一時的な無応答（判定ではない）。設定で直すものではない"
+    },
+    {
+      "kind": "user-rejected",
+      "reason": "人間がツール実行を拒否した。sandbox・設定の問題ではない"
+    },
+    {
+      "id": "sandbox:network:telemetry.vercel.com",
+      "reason": "テレメトリの送信先。許可しない（拒否されても作業は続く）"
     }
   ],
   "issue": {
