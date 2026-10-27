@@ -584,6 +584,8 @@
         "~/ghq/**/.claude/scheduled_tasks.lock",
         "~/.config/gws",
         "~/.config/gcloud",
+        "~/.config/gcloud-*",
+        "~/.config/gcloud-*/**/*",
         "~/.config/neon",
         "~/.config/receipt-video",
         "/private/tmp/claude"

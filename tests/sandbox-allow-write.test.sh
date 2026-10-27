@@ -171,6 +171,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# gcloud_account_config_dirs_writable
+# account-exec はアカウントごとの CLOUDSDK_CONFIG（account-map の gcloud_config_dir、
+# ~/.config/gcloud-<account>）で gcloud を起動する。gcloud は読み取り系のコマンドでも
+# logs/<日付>/<時刻>.log と credentials.db に書き、書けないと exit 1 で落ちる。
+# glob は配下に効かないので、配下は `**/*` で任意の深さに一致させる。
+# ---------------------------------------------------------------------------
+echo "- gcloud_account_config_dirs_writable"
+gcloud_dir="${HOME}/.config/gcloud-acme"
+expected_writable=(
+  "${gcloud_dir}"
+  "${gcloud_dir}/credentials.db"
+  "${gcloud_dir}/logs/2026.10.27/11.39.08.130829.log"
+)
+not_writable=(
+  "${HOME}/.config/gcloudx/credentials.db"
+  "${HOME}/.config/other-tool/x"
+)
+missed=()
+for p in "${expected_writable[@]}"; do
+  write_allowed "${p}" || missed+=("${p}")
+done
+leaked=()
+for p in "${not_writable[@]}"; do
+  write_allowed "${p}" && leaked+=("${p}")
+done
+if [ "${#missed[@]}" -ne 0 ]; then
+  fail "gcloud_account_config_dirs_writable" "Not covered by allowWrite: ${missed[*]}"
+elif [ "${#leaked[@]}" -ne 0 ]; then
+  fail "gcloud_account_config_dirs_writable" "Unexpectedly writable: ${leaked[*]}"
+else
+  pass "gcloud_account_config_dirs_writable"
+fi
+
+# ---------------------------------------------------------------------------
 # tmp_root_not_writable
 # ---------------------------------------------------------------------------
 echo "- tmp_root_not_writable"
