@@ -90,6 +90,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 - Postgres: sandbox 内で `initdb` は使わず、`pg-broker` に頼む。sandbox-docker VM（`docker-vm`）に digest 固定の postgres コンテナを起動する。`pg-broker create` が返す `database_url`（`127.0.0.1:5500〜5599`。`app` は superuser だが動くのは VM の中だけ、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`
 - プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。`ps` は使わない（環境変数を出せるので hook が deny する）。一覧・CPU・メモリは `/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time`、引数まで含むコマンドラインは `/usr/bin/pgrep -lf <pattern>`。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
 - pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）
+- gcloud（account-exec のアカウント別 `CLOUDSDK_CONFIG` を含む）は sandbox 内で動く。host-exec に回さず最初から Bash で叩き、sandbox の拒否で落ちたときだけ host-exec に回す。`Reauthentication failed` は sandbox ではなく認証切れなので、host-exec でも直らない（人間に `gcloud auth login` を頼む）
 - Postgres を使う E2E（Playwright 等）も sandbox 内で回す。人間や CI に回さない。DB は自分で docker compose や initdb で立てず、`pg-broker create` の `database_url` を、その repo が外部 DB を受け取る口（環境変数等。repo のテスト手順書で確かめる）に渡す。終わったら `pg-broker delete <id>`
 - 依存の install が postinstall / prepare の書き込みで EPERM になったら（`.husky` 等の denyWrite・`~/.cache/<tool>` 等の書けない場所）、その tool の無効化用の環境変数（husky は `HUSKY=0`）を付けるか、キャッシュを `XDG_CACHE_HOME="$TMPDIR/<一意名>"` に向けて入れ直す
 
