@@ -70,6 +70,10 @@
       "reason": "起動元 repo の .git/worktrees は Claude Code の組み込み保護で設定では外せない"
     },
     {
+      "id": "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.claude/worktrees/*",
+      "reason": "sandbox 内の git worktree remove は組み込み保護で worktree の削除が失敗し、設定では外せない。RULES: host-exec の git worktree remove で行う"
+    },
+    {
       "id": "sandbox:path:~/ghq/github.com/playpark-llc/back-office/.claude/worktrees/*/.claude/skills",
       "reason": "作業中の repo の .claude/skills は Claude Code の組み込み保護で worktree でも外せない。RULES: 編集は Edit / Write ツールで行う"
     },

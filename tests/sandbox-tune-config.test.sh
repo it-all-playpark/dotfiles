@@ -7,6 +7,7 @@
 #   - 組み込み保護（.git/config 等）・人間が行うログイン（gws auth）・Bash からの .env.*.example 読み取りも型の id で intended にする。
 #     .env.*.example は deny の Read(./.env.*) と RULES の「Read ツールで読む」が前提なので、その 2 つも確かめる
 #   - 人間へのコピペ実行の依頼（request:request:bash）を直す RULES の host-exec の行と、人間に頼む例外がある
+#   - sandbox 内で消せない worktree ディレクトリを id で intended にし、RULES に host-exec の git worktree remove の行がある
 # Run from the repo root: bash tests/sandbox-tune-config.test.sh
 # Requires: jq
 
@@ -43,9 +44,13 @@ check "host-exec の dotfiles-sync・dotfiles-apply を id で intended にし�
 check "host_exec を kind で intended にしない" \
   '[.intended[] | select(.kind == "host_exec")] | length == 0'
 
+# shellcheck disable=SC2016 # 意図的: $ids は jq の変数
 check "設定では外せない組み込み保護と人間が行うログインを id で intended にしている" \
   '[.intended[].id // empty] as $ids
    | all("request:request:gws auth", "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.git/config"; IN($ids[]))'
+
+check "sandbox 内で消せない worktree ディレクトリの拒否を id で reason 付きの intended にしている" \
+  '[.intended[] | select(.id == "sandbox:path:~/ghq/github.com/it-all-playpark/dotfiles/.claude/worktrees/*") | .reason | length > 0] | length == 1 and all'
 
 check "Bash からの .env.*.example 読み取りの拒否を id で 2 つ以上 intended にしている" \
   '[.intended[].id // empty | select(endswith(".env.example"))] | length >= 2'
@@ -79,6 +84,21 @@ if [ -n "${host_exec_line}" ] &&
   echo "  PASS: RULES.md の Sandbox 節に、人間にコピペ実行を頼まず host-exec を使い、例外を書いた行がある"
 else
   echo "  FAIL: RULES.md の Sandbox 節に、人間にコピペ実行を頼まず host-exec を使い、例外（対話的なログイン・RULES が人間の操作と決めたもの）を書いた行が無い"
+  FAILED=1
+fi
+
+# sandbox:path:<repo>/.claude/worktrees/*（sandbox 内の git worktree remove の削除失敗）は、RULES の行で直す。
+# 人間に頼まず host-exec で消し、未コミットの変更は --force で消さずに人間に判断を渡す
+# shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
+worktree_remove_line="$(grep -F -- '- worktree の削除（`git worktree remove`）は' <<<"${sandbox_section}" || true)"
+# shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
+if [ -n "${worktree_remove_line}" ] &&
+  grep -qF '人間に頼まず host-exec' <<<"${worktree_remove_line}" &&
+  grep -qF '`--force` は付けず' <<<"${worktree_remove_line}" &&
+  grep -qF '未コミットの変更がある worktree は消さずに人間に判断を渡す' <<<"${worktree_remove_line}"; then
+  echo "  PASS: RULES.md の Sandbox 節に、worktree の削除を人間に頼まず host-exec で行い、未コミットの変更は --force で消さない行がある"
+else
+  echo "  FAIL: RULES.md の Sandbox 節に、worktree の削除を人間に頼まず host-exec で行い、未コミットの変更は --force で消さずに人間に判断を渡す行が無い"
   FAILED=1
 fi
 
