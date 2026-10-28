@@ -19,7 +19,10 @@ let
   # docker-vm の DOCKER_CONFIG。docker-vm は Mac の docker CLI なので、コンテナと build の RUN に入るプロキシは
   # この config.json の proxies から決まる（VM 側の ~/.docker/config.json は読まれない）。値は lima.yaml の
   # param.egressProxy / egressNoProxy と同じ（tests/sandbox-docker.test.sh で突き合わせる）。
-  # Mac の ~/.docker/config.json（OrbStack 用）は使わないので、buildx はそこの cli-plugins から探させる
+  # Mac の ~/.docker/config.json（OrbStack 用）は使わないので、buildx はそこの cli-plugins から探させる。
+  # auths が空だと docker CLI は既定の credential store（macOS では PATH 上の docker-credential-osxkeychain）を
+  # 選び、pull のたびにキーチェーンの index.docker.io を読みに行ってダイアログを出す。資格情報の無い
+  # Docker Hub の項目を置いて config.json の auths を使わせ、Docker Hub からは匿名で pull する
   dockerConfig = pkgs.writeTextDir "config.json" (
     builtins.toJSON {
       proxies.default = {
@@ -28,6 +31,7 @@ let
         noProxy = "localhost,127.0.0.1,::1";
       };
       cliPluginsExtraDirs = [ "${home}/.docker/cli-plugins" ];
+      auths."https://index.docker.io/v1/" = { };
     }
   );
 in
