@@ -38,9 +38,12 @@
       # sandbox 外の端末で HTTPS の push / fetch に gh の token を使う。
       # 空の helper で osxkeychain 等の既定を消してから gh を足す（gh auth setup-git と同じ形）。
       # sandbox 内では claude wrapper（claude-code/bin/claude）がこの helper を env で空にする
+      # gh は shim（~/.claude/bin/gh → account-exec）経由で呼び、repo の org に応じた GH_CONFIG_DIR を付けさせる
+      # （絶対パスの gh だと常に ~/.config/gh のアカウントになり、別アカウントの private repo が not found になる）。
+      # PATH の先頭に nix の gh を置くのは、PATH に gh の無い GUI の git クライアントでも shim が実体を見つけられるようにするため
       credential."https://github.com".helper = [
         ""
-        "!${pkgs.gh}/bin/gh auth git-credential"
+        "!PATH=\"${pkgs.gh}/bin:$PATH\" \"$HOME/.claude/bin/gh\" auth git-credential"
       ];
 
       # cachetextconv は変換結果を git notes にキャッシュする。
