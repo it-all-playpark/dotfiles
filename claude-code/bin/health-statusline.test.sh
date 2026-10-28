@@ -229,6 +229,27 @@ jq -nc --arg ts "$(ago $((3 * H)))" '{report: "r.md", analysis: "r.json", recurr
   >>"$LOGS/sandbox-tune/runs.jsonl"
 expect "21c_sbx_omitted_when_recurring_not_number" ""
 
+# 最後の drafts_root の <実行時刻>/sandbox-tune-issue-*.md の数を未処理の下書きとして経過の前に出す（.meta.json 等は数えない）
+setup_home sbx_drafts
+old_root="$HOME_DIR/old-drafts"
+mkdir -p "$old_root/20261001T000000Z"
+touch "$old_root/20261001T000000Z/sandbox-tune-issue-1.md"
+jq -nc --arg ts "$(ago $((26 * H)))" --arg root "$old_root" '{recurring: 3, drafts_root: $root, ts: $ts}' >>"$LOGS/sandbox-tune/runs.jsonl"
+root="$HOME_DIR/drafts"
+mkdir -p "$root/20261027T213000Z" "$root/20261028T213000Z"
+touch "$root/20261027T213000Z/sandbox-tune-issue-1.md" "$root/20261027T213000Z/sandbox-tune-issue-1.meta.json" \
+  "$root/20261027T213000Z/llm.log" "$root/20261028T213000Z/sandbox-tune-issue-1.md" "$root/20261028T213000Z/sandbox-tune-issue-2.md"
+jq -nc --arg ts "$(ago $((3 * H)))" --arg root "$root" '{recurring: 5, drafts_root: $root, ts: $ts}' >>"$LOGS/sandbox-tune/runs.jsonl"
+expect "21d_sbx_pending_drafts" "sbx 再発5(+2) 下書き3 3h前"
+error_run $((1 * H))
+expect "21e_sbx_failed_with_pending_drafts" "sbx ⚠ 失敗 下書き3 1h前"
+
+# 下書きを処理して残っていなければ出さない
+setup_home sbx_no_pending_drafts
+mkdir -p "$HOME_DIR/drafts/20261028T213000Z"
+jq -nc --arg ts "$(ago $((3 * H)))" --arg root "$HOME_DIR/drafts" '{recurring: 5, drafts_root: $root, ts: $ts}' >>"$LOGS/sandbox-tune/runs.jsonl"
+expect "21f_sbx_no_pending_drafts" "sbx 再発5 3h前"
+
 # --- 1 行にまとめる ----------------------------------------------------------
 setup_home both
 log_line "$DAILY" "$(report a $((2 * H)))"
