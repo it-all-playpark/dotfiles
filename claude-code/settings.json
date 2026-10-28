@@ -610,6 +610,8 @@
         "~/ghq/*/*/*/*/.husky",
         "~/ghq/*/*/*/.claude/worktrees/*/.husky",
         "~/ghq/*/*/*/.claude/worktrees/*/*/.husky",
+        "~/ghq/*/*/*-wt/*/*/.husky",
+        "~/ghq/*/*/*-worktrees/*/*/.husky",
         "~/ghq/**/.codex",
         "~/ghq/*/*/*/.git/hooks",
         "~/ghq/*/*/*/.git/config",

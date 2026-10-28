@@ -332,10 +332,15 @@ husky_denied=(
   "${WT}/.husky/pre-commit"
   "${WT}/web/.husky/pre-commit"
   "${R}-wt/df-1/.husky/pre-commit"
+  "${R}-wt/df-1/web/.husky/pre-commit"
+  "${R}-worktrees/w/web/.husky/pre-commit"
 )
+# 2 段下の monorepo（<repo>/apps/web/.husky）は塞がない。glob に除外が無く、同じ深さの
+# npm の hoist 配置（<repo>/node_modules/<pkg>/.husky）と区別できないため。
 husky_not_denied=(
   "${R}/node_modules/.pnpm/pino-abstract-transport@1.0.0/node_modules/pino-abstract-transport_tmp_1/.husky/pre-commit"
   "${R}/node_modules/pino-abstract-transport/.husky/pre-commit"
+  "${R}-wt/df-1/node_modules/pino-abstract-transport/.husky/pre-commit"
   "${WT}/node_modules/.pnpm/pino-abstract-transport@1.0.0/node_modules/pino-abstract-transport/.husky/pre-commit"
   "${WT}/node_modules/pino-abstract-transport/.husky/pre-commit"
 )
