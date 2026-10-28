@@ -32,9 +32,9 @@
 #                              placeholder を本物の token に置き換える。bg job も daemon 経由でこの env を継承する
 #   GIT_CONFIG_KEY_n=credential.https://github.com.helper / GIT_CONFIG_VALUE_n=（空）
 #                              github.com 向けの git credential helper を空にする（空の helper は一覧を消す。
-#                              env の設定は ~/.config/git/config.local の `gh auth git-credential` より後に
+#                              env の設定は git.nix / ~/.config/git/config.local の helper より後に
 #                              読まれる）。他ホストの helper（osxkeychain 等）はそのまま残す。
-#                              helper は gh を絶対パスで呼んで ~/.config/gh を読むので sandbox 内では動かない。
+#                              helper の gh は ~/.config/gh* を読むので sandbox 内では動かない。
 #                              github.com の認証は agent-vault が owner ごとの Basic 認証で付ける
 #   HOST_EXEC_ENV              host-exec（sandbox 外でコマンドを動かす plugin）が子プロセスの env に当てる指定。
 #                              JSON オブジェクト {"<名前>": null（取り除く）| "<値>"（上書き）}。host-exec のコマンドは

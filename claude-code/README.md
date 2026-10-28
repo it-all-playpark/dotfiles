@@ -104,8 +104,10 @@ gcloud は構成名（`CLOUDSDK_ACTIVE_CONFIG_NAME`）ではなく **config dir 
   起動元の PATH に依存せず shim が効くようにする
 - 同じスクリプト内で `cd org1 && gh …; cd org2 && gh …` としても各呼び出しが独立に解決される。
   `pnpm tf:init:stg` のような `cd infrastructure/terraform && tofu init …` も repo 内に留まるので同じ org で解決される
-- `git push`（https）の credential helper は `~/.config/git/config.local` に `gh auth git-credential` を
-  **絶対パス**で書いている（`gh auth setup-git` の形）ので shim を通らず、常に `~/.config/gh` のアカウントになる。
+- `git push` / `git pull`（https）の credential helper（`home-manager/programs/git.nix`）は `~/.claude/bin/gh auth git-credential`
+  を呼ぶので shim を通り、repo の org のアカウントになる（`tests/git-credential-account.test.sh`）。
+  `gh auth setup-git` を実行すると `~/.config/git/config.local` に絶対パスの helper が書かれ、後から読まれるこちらが勝って
+  常に `~/.config/gh` のアカウントに戻るので、`config.local` には helper を書かない。
   agent-vault 経由のセッションでは `bin/claude` が helper を空にし、agent-vault が owner ごとに Basic 認証を付ける（下記）
 - **明示指定は素通し**: `GH_CONFIG_DIR=… gh …` / `CLOUDSDK_CONFIG=… gcloud …` /
   `GOOGLE_APPLICATION_CREDENTIALS=… tofu …` のように対象 env が既に set なら判定しない
