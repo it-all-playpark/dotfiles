@@ -168,6 +168,9 @@ sandbox に塞がれたら:
   `~/ghq/*/*/*/*/.husky` は monorepo の 1 段下（dify/web）と repo 外の worktree（`<repo>-wt/*`・`<repo>-worktrees/*`）を兼ねる。
   ~/ghq の node_modules 外にある `.husky` 11 箇所はすべてどれかに一致することを実測した。repo の 2 段下（`apps/web/.husky`）は
   塞がない: glob に除外が無く、同じ深さの npm の hoist 配置（`node_modules/<pkg>/.husky`）と区別できない。
+  塞ぐべきは名前ではなく各 repo の core.hooksPath の先なので、`tests/sandbox-allow-write.test.sh` の `configured_hooks_paths_denied` が
+  ~/ghq の repo と worktree の hooksPath（husky は親の `.husky` も）を実際に読み、denyWrite に入らないものがあれば落ちる（pre-push で走る）。
+  そういう repo が現れたら、その hooksPath を塞ぐパターンを足す。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。

@@ -361,6 +361,44 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# configured_hooks_paths_denied
+# ---------------------------------------------------------------------------
+echo "- configured_hooks_paths_denied"
+# 塞ぐべきは名前ではなく、人間の sandbox 外の git が hook として実行する場所（各 repo の core.hooksPath の先）。
+# 上の .husky は深さ固定なので、hooksPath が repo の 2 段以上下を指す repo が現れると塞がれずに通る。
+# このマシンの ~/ghq の repo と worktree を実際に読み、hooksPath の先がすべて denyWrite に入っていることを確かめる。
+# .git/config は denyWrite なので sandbox の中から hooksPath を向け直すことはできない。~/ghq が無い CI では照合対象が 0 件になる。
+# husky（hooksPath=.husky/_）は _/h が親の .husky/<hook> を実行するので、親も見る。
+uncovered=()
+for repo in "${HOME}"/ghq/*/*/*; do
+  [ -f "${repo}/.git/config" ] || continue
+  hp="$(git config --file "${repo}/.git/config" --get core.hooksPath || true)"
+  roots=("${repo}")
+  for wt in "${repo}"/.claude/worktrees/* "${repo}"-wt/* "${repo}"-worktrees/*; do
+    [ -e "${wt}/.git" ] && roots+=("${wt}")
+  done
+  hook_dirs=()
+  case "${hp}" in
+  "") hook_dirs=("${repo}/.git/hooks") ;;
+  \~/*) hook_dirs=("${HOME}/${hp#\~/}") ;;
+  /*) hook_dirs=("${hp}") ;;
+  *) for root in "${roots[@]}"; do hook_dirs+=("${root}/${hp}"); done ;;
+  esac
+  for d in "${hook_dirs[@]}"; do
+    d="${d%/}"
+    write_denied "${d}/pre-commit" || uncovered+=("${d}")
+    if [ "$(basename "${d}")" = "_" ]; then
+      write_denied "$(dirname "${d}")/pre-commit" || uncovered+=("$(dirname "${d}")")
+    fi
+  done
+done
+if [ "${#uncovered[@]}" -eq 0 ]; then
+  pass "configured_hooks_paths_denied"
+else
+  fail "configured_hooks_paths_denied" "hooksPath not covered by denyWrite (add a pattern to sandbox.filesystem.denyWrite): ${uncovered[*]}"
+fi
+
+# ---------------------------------------------------------------------------
 # permissions_deny_guards_repo_git_and_sns_sync
 # ---------------------------------------------------------------------------
 echo "- permissions_deny_guards_repo_git_and_sns_sync"
