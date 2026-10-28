@@ -161,6 +161,16 @@ sandbox に塞がれたら:
 - 2026-10-21（issue #366）denyWrite に `~/ghq/*/*/*/` の `.git/hooks`・`.git/config`・`.claude/settings{,.local}.json`・`.claude/hooks` を追加:
   組み込み保護は起動元 repo しか塞がず、他 repo のこれらへの `: >>` が sandbox 内で通った（下の 2026-09-30 の「既に塞いでいる」は起動元だけの話）。
   `**` にしないのは skills と同じ理由。permissions.deny の `Write(path)` は参照されないので `Edit(path)` で書く。
+- 2026-10-28 denyWrite の `~/ghq/**/.husky` を深さ固定の 6 本（repo 直下・その 1 段下・`.claude/worktrees/*` とその 1 段下・
+  `<repo>-wt/*`・`<repo>-worktrees/*` の 1 段下）に絞る:
+  `**` が node_modules の中にも一致し、`.husky` を同梱した依存（pino-abstract-transport@1.0.0）の展開が EPERM になって
+  `pnpm install` が途中で止まり、dev-flow の Validate が `jest: command not found` で落ちていた（`HUSKY=0` では避けられない）。
+  `~/ghq/*/*/*/*/.husky` は monorepo の 1 段下（dify/web）と repo 外の worktree（`<repo>-wt/*`・`<repo>-worktrees/*`）を兼ねる。
+  ~/ghq の node_modules 外にある `.husky` 11 箇所はすべてどれかに一致することを実測した。repo の 2 段下（`apps/web/.husky`）は
+  塞がない: glob に除外が無く、同じ深さの npm の hoist 配置（`node_modules/<pkg>/.husky`）と区別できない。
+  塞ぐべきは名前ではなく各 repo の core.hooksPath の先なので、`tests/sandbox-allow-write.test.sh` の `configured_hooks_paths_denied` が
+  ~/ghq の repo と worktree の hooksPath（husky は親の `.husky` も）を実際に読み、denyWrite に入らないものがあれば落ちる（pre-push で走る）。
+  そういう repo が現れたら、その hooksPath を塞ぐパターンを足す。
 - 2026-10-08 ~/.claude/skills の symlink 撤去: plugin 化後も ~/.claude/skills → skills repo ルートの symlink が残り、組み込み保護が
   skills/.git まで及んで dev-flow の commit が index.lock EPERM で止まっていた（skills#871）。symlink は skill を 1 つも提供して
   いなかった。撤去で skills checkout が書けるようになるので、checkout 配下の excludedCommands 5 件と live checkout 用の git guard hook も外した。

@@ -319,6 +319,86 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# husky_deny_covers_hooks_paths_not_dependencies
+# ---------------------------------------------------------------------------
+echo "- husky_deny_covers_hooks_paths_not_dependencies"
+# .husky は hooksPath が作業ツリー内にあり、人間の sandbox 外の git commit で実行される。
+# repo 直下・monorepo の 1 段下・worktree（<repo>/.claude/worktrees/*・<repo>-wt/*）を塞ぐ。
+# 依存パッケージが .husky を同梱していることがあり（pino-abstract-transport@1.0.0）、`**` だと
+# node_modules への展開が EPERM になって pnpm install が途中で止まる。
+husky_denied=(
+  "${R}/.husky/pre-commit"
+  "${R}/web/.husky/pre-commit"
+  "${WT}/.husky/pre-commit"
+  "${WT}/web/.husky/pre-commit"
+  "${R}-wt/df-1/.husky/pre-commit"
+  "${R}-wt/df-1/web/.husky/pre-commit"
+  "${R}-worktrees/w/web/.husky/pre-commit"
+)
+# 2 段下の monorepo（<repo>/apps/web/.husky）は塞がない。glob に除外が無く、同じ深さの
+# npm の hoist 配置（<repo>/node_modules/<pkg>/.husky）と区別できないため。
+husky_not_denied=(
+  "${R}/node_modules/.pnpm/pino-abstract-transport@1.0.0/node_modules/pino-abstract-transport_tmp_1/.husky/pre-commit"
+  "${R}/node_modules/pino-abstract-transport/.husky/pre-commit"
+  "${R}-wt/df-1/node_modules/pino-abstract-transport/.husky/pre-commit"
+  "${WT}/node_modules/.pnpm/pino-abstract-transport@1.0.0/node_modules/pino-abstract-transport/.husky/pre-commit"
+  "${WT}/node_modules/pino-abstract-transport/.husky/pre-commit"
+)
+missed=()
+for p in "${husky_denied[@]}"; do
+  write_denied "${p}" || missed+=("${p}")
+done
+over_denied=()
+for p in "${husky_not_denied[@]}"; do
+  write_denied "${p}" && over_denied+=("${p}")
+done
+if [ "${#missed[@]}" -ne 0 ]; then
+  fail "husky_deny_covers_hooks_paths_not_dependencies" "Not denied: ${missed[*]}"
+elif [ "${#over_denied[@]}" -ne 0 ]; then
+  fail "husky_deny_covers_hooks_paths_not_dependencies" "Unexpectedly denied: ${over_denied[*]}"
+else
+  pass "husky_deny_covers_hooks_paths_not_dependencies"
+fi
+
+# ---------------------------------------------------------------------------
+# configured_hooks_paths_denied
+# ---------------------------------------------------------------------------
+echo "- configured_hooks_paths_denied"
+# 塞ぐべきは名前ではなく、人間の sandbox 外の git が hook として実行する場所（各 repo の core.hooksPath の先）。
+# 上の .husky は深さ固定なので、hooksPath が repo の 2 段以上下を指す repo が現れると塞がれずに通る。
+# このマシンの ~/ghq の repo と worktree を実際に読み、hooksPath の先がすべて denyWrite に入っていることを確かめる。
+# .git/config は denyWrite なので sandbox の中から hooksPath を向け直すことはできない。~/ghq が無い CI では照合対象が 0 件になる。
+# husky（hooksPath=.husky/_）は _/h が親の .husky/<hook> を実行するので、親も見る。
+uncovered=()
+for repo in "${HOME}"/ghq/*/*/*; do
+  [ -f "${repo}/.git/config" ] || continue
+  hp="$(git config --file "${repo}/.git/config" --get core.hooksPath || true)"
+  roots=("${repo}")
+  for wt in "${repo}"/.claude/worktrees/* "${repo}"-wt/* "${repo}"-worktrees/*; do
+    [ -e "${wt}/.git" ] && roots+=("${wt}")
+  done
+  hook_dirs=()
+  case "${hp}" in
+  "") hook_dirs=("${repo}/.git/hooks") ;;
+  \~/*) hook_dirs=("${HOME}/${hp#\~/}") ;;
+  /*) hook_dirs=("${hp}") ;;
+  *) for root in "${roots[@]}"; do hook_dirs+=("${root}/${hp}"); done ;;
+  esac
+  for d in "${hook_dirs[@]}"; do
+    d="${d%/}"
+    write_denied "${d}/pre-commit" || uncovered+=("${d}")
+    if [ "$(basename "${d}")" = "_" ]; then
+      write_denied "$(dirname "${d}")/pre-commit" || uncovered+=("$(dirname "${d}")")
+    fi
+  done
+done
+if [ "${#uncovered[@]}" -eq 0 ]; then
+  pass "configured_hooks_paths_denied"
+else
+  fail "configured_hooks_paths_denied" "hooksPath not covered by denyWrite (add a pattern to sandbox.filesystem.denyWrite): ${uncovered[*]}"
+fi
+
+# ---------------------------------------------------------------------------
 # permissions_deny_guards_repo_git_and_sns_sync
 # ---------------------------------------------------------------------------
 echo "- permissions_deny_guards_repo_git_and_sns_sync"
