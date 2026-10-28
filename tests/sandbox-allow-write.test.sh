@@ -319,6 +319,43 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# husky_deny_covers_hooks_paths_not_dependencies
+# ---------------------------------------------------------------------------
+echo "- husky_deny_covers_hooks_paths_not_dependencies"
+# .husky は hooksPath が作業ツリー内にあり、人間の sandbox 外の git commit で実行される。
+# repo 直下・monorepo の 1 段下・worktree（<repo>/.claude/worktrees/*・<repo>-wt/*）を塞ぐ。
+# 依存パッケージが .husky を同梱していることがあり（pino-abstract-transport@1.0.0）、`**` だと
+# node_modules への展開が EPERM になって pnpm install が途中で止まる。
+husky_denied=(
+  "${R}/.husky/pre-commit"
+  "${R}/web/.husky/pre-commit"
+  "${WT}/.husky/pre-commit"
+  "${WT}/web/.husky/pre-commit"
+  "${R}-wt/df-1/.husky/pre-commit"
+)
+husky_not_denied=(
+  "${R}/node_modules/.pnpm/pino-abstract-transport@1.0.0/node_modules/pino-abstract-transport_tmp_1/.husky/pre-commit"
+  "${R}/node_modules/pino-abstract-transport/.husky/pre-commit"
+  "${WT}/node_modules/.pnpm/pino-abstract-transport@1.0.0/node_modules/pino-abstract-transport/.husky/pre-commit"
+  "${WT}/node_modules/pino-abstract-transport/.husky/pre-commit"
+)
+missed=()
+for p in "${husky_denied[@]}"; do
+  write_denied "${p}" || missed+=("${p}")
+done
+over_denied=()
+for p in "${husky_not_denied[@]}"; do
+  write_denied "${p}" && over_denied+=("${p}")
+done
+if [ "${#missed[@]}" -ne 0 ]; then
+  fail "husky_deny_covers_hooks_paths_not_dependencies" "Not denied: ${missed[*]}"
+elif [ "${#over_denied[@]}" -ne 0 ]; then
+  fail "husky_deny_covers_hooks_paths_not_dependencies" "Unexpectedly denied: ${over_denied[*]}"
+else
+  pass "husky_deny_covers_hooks_paths_not_dependencies"
+fi
+
+# ---------------------------------------------------------------------------
 # permissions_deny_guards_repo_git_and_sns_sync
 # ---------------------------------------------------------------------------
 echo "- permissions_deny_guards_repo_git_and_sns_sync"
