@@ -489,6 +489,30 @@ EOF
   else
     fail "docker_vm_container_proxy" "DOCKER_CONFIG=${docker_config:-<none>} got=${got:-<none>} want=${want}"
   fi
+
+  # ---------------------------------------------------------------------------
+  # docker_vm_no_keychain: docker-vm の DOCKER_CONFIG の config.json は credsStore / credHelpers / auths の
+  # いずれかが空でない（docker/cli の ContainsAuth() が true になり、macOS の既定の
+  # docker-credential-osxkeychain を選ばない）。credsStore・credHelpers に osxkeychain を含まず、
+  # auths は資格情報を持たない（Docker Hub からは匿名で pull する）
+  # ---------------------------------------------------------------------------
+  echo "- docker_vm_no_keychain"
+  got=""
+  if [ -f "${docker_config}/config.json" ]; then
+    got="$(jq -c '{
+      containsAuth: (((.credsStore // "") != "") or ((.credHelpers // {}) | length > 0) or ((.auths // {}) | length > 0)),
+      osxkeychain: [.credsStore // empty, (.credHelpers // {})[] | select(test("osxkeychain"))],
+      credentials: [(.auths // {}) | to_entries[] | .key as $k | .value
+        | to_entries[] | select((.key | IN("auth", "identitytoken", "registrytoken", "username", "password")) and .value != "")
+        | "\($k).\(.key)"]
+    }' "${docker_config}/config.json")"
+  fi
+  want='{"containsAuth":true,"osxkeychain":[],"credentials":[]}'
+  if [ "${got}" = "${want}" ]; then
+    pass "docker_vm_no_keychain"
+  else
+    fail "docker_vm_no_keychain" "DOCKER_CONFIG=${docker_config:-<none>} got=${got:-<none>} want=${want}"
+  fi
 fi
 
 echo ""
