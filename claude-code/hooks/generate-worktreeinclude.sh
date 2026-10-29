@@ -3,7 +3,8 @@ set -euo pipefail
 
 # generate-worktreeinclude.sh
 # Pre-hook for "git worktree add": auto-generate .worktreeinclude so that
-# .env files and Claude Code local config are copied into new worktrees.
+# .env files are copied into new worktrees. Claude Code reads
+# .claude/settings.local.json from the main checkout's root, so it is not copied.
 
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "[generate-worktreeinclude] Not inside a git repository, skipping." >&2
@@ -49,11 +50,7 @@ fi
       echo "$pattern"
       echo "**/$pattern"
     done
-    echo ""
   fi
-
-  echo "# Claude Code local config"
-  echo ".claude/settings.local.json"
 } >"$WORKTREEINCLUDE"
 
 echo "[generate-worktreeinclude] Created $WORKTREEINCLUDE with ${#PATTERNS[@]} env pattern(s)." >&2
