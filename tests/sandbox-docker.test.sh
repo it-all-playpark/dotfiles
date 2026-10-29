@@ -157,7 +157,8 @@ fi
 # rules_docker_vm: RULES.md の「使えるもの」に docker-vm の使い方（VM の rootless docker・
 # /private/tmp/claude だけの mount と build context / docker cp・Docker Hub 以外は先に docker-vm pull・
 # VM の外向き通信は許可リスト（allowedDomains と vm-domains.txt）で絞られ、足りないホストはプロキシの
-# 拒否ログで確かめてどちらかに足す）がある
+# 拒否ログで確かめてどちらかに足す）がある。sandbox 内では素の docker が docker-vm に回り（claude-code/bin/docker）、
+# テストやスクリプトには素の docker を書いて DOCKER のような差し替え変数を repo に持ち込まないことも書かれている
 # -----------------------------------------------------------------------------
 echo "- rules_docker_vm"
 rules_line="$(awk '/^使えるもの:/ { f = 1; next } f && /^$/ { exit } f && /^- docker-vm:/' "${REPO_ROOT}/claude-code/RULES.md")"
@@ -165,7 +166,8 @@ missing=()
 # shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
 for want in "rootless docker" '`/private/tmp/claude` だけ' "build context" '`docker cp`' "ghcr.io" '`docker-vm pull`' \
   "外向き通信は許可リスト" '`allowedDomains`' '`vm-domains.txt`' '`~/.local/state/vm-egress-proxy.err.log`' '`denied`' \
-  '`HTTPS_PROXY`'; do
+  '`HTTPS_PROXY`' 'sandbox 内では素の `docker` も docker-vm に回る' 'テストやスクリプトには CI と同じ素の `docker` を書き' \
+  '`DOCKER` のような sandbox 用の差し替え変数を repo に持ち込まない'; do
   case "${rules_line}" in
   *"${want}"*) ;;
   *) missing+=("${want}") ;;

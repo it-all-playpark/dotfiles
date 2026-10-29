@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# docker: sandbox 内の素の docker を sandbox-docker VM（docker-vm）に振り分ける shim
+#
+# sandbox 内からは OrbStack の socket（$HOME/.orbstack/run/docker.sock）が見えない（~/.orbstack は denyRead）。
+# socket が UNIX socket として見えればホスト（ターミナル・host-exec）なので、PATH から shim dir を除いて
+# 解決した実体の docker に引数をそのまま渡して exec する（挙動を変えない）。見えなければ sandbox 内なので、
+# PATH 上の docker-vm に引数をそのまま渡して exec する。VM への接続（DOCKER_CONFIG の proxies / auths・
+# BUILDX_CONFIG）は docker-vm が持ち、ここでは持たない。
+#
+# 繋ぎ先が明示されているときは socket の有無にかかわらず実体に素通しする:
+#   - サブコマンドより前のグローバルオプションに --host / -H / --context / -c がある
+#   - 環境変数 DOCKER_HOST / DOCKER_CONTEXT が空でない（docker CLI も空は未設定と同じに扱う）
+# docker-vm（sandbox-docker.nix）と docker-sb（docker-proxy.nix）は `exec docker --host …` なので、
+# この shim を通っても VM に戻らず再帰しない。
+#
+# repo のテストやスクリプトには素の docker を書けばよい（RULES.md の docker-vm の項）。
+set -euo pipefail
+
+# 1. 繋ぎ先の明示を探す。値を取るグローバルオプションは値を読み飛ばし、最初の非オプション（サブコマンド）か
+#    -- で止める
+explicit=0
+if [ -n "${DOCKER_HOST:-}" ] || [ -n "${DOCKER_CONTEXT:-}" ]; then
+  explicit=1
+fi
+skip_value=0
+for a in "$@"; do
+  if [ "$skip_value" = 1 ]; then
+    skip_value=0
+    continue
+  fi
+  case "$a" in
+  --) break ;;
+  --host | -H | --context | -c | --host=* | -H?* | --context=* | -c?*)
+    explicit=1
+    break
+    ;;
+  --config | -l | --log-level | --tlscacert | --tlscert | --tlskey) skip_value=1 ;;
+  -*) ;;
+  *) break ;;
+  esac
+done
+
+# 2. sandbox 内（OrbStack の socket が見えない）で繋ぎ先の明示が無ければ docker-vm へ
+if [ "$explicit" = 0 ] && [ ! -S "$HOME/.orbstack/run/docker.sock" ]; then
+  if ! command -v docker-vm >/dev/null 2>&1; then
+    echo "docker: docker-vm not found in PATH (OrbStack socket $HOME/.orbstack/run/docker.sock is not visible)" >&2
+    exit 127
+  fi
+  exec docker-vm "$@"
+fi
+
+# 3. PATH から shim dir（$HOME/.claude/bin と自身の物理 dir）を除いて実体を解決
+self="$0"
+if resolved="$(readlink -f "$0" 2>/dev/null)" && [ -n "$resolved" ]; then
+  self="$resolved"
+fi
+self_dir="$(cd "$(dirname "$self")" && pwd -P)"
+shim_dirs=":$HOME/.claude/bin:$self_dir:"
+if home_bin_phys="$(cd "$HOME/.claude/bin" 2>/dev/null && pwd -P)"; then
+  shim_dirs="$shim_dirs$home_bin_phys:"
+fi
+
+lookup_path=""
+p_rest="$PATH:"
+while [ -n "$p_rest" ]; do
+  p="${p_rest%%:*}"
+  p_rest="${p_rest#*:}"
+  [ -z "$p" ] && continue
+  p_phys="$(cd "$p" 2>/dev/null && pwd -P)" || p_phys="$p"
+  case "$shim_dirs" in
+  *":$p:"* | *":$p_phys:"*) continue ;;
+  esac
+  lookup_path="${lookup_path:+$lookup_path:}$p"
+done
+
+real=""
+if [ -n "$lookup_path" ]; then
+  real="$(PATH="$lookup_path" command -v docker 2>/dev/null || true)"
+fi
+if [ -z "$real" ]; then
+  echo "docker: real 'docker' not found in PATH (shim dirs excluded: $HOME/.claude/bin, $self_dir)" >&2
+  exit 127
+fi
+# 4. 解決先が shim 自身（同一 inode）なら再帰しない
+if [ "$real" -ef "$self" ]; then
+  echo "docker: resolved 'docker' is the shim itself ($real); refusing to recurse" >&2
+  exit 127
+fi
+
+exec "$real" "$@"

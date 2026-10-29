@@ -11,18 +11,24 @@ SRC_DIR="$REPO_ROOT/home-manager/home/file/docker-proxy"
 # rules_docker_sb: RULES.md の「使えるもの」に docker-sb の項があり、OrbStack の読み取り
 # （ps / images / inspect / stats --no-stream / logs）に使うこと、書き込み系（run / stop / rm / rmi /
 # prune）は proxy が 403 を返して通らないこと、その場合は docker-vm、ホストのコンテナの停止・削除は
-# 人間に頼むことが書かれている
+# 人間に頼むことが書かれている。素の docker は（claude-code/bin/docker で）VM に向くので OrbStack の状態は
+# docker-sb で読むと書かれ、「素の docker は sandbox に拒否される」とは書かれていない
 # -----------------------------------------------------------------------------
 rules_line="$(awk '/^使えるもの:/ { f = 1; next } f && /^$/ { exit } f && /^- docker-sb:/' "${REPO_ROOT}/claude-code/RULES.md")"
 missing=()
 # shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
 for want in "OrbStack" '`docker-sb ps`' '`images`' '`inspect`' '`stats --no-stream`' '`logs`' \
-  '`run`' '`stop`' '`rm`' '`rmi`' '`prune`' "403" '`docker-vm`' "停止・削除は人間" '`Config.Env` が取り除かれる'; do
+  '`run`' '`stop`' '`rm`' '`rmi`' '`prune`' "403" '`docker-vm`' "停止・削除は人間" '`Config.Env` が取り除かれる' \
+  '素の `docker` は VM に向くので、OrbStack の状態を読むときは'; do
   case "${rules_line}" in
   *"${want}"*) ;;
   *) missing+=("${want}") ;;
   esac
 done
+# shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
+case "${rules_line}" in
+*'素の `docker` は sandbox に拒否される'*) missing+=("<stale: 素の docker は sandbox に拒否される>") ;;
+esac
 if [ -n "${rules_line}" ] && [ "${#missing[@]}" -eq 0 ]; then
   echo "PASS: rules_docker_sb"
 else
