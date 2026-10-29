@@ -165,8 +165,8 @@ fi
 # ---------------------------------------------------------------------------
 echo "- static_homeFile_herdr_wiring"
 home_file_block="$(awk '/"\.config\/herdr" = \{/,/\};/' "${REPO_ROOT}/home-manager/home/default.nix")"
-if echo "${home_file_block}" | grep -Fq 'source = ./file/herdr;' &&
-  echo "${home_file_block}" | grep -Fq 'recursive = true;'; then
+if grep -Fq 'source = ./file/herdr;' <<<"${home_file_block}" &&
+  grep -Fq 'recursive = true;' <<<"${home_file_block}"; then
   pass "static_homeFile_herdr_wiring"
 else
   fail "static_homeFile_herdr_wiring" \
