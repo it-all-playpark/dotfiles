@@ -41,12 +41,14 @@ lib.mkIf pkgs.stdenv.isDarwin {
   # docker cp で渡す（lima.yaml 冒頭参照）。OrbStack 側の読み取り専用は docker-sb（docker-proxy.nix）。
   # buildx は ~/.docker/buildx に状態を書くが sandbox 内からは書けないので、呼び出し側が BUILDX_CONFIG を
   # 決めていなければ sandbox の内外どちらからも書ける /private/tmp/claude 配下に向ける。
-  # VM の外向き通信は vm-egress-proxy だけを通るので、DOCKER_CONFIG（dockerConfig）は常に差し替える
+  # VM の外向き通信は vm-egress-proxy だけを通るので、DOCKER_CONFIG（dockerConfig）は常に差し替える。
+  # BuildKit は手元に無いイメージのトークンを Mac 側の CLI で取りにいき sandbox 内では落ちるので、build のときは
+  # docker-vm.sh が Dockerfile の参照イメージを同じ接続先で先に pull してから、受けた引数のまま docker を exec する
   home.packages = [
     (pkgs.writeShellScriptBin "docker-vm" ''
       export BUILDX_CONFIG="''${BUILDX_CONFIG:-/private/tmp/claude/docker-vm-buildx}"
       export DOCKER_CONFIG="${dockerConfig}"
-      exec docker --host unix://${socket} "$@"
+      exec ${pkgs.bash}/bin/bash ${../home/file/sandbox-docker/docker-vm.sh} --host unix://${socket} "$@"
     '')
   ];
 
