@@ -35,7 +35,10 @@ skip() {
   SKIP=$((SKIP + 1))
 }
 
-TMPROOT="$(mktemp -d "${TMPDIR:-/tmp}/vm-egress-proxy-test.XXXXXX")"
+# TMPROOT は nix の式にパスとして埋め込む。macOS の TMPDIR は末尾が / なので、そのまま繋ぐと
+# `T//vm-egress-proxy-test…` になり、nix のパスとして読めずに構文エラーになる。末尾の / を落とす
+tmpbase="${TMPDIR:-/tmp}"
+TMPROOT="$(mktemp -d "${tmpbase%/}/vm-egress-proxy-test.XXXXXX")"
 trap 'rm -rf "${TMPROOT}"' EXIT
 
 echo "=== vm-egress-proxy tests ==="
