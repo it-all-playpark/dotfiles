@@ -675,6 +675,7 @@
         "proxy.golang.org",
         "sum.golang.org",
         "go.dev",
+        "registry.opentofu.org",
         "storage.googleapis.com",
         "zernio.com",
         "*.amazonaws.com",
