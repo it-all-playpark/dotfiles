@@ -23,6 +23,11 @@
 # `host is not on the allow list` で拒否し、毎回 host-exec の承認が要っていた。
 # どれも OAuth のトークンが要る API なので、完全一致の 3 ホストだけ足し、*.moneyforward.com にはしない。
 # 認可画面（api.biz.moneyforward.com/authorize）はブラウザで開くので sandbox を通らない。
+#
+# OpenTofu の provider の取得: `tofu init` は registry.opentofu.org で provider の版と配布元を引き、
+# sandbox が `host is not on the allow list` で拒否していた（thdexd/shakenkan-dev の infra）。
+# 配布物（zip・SHA256SUMS・署名）は github.com の Releases から取り、実体は *.githubusercontent.com に
+# リダイレクトされる。どちらも許可済みなので、足すのは registry.opentofu.org の完全一致 1 件だけ。
 
 set -euo pipefail
 
@@ -100,6 +105,16 @@ if [ "${#missing[@]}" -eq 0 ]; then
   pass "moneyforward_api_hosts_exact"
 else
   fail "moneyforward_api_hosts_exact" "missing=${missing[*]}"
+fi
+
+# ---------------------------------------------------------------------------
+# opentofu_registry_host_exact: registry.opentofu.org が完全一致のエントリで入っている
+# ---------------------------------------------------------------------------
+echo "- opentofu_registry_host_exact"
+if jq -e '.sandbox.network.allowedDomains | index("registry.opentofu.org") != null' "${SETTINGS}" >/dev/null; then
+  pass "opentofu_registry_host_exact"
+else
+  fail "opentofu_registry_host_exact" "missing=registry.opentofu.org"
 fi
 
 # ---------------------------------------------------------------------------
