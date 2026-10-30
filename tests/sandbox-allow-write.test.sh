@@ -153,19 +153,6 @@ case "${pnpm_home_abs}" in
 esac
 
 # ---------------------------------------------------------------------------
-# npm_cache_writable
-# dev-flow の deps install（npm ci）は sandbox 内で走る（skills #868）。
-# ~/.npm/_cacache に書けないと EPERM で落ちる。~/.npm の他（_npx 等）は開けない。
-# ---------------------------------------------------------------------------
-echo "- npm_cache_writable"
-cache_file="${HOME}/.npm/_cacache/content-v2/sha512/00/ab/abc"
-if write_allowed "${cache_file}" && ! write_allowed "${HOME}/.npm/_npx/abc/package.json"; then
-  pass "npm_cache_writable"
-else
-  fail "npm_cache_writable" "${cache_file} must be writable and ~/.npm/_npx must not be"
-fi
-
-# ---------------------------------------------------------------------------
 # uv_cache_dir_writable
 # issue #317: sandbox 内の uv run は ~/.cache/uv を初期化できず exit 2 で落ちる。
 # env の UV_CACHE_DIR を allowWrite 内の /private/tmp/claude/uv-cache に向ける。
@@ -217,17 +204,52 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# gh_cache_writable
-# issue #352: gh run view --log / --log-failed はログの zip を ~/.cache/gh/run-log-*.zip に
-# キャッシュし、書けないと `creating cache entry: … operation not permitted` で落ちる。
-# ~/.cache/gh から実行されるものは無いので開ける。~/.cache 全体には広げない。
+# xdg_cache_tools_use_sandbox_cache
+# issue #352: gh run view --log / --log-failed はログの zip をキャッシュに書き、書けないと
+# `creating cache entry: … operation not permitted` で落ちる。nix は fetcher cache の SQLite が書けないと
+# nix flake metadata すら落ちる。treefmt（nix fmt・pre-commit）は整形済みの記録を書く。
+# issue #446: ~/.cache/gh・~/.cache/nix（sandbox の外の nix が取得物の記録として使う）・~/Library/Caches/treefmt は
+# sandbox の外の同じツールが読むので開けない。3 つとも env の XDG_CACHE_HOME に従う（macOS の treefmt も先に見る）ので、
+# sandbox 内では XDG_CACHE_HOME の下に書く。
 # ---------------------------------------------------------------------------
-echo "- gh_cache_writable"
-gh_cache_file="${HOME}/.cache/gh/run-log-123456789-1760000000.zip"
-if write_allowed "${gh_cache_file}" && ! write_allowed "${HOME}/.cache/other-tool/x"; then
-  pass "gh_cache_writable"
+echo "- xdg_cache_tools_use_sandbox_cache"
+xdg_rels=(
+  "gh/run-log-123456789-1760000000.zip"
+  "nix/fetcher-cache-v4.sqlite"
+  "treefmt/eval-cache/28b831f74adf51fdd2314e79993964b0c697ef1e15e520a405c934fdc4adf23f.db"
+)
+missed=()
+leaked=()
+for rel in "${xdg_rels[@]}"; do
+  write_allowed "${xdg_cache_home}/${rel}" || missed+=("${xdg_cache_home}/${rel}")
+done
+for p in "${HOME}/.cache/${xdg_rels[0]}" "${HOME}/.cache/${xdg_rels[1]}" "${HOME}/Library/Caches/${xdg_rels[2]}"; do
+  write_allowed "${p}" && leaked+=("${p}")
+done
+if [ "${#missed[@]}" -ne 0 ]; then
+  fail "xdg_cache_tools_use_sandbox_cache" "Not covered by allowWrite: ${missed[*]}"
+elif [ "${#leaked[@]}" -ne 0 ]; then
+  fail "xdg_cache_tools_use_sandbox_cache" "Unexpectedly writable (read by the same tool outside the sandbox): ${leaked[*]}"
 else
-  fail "gh_cache_writable" "${gh_cache_file} must be writable and the rest of ~/.cache must not be"
+  pass "xdg_cache_tools_use_sandbox_cache"
+fi
+
+# ---------------------------------------------------------------------------
+# npm_cache_is_sandbox_only
+# dev-flow の deps install（npm ci）は sandbox 内で走り（skills #868）、キャッシュに書けないと EPERM で落ちる。
+# issue #446: ~/.npm/_cacache は sandbox の外の npm / npx が読む（内容の整合性の記録も同じ場所）ので開けない。
+# env の NPM_CONFIG_CACHE で sandbox 専用の場所（/private/tmp/claude/ 配下。uv・XDG のキャッシュとは別）に向ける。
+# ---------------------------------------------------------------------------
+echo "- npm_cache_is_sandbox_only"
+npm_cache="$(jq -r '.env.NPM_CONFIG_CACHE // ""' "${SETTINGS}")"
+npm_rel="_cacache/content-v2/sha512/00/ab/abc"
+if [[ ${npm_cache} == /private/tmp/claude/?* ]] &&
+  [ "${npm_cache}" != "${uv_cache_dir}" ] && [ "${npm_cache}" != "${xdg_cache_home}" ] &&
+  write_allowed "${npm_cache}/${npm_rel}" &&
+  ! write_allowed "${HOME}/.npm/${npm_rel}" && ! write_allowed "${HOME}/.npm/_npx/abc/package.json"; then
+  pass "npm_cache_is_sandbox_only"
+else
+  fail "npm_cache_is_sandbox_only" "env.NPM_CONFIG_CACHE=${npm_cache:-<unset>} must be a dedicated dir under /private/tmp/claude/ covered by allowWrite, and ~/.npm must not be writable"
 fi
 
 # ---------------------------------------------------------------------------
@@ -307,6 +329,103 @@ if [ -z "${globstar_entries}" ]; then
   pass "no_globstar_suffix_entries"
 else
   fail "no_globstar_suffix_entries" "Entries ending in /** (stripped by Claude Code): ${globstar_entries//$'\n'/ }"
+fi
+
+# ---------------------------------------------------------------------------
+# allow_write_entries_classified
+# issue #446: allowWrite には sandbox の外のプロセスも読む場所を入れない（RULES.md の Sandbox 節）。
+# 各項目は「sandbox 専用の場所」（env で sandbox 内のツールだけをそこへ向ける）の配下にあるか、「例外」に
+# 「sandbox の外のプロセスが読むか」「読んだものを実行しうるか」を書いて載せる。どちらにも無い項目・理由が空の例外は落ちる。
+# 表記は settings.json のまま（~/ を展開しない）比べる。
+# ---------------------------------------------------------------------------
+# shellcheck disable=SC2088 # 意図的: settings.json の表記（~/）のまま比べる
+SANDBOX_ONLY_DIRS=(
+  "/private/tmp/claude"
+  "~/.local/state/pnpm-sandbox"
+  "~/.local/state/codex-sandbox"
+)
+# "<allowWrite の項目>|<sandbox の外のプロセスが読むか>|<読んだものを実行しうるか>"
+# shellcheck disable=SC2088 # 意図的: settings.json の表記（~/）のまま比べる
+ALLOW_WRITE_EXCEPTIONS=(
+  "~/.local/state/nix|読む: profiles/ の profile・home-manager の symlink を、sandbox の外の shell（~/.nix-profile 経由の PATH）・home-manager・nix が読む|実行しうる: symlink の先を外の shell が PATH から実行する（sandbox 内の nix が書くので残す。移す先は未決）"
+  "~/.claude/journal|読む: sandbox の外の journal（excludedCommands）と skill が dev-flow 等の実行記録として読む|実行しない: JSON の記録を集計・表示するだけ"
+  "~/.claude/logs|読む: sandbox の外の hook・health-statusline・sandbox-tune がログとして読む|実行しない: JSON 行を集計するだけ"
+  "~/.claude/memory|読む: sandbox の外の Claude Code が次の session の context に読み込む|実行しない: コードとしては実行しないが、指示として読まれる"
+  "~/.claude/channels|読む: sandbox の外の channel plugin（discord）が設定・状態として読む|実行しない: ファイルを実行はしない"
+  "~/Documents/meetings|読む: sandbox の外の meeting（excludedCommands の play / set-names）と人間が録音・議事録として読む|実行しない: 音声とテキスト"
+  "~/Library/CloudStorage/Box-Box|読む: sandbox の外の Box Drive が読んで同期し、人間が開く|実行しない: 文書の置き場で、Box Drive は中身を実行しない"
+  "/private/tmp/pnpm-store-operation-locks-*|読む: sandbox の外の pnpm が同じ uid の lock を開く|実行しない: 排他に使うだけで中身を読まない"
+  "/private/tmp/pnpm-store-operation-locks-*/*|読む: sandbox の外の pnpm が同じ lock ファイルを開く|実行しない: 排他に使うだけで中身を読まない"
+  "~/ghq/**/.claude/scheduled_tasks.json|読む: sandbox の外の Claude Code が定期タスクの定義として読む|実行しうる: 定義の prompt を Claude Code が次の session で実行する（permission の判定は通る）"
+  "~/ghq/**/.claude/scheduled_tasks.lock|読む: sandbox の外の Claude Code が定期タスクの排他に使う|実行しない: lock で中身を実行しない"
+  "~/.config/gws|読む: sandbox の外の gws（人間のターミナル）が資格情報・設定として読む|実行しない: token と設定で、コマンドを指す項目は無い"
+  "~/.config/gcloud|読む: sandbox の外の gcloud が資格情報・プロパティとして読む|実行しない: ファイルは実行しないが、proxy・CA 等のプロパティで外の gcloud の通信を変えうる"
+  "~/.config/gcloud-*|読む: sandbox の外の account-exec 経由の gcloud が CLOUDSDK_CONFIG として読む|実行しない: ファイルは実行しないが、proxy・CA 等のプロパティで外の gcloud の通信を変えうる"
+  "~/.config/gcloud-*/**/*|読む: sandbox の外の account-exec 経由の gcloud が資格情報・ログとして読む|実行しない: ファイルは実行しないが、proxy・CA 等のプロパティで外の gcloud の通信を変えうる"
+  "~/.config/neon|読む: sandbox の外の neonctl が資格情報として読む|実行しない: token だけ"
+  "~/.config/receipt-video|読む: sandbox の外の receipt-video skill（人間の起動）が Box・会計の token と送信済みの記録として読む|実行しない: token と JSON の記録だけ"
+)
+
+# allow_write_problems <allowWrite JSON> [<例外>...]: sandbox 専用の場所の配下でも例外でもない項目と、理由が空の例外を 1 行ずつ出す
+allow_write_problems() {
+  local entries="$1" entry d ex rest reader runs found
+  shift
+  while IFS= read -r entry; do
+    found=0
+    for d in "${SANDBOX_ONLY_DIRS[@]}"; do
+      if [ "${entry}" = "${d}" ] || [[ ${entry} == "${d}/"* ]]; then
+        found=1
+        break
+      fi
+    done
+    [ "${found}" -eq 1 ] && continue
+    for ex in "$@"; do
+      [ "${ex%%|*}" = "${entry}" ] || continue
+      found=1
+      rest="${ex#*|}"
+      reader="${rest%%|*}"
+      runs="${rest#*|}"
+      if [ "${rest}" = "${ex}" ] || [ "${runs}" = "${rest}" ] || [ -z "${reader}" ] || [ -z "${runs}" ]; then
+        echo "empty reason: ${entry}"
+      fi
+      break
+    done
+    [ "${found}" -eq 1 ] || echo "unclassified: ${entry}"
+  done <<<"$(jq -r '.[]' <<<"${entries}")"
+}
+
+echo "- allow_write_problems_detects_unclassified_and_empty_reason"
+# 検出器の確認: どちらにも無い項目（~/.cache/other）、片方の理由が空の例外、sandbox 専用の場所の隣の名前（/private/tmp/claudex）を拾う
+# shellcheck disable=SC2088 # 意図的: settings.json の表記（~/）のまま渡す
+got="$(allow_write_problems '["/private/tmp/claude/x", "~/.local/state/pnpm-sandbox", "~/.cache/other", "~/.config/a", "~/.config/b", "/private/tmp/claudex"]' \
+  "~/.config/a|読む: x|" "~/.config/b||実行しない: y")"
+want=$'unclassified: ~/.cache/other\nempty reason: ~/.config/a\nempty reason: ~/.config/b\nunclassified: /private/tmp/claudex'
+if [ "${got}" = "${want}" ]; then
+  pass "allow_write_problems_detects_unclassified_and_empty_reason"
+else
+  fail "allow_write_problems_detects_unclassified_and_empty_reason" "got=[${got//$'\n'/; }]"
+fi
+
+echo "- allow_write_entries_classified"
+problems="$(allow_write_problems "${ALLOW_WRITE_JSON}" "${ALLOW_WRITE_EXCEPTIONS[@]}")"
+if [ -z "${problems}" ]; then
+  pass "allow_write_entries_classified"
+else
+  fail "allow_write_entries_classified" "Add to SANDBOX_ONLY_DIRS or ALLOW_WRITE_EXCEPTIONS with both reasons: ${problems//$'\n'/; }"
+fi
+
+# ---------------------------------------------------------------------------
+# allow_write_sandbox_only_rule
+# issue #446: 上の分類の原則を RULES.md の Sandbox 節に残す（settings.json にはコメントを書けない）
+# ---------------------------------------------------------------------------
+echo "- allow_write_sandbox_only_rule"
+sandbox_section="$(awk '/^## Sandbox$/ { in_s = 1; next } /^## / { in_s = 0 } in_s' "${REPO_ROOT}/claude-code/RULES.md")"
+# バッククォートは RULES.md の文字どおりに照合するので展開させない
+# shellcheck disable=SC2016
+if grep -E '^- `allowWrite` には sandbox の外のプロセスも読む場所を入れない。sandbox 内のツールのキャッシュ・store は sandbox 専用の場所に置き、`env` でそこへ向ける' <<<"${sandbox_section}" >/dev/null; then
+  pass "allow_write_sandbox_only_rule"
+else
+  fail "allow_write_sandbox_only_rule" "RULES.md の Sandbox 節に「allowWrite には sandbox の外のプロセスも読む場所を入れない。…env でそこへ向ける」行が無い"
 fi
 
 # ---------------------------------------------------------------------------

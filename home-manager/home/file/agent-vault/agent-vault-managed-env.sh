@@ -99,6 +99,7 @@ if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>
       CLAUDE_GH_VAULT: null,
       AGENT_BROWSER_SOCKET_DIR: null,
       CODEX_HOME: null,
+      NPM_CONFIG_CACHE: null,
       PNPM_HOME: null,
       UV_CACHE_DIR: null,
       XDG_CACHE_HOME: null,

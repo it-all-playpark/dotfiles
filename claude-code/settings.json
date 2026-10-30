@@ -43,6 +43,7 @@
     "DISABLE_AUTOUPDATER": "1",
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NODE_USE_ENV_PROXY": "1",
+    "NPM_CONFIG_CACHE": "/private/tmp/claude/npm-cache",
     "PNPM_HOME": "~/.local/state/pnpm-sandbox",
     "UV_CACHE_DIR": "/private/tmp/claude/uv-cache",
     "WATCHPACK_POLLING": "true",
@@ -567,8 +568,6 @@
     "failIfUnavailable": true,
     "filesystem": {
       "allowWrite": [
-        "~/.cache/nix",
-        "~/.cache/gh",
         "~/.local/state/nix",
         "~/.local/state/codex-sandbox",
         "~/.local/state/pnpm-sandbox",
@@ -578,8 +577,6 @@
         "~/.claude/channels",
         "~/Documents/meetings",
         "~/Library/CloudStorage/Box-Box",
-        "~/Library/Caches/treefmt",
-        "~/.npm/_cacache",
         "/private/tmp/pnpm-store-operation-locks-*",
         "/private/tmp/pnpm-store-operation-locks-*/*",
         "~/ghq/**/.claude/scheduled_tasks.json",

@@ -101,6 +101,7 @@ sandbox に塞がれたら:
 - `XDG_CACHE_HOME` のキャッシュを使うもの（prisma 等）を `excludedCommands` に足すときは、その起動で `XDG_CACHE_HOME` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/xdg-cache` の engine 等を sandbox 外で実行させることになる）
 - uv を使うものを `excludedCommands` に足すときは、その起動で `UV_CACHE_DIR` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/uv-cache` を sandbox 外で読ませることになる）
 - settings.json の `env` で sandbox 内から書ける場所（`allowWrite` の配下）を指す変数は、`HOST_EXEC_ENV`（`claude-code/bin/claude` と `agent-vault-managed-env.sh` の両方）で host-exec の起動から外す（`env` は host-exec の子プロセスにも渡り、sandbox 内で書き換えられたキャッシュ・設定を sandbox の外で使うことになる）
+- `allowWrite` には sandbox の外のプロセスも読む場所を入れない。sandbox 内のツールのキャッシュ・store は sandbox 専用の場所に置き、`env` でそこへ向ける（`XDG_CACHE_HOME`・`NPM_CONFIG_CACHE` 等）。外せない許可は `tests/sandbox-allow-write.test.sh` の例外の一覧に「sandbox の外のプロセスが読むか」「読んだものを実行しうるか」を書いて足す
 - plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る
 - sandbox を広げる変更（`allowMachLookup`・`allowUnixSockets`・`allowedDomains`・`excludedCommands` 等）は、広げた口の悪用を防ぐ手当てまで dotfiles（`nix run .#update`）で完結するものだけにする。手当てに dotfiles の外（システム拡張・GUI での許可・MDM）が要るものは入れず、repo 側か手順で直す。設定が分散すると、片方だけ外れても気付けない
 - sandbox の外が要るコマンドは、人間に `!` やコピペで実行を頼まず host-exec の argv（複数の手順は steps）で実行する（1 回ごとに人間の承認を通る）。人間に頼むのは対話的なログイン（`gws auth` 等）と、RULES が人間の操作と決めたもの（プロセスの kill・ホストの docker の停止・削除・`git config --local`・remote の変更等）だけ。git / gh は sandbox 内でそのまま叩く
@@ -143,6 +144,11 @@ sandbox に塞がれたら:
 - prisma: 2026-10-31（issue #444）sandbox 内の prisma generate が ~/.cache/prisma の engine の utimes で EPERM。置き場を変える口は
   XDG_CACHE_HOME だけなので env で /private/tmp/claude/xdg-cache に向け、engine の取得先 binaries.prisma.sh を allowedDomains に足した。
   ~/.cache/prisma は engine と .sha256 が並び、sandbox 外の prisma が実行するので allowWrite に足さない。
+- 2026-10-31（issue #446）allowWrite から ~/.npm/_cacache・~/.cache/nix・~/.cache/gh・~/Library/Caches/treefmt を外した:
+  どれも sandbox の外の同じツールが読む（npm の整合性の記録も _cacache の中、nix は取得物）。sandbox 内の nix・gh・treefmt は
+  env の XDG_CACHE_HOME に従う（2026-10-31 に /private/tmp/claude/xdg-cache の下に nix/fetcher-cache-v4.sqlite・gh/・treefmt/ が
+  できるのを実測。treefmt は macOS でも XDG_CACHE_HOME を先に見る）。npm は env の NPM_CONFIG_CACHE で /private/tmp/claude/npm-cache に向けた。
+  残りの許可は tests/sandbox-allow-write.test.sh が sandbox 専用の場所か理由つきの例外かに分け、どちらにも無い許可を足すと落ちる。
 - ホーム基点の excludedCommands は `~/` で書く（絶対パスへの展開は agent-vault-managed-env が
   managed-settings.d/60-home-paths.json に書く。`/Users/<name>` の直書きはテストで落ちる）。
 - 2026-10-14 plugin cache の glob（`~/.claude/plugins/cache/playpark/*` の bare / bash / python3 形）を撤去: `*` が `..` に一致し、

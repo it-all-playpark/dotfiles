@@ -156,7 +156,7 @@ ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" 
   HOST_EXEC_ENV: ({HTTPS_PROXY: null, HTTP_PROXY: null, NO_PROXY: null,
     NODE_EXTRA_CA_CERTS: null, SSL_CERT_FILE: null, GIT_SSL_CAINFO: null,
     CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null, CLAUDE_GH_VAULT: null,
-    AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, PNPM_HOME: null, UV_CACHE_DIR: null, XDG_CACHE_HOME: null,
+    AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, NPM_CONFIG_CACHE: null, PNPM_HOME: null, UV_CACHE_DIR: null, XDG_CACHE_HOME: null,
     GIT_CONFIG_KEY_0: "branch.autoSetupMerge", GIT_CONFIG_VALUE_0: "false"} | tojson)}')"
 INACTIVE_ENV='{
   "GIT_CONFIG_COUNT": "2",
