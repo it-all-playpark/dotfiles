@@ -384,6 +384,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# sandbox_writable_env_host_exec_rule_after_uv_rule
+# issue #443: env は host-exec の起動にも渡る。sandbox 内から書ける場所を指す変数を HOST_EXEC_ENV で外す旨を、
+# 上の uv の行の直後に残す（settings.json との突き合わせは tests/agent-vault-managed-env.test.sh）
+# ---------------------------------------------------------------------------
+echo "- sandbox_writable_env_host_exec_rule_after_uv_rule"
+# shellcheck disable=SC2016
+if grep -A1 -E '^- .*uv.*`excludedCommands`.*`UV_CACHE_DIR` を外す' <<<"${sandbox_section}" | tail -n +2 |
+  grep -E '^- settings\.json の `env` で sandbox 内から書ける場所.*`HOST_EXEC_ENV`.*host-exec の起動から外す' >/dev/null; then
+  pass "sandbox_writable_env_host_exec_rule_after_uv_rule"
+else
+  fail "sandbox_writable_env_host_exec_rule_after_uv_rule" "RULES.md の Sandbox 節の uv の行の直後に「settings.json の env で sandbox 内から書ける場所を指す変数は、HOST_EXEC_ENV で host-exec の起動から外す」行が無い"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
