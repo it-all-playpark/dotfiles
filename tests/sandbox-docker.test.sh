@@ -5,7 +5,8 @@
 # Run from anywhere: bash tests/sandbox-docker.test.sh
 # Requires: jq, yq（mikefarah/yq）。nix（daemon に届くときだけ。届かなければ tier-2 を skip）
 #
-# tier-1: lima.yaml の定義と vm-egress-proxy の設定、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）
+# tier-1: lima.yaml の定義と vm-egress-proxy の設定、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）、
+#         docker-vm.sh（build の前の参照イメージの pull。偽の docker で動かす）
 # tier-2: パッチ版 limactl の template copy --fill で展開した mounts / portForwards、
 #         Lima の docker template との手順の突き合わせ、home-manager の評価結果（launchd agent・docker-vm・image）
 #
@@ -155,8 +156,9 @@ fi
 
 # -----------------------------------------------------------------------------
 # rules_docker_vm: RULES.md の「使えるもの」に docker-vm の使い方（VM の rootless docker・
-# /private/tmp/claude だけの mount と build context / docker cp・Docker Hub 以外は先に docker-vm pull・
-# VM の外向き通信は許可リスト（allowedDomains と vm-domains.txt）で絞られ、足りないホストはプロキシの
+# /private/tmp/claude だけの mount と build context / docker cp・BuildKit はレジストリを問わず Mac 側の CLI で
+# トークンを取るので手元に無いイメージは VM 側で pull が要り、build では docker-vm が参照イメージを自動で pull し、
+# compose の build と --pull は手で docker-vm pull する・VM の外向き通信は許可リスト（allowedDomains と vm-domains.txt）で絞られ、足りないホストはプロキシの
 # 拒否ログで確かめてどちらかに足す）がある。sandbox 内では素の docker が docker-vm に回り（claude-code/bin/docker）、
 # テストやスクリプトには素の docker を書いて DOCKER のような差し替え変数を repo に持ち込まないことも書かれている
 # -----------------------------------------------------------------------------
@@ -164,7 +166,10 @@ echo "- rules_docker_vm"
 rules_line="$(awk '/^使えるもの:/ { f = 1; next } f && /^$/ { exit } f && /^- docker-vm:/' "${REPO_ROOT}/claude-code/RULES.md")"
 missing=()
 # shellcheck disable=SC2016 # 意図的: RULES.md のバッククォートを文字列として探す
-for want in "rootless docker" '`/private/tmp/claude` だけ' "build context" '`docker cp`' "ghcr.io" '`docker-vm pull`' \
+for want in "rootless docker" '`/private/tmp/claude` だけ' "build context" '`docker cp`' \
+  "BuildKit はレジストリを問わず Mac 側の docker CLI でトークンを取る" "手元に無いイメージは VM 側で pull しておく必要がある" \
+  '`docker-vm` が Dockerfile の参照イメージ' "VM に無いものを自動で pull する" \
+  'compose の build（`compose build` / `up --build`）と `--pull` は自動では拾えないので、手で `docker-vm pull` しておく' \
   "外向き通信は許可リスト" '`allowedDomains`' '`vm-domains.txt`' '`~/.local/state/vm-egress-proxy.err.log`' '`denied`' \
   '`HTTPS_PROXY`' 'sandbox 内では素の `docker` も docker-vm に回る' 'テストやスクリプトには CI と同じ素の `docker` を書き' \
   '`DOCKER` のような sandbox 用の差し替え変数を repo に持ち込まない'; do
@@ -224,6 +229,249 @@ else
   fail "start_starts_existing_vm" "calls=$(tr '\n' ';' <"${TMPROOT}/calls")"
 fi
 
+# -----------------------------------------------------------------------------
+# docker_vm_*: docker-vm の本体 docker-vm.sh。nix の docker-vm と同じく先頭に --host を付けて走らせる。
+# 偽の docker は受けた引数を 1 行ずつ記録し、image inspect は FAKE_PRESENT にある参照だけ見つかり、
+# pull は FAKE_PULL_FAIL にある参照だけ失敗する
+# -----------------------------------------------------------------------------
+VM_SH="${SRC_DIR}/docker-vm.sh"
+VM_HOST="unix:///vm/docker.sock"
+mkdir -p "${TMPROOT}/vmbin"
+cat >"${TMPROOT}/vmbin/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"${FAKE_LOG}"
+ref="${*: -1}"
+case "$*" in
+*" image inspect -- "*)
+  case " ${FAKE_PRESENT} " in
+  *" ${ref} "*) exit 0 ;;
+  esac
+  exit 1
+  ;;
+*" pull "*)
+  case " ${FAKE_PULL_FAIL} " in
+  *" ${ref} "*) exit 1 ;;
+  esac
+  ;;
+esac
+EOF
+chmod +x "${TMPROOT}/vmbin/docker"
+
+# run_vm <dir> <args...>: <dir> で docker-vm.sh を走らせ、偽の docker の呼び出しを vm-calls に、stderr を vm-err に残す
+run_vm() {
+  local dir="$1"
+  shift
+  : >"${TMPROOT}/vm-calls"
+  (cd "${dir}" && FAKE_LOG="${TMPROOT}/vm-calls" FAKE_PRESENT="${FAKE_PRESENT-}" FAKE_PULL_FAIL="${FAKE_PULL_FAIL-}" \
+    PATH="${TMPROOT}/vmbin:${PATH}" bash "${VM_SH}" --host "${VM_HOST}" "$@") >/dev/null 2>"${TMPROOT}/vm-err"
+}
+
+# vm_calls <ref>...: 参照ごとの inspect と pull（FAKE_PRESENT にあるものは inspect だけ）の呼び出し列。
+# VM_PULL_OPTS（--platform）があるときは inspect せず、FAKE_PRESENT に関わらず常に pull する
+vm_calls() {
+  local ref
+  for ref in "$@"; do
+    if [ -n "${VM_PULL_OPTS-}" ]; then
+      echo "--host ${VM_HOST} pull ${VM_PULL_OPTS} -- ${ref}"
+      continue
+    fi
+    echo "--host ${VM_HOST} image inspect -- ${ref}"
+    case " ${FAKE_PRESENT-} " in
+    *" ${ref} "*) ;;
+    *) echo "--host ${VM_HOST} pull -- ${ref}" ;;
+    esac
+  done
+}
+
+vm_got() {
+  echo "calls=$(tr '\n' ';' <"${TMPROOT}/vm-calls") err=$(tr '\n' ';' <"${TMPROOT}/vm-err")"
+}
+
+# 参照の集め方を確かめる Dockerfile。ステージ名（大文字小文字を問わない）・scratch・ステージ番号は pull しない
+mkdir -p "${TMPROOT}/vm/refs"
+cat >"${TMPROOT}/vm/refs/Dockerfile" <<'EOF'
+# syntax=docker/dockerfile:1.7
+# 先頭のコメント
+FROM --platform=$BUILDPLATFORM golang:1.22 AS build
+RUN --mount=type=cache,target=/root/.cache \
+    --mount=type=bind,from=busybox:1.36,source=/bin,target=/bb true
+FROM build AS test
+COPY --from=alpine:3.18.6 /etc/os-release /
+FROM scratch
+COPY --from=build /out /out
+COPY --from=0 /out /out2
+FROM Test
+from debian:12 as Deb
+COPY --from=deb /etc /etc
+EOF
+refs_all=(docker/dockerfile:1.7 golang:1.22 busybox:1.36 alpine:3.18.6 debian:12)
+
+# AC-1: build / buildx build / image build で、VM に無い参照だけを同じ --host で pull してから、受けた引数のまま build する
+echo "- docker_vm_pulls_missing_refs"
+bad=()
+for sub in "build" "buildx build" "image build"; do
+  read -r -a sub_words <<<"${sub}"
+  FAKE_PRESENT="golang:1.22" run_vm "${TMPROOT}/vm/refs" "${sub_words[@]}" -t x --build-arg A=1 .
+  want="$(FAKE_PRESENT="golang:1.22" vm_calls "${refs_all[@]}")
+--host ${VM_HOST} ${sub} -t x --build-arg A=1 ."
+  if [ "$(cat "${TMPROOT}/vm-calls")" != "${want}" ]; then
+    bad+=("${sub}: $(vm_got)")
+  fi
+done
+if [ "${#bad[@]}" -eq 0 ]; then
+  pass "docker_vm_pulls_missing_refs"
+else
+  fail "docker_vm_pulls_missing_refs" "${bad[*]}"
+fi
+
+# AC-2: 参照がすべて inspect で見つかれば pull を呼ばない
+echo "- docker_vm_no_pull_when_present"
+FAKE_PRESENT="${refs_all[*]}" run_vm "${TMPROOT}/vm/refs" build -t x .
+want="$(FAKE_PRESENT="${refs_all[*]}" vm_calls "${refs_all[@]}")
+--host ${VM_HOST} build -t x ."
+if [ "$(cat "${TMPROOT}/vm-calls")" = "${want}" ] && ! grep -q ' pull ' "${TMPROOT}/vm-calls"; then
+  pass "docker_vm_no_pull_when_present"
+else
+  fail "docker_vm_no_pull_when_present" "$(vm_got)"
+fi
+
+# AC-3: Dockerfile は -f / --file / --file=（相対パスはカレントディレクトリ基準）、無ければ context の Dockerfile。
+# files/ は context（ctx）の中に無いので、context 基準に解決すると読めずに素通しになる
+echo "- docker_vm_dockerfile_location"
+mkdir -p "${TMPROOT}/vm/loc/ctx" "${TMPROOT}/vm/loc/files"
+echo "FROM ctx-image:1" >"${TMPROOT}/vm/loc/ctx/Dockerfile"
+echo "FROM file-image:1" >"${TMPROOT}/vm/loc/files/app.Dockerfile"
+bad=()
+for case_args in "ctx-image:1|build ctx" "file-image:1|build -f files/app.Dockerfile ctx" \
+  "file-image:1|build --file files/app.Dockerfile ctx" "file-image:1|build --file=files/app.Dockerfile ctx"; do
+  read -r -a words <<<"${case_args#*|}"
+  run_vm "${TMPROOT}/vm/loc" "${words[@]}"
+  want="$(vm_calls "${case_args%%|*}")
+--host ${VM_HOST} ${case_args#*|}"
+  if [ "$(cat "${TMPROOT}/vm-calls")" != "${want}" ]; then
+    bad+=("${case_args#*|}: $(vm_got)")
+  fi
+done
+if [ "${#bad[@]}" -eq 0 ]; then
+  pass "docker_vm_dockerfile_location"
+else
+  fail "docker_vm_dockerfile_location" "${bad[*]}"
+fi
+
+# AC-3: --platform（--platform= 形式を含む）は pull にも同じ値を渡す。VM に（別プラットフォーム版が）あって
+# inspect が見つかったと返す参照でも、inspect に頼らず --platform 付きで pull する
+echo "- docker_vm_platform"
+bad=()
+for present in "" "ctx-image:1"; do
+  for case_args in "linux/amd64|--platform linux/amd64" "linux/arm64|--platform=linux/arm64"; do
+    read -r -a words <<<"${case_args#*|}"
+    FAKE_PRESENT="${present}" run_vm "${TMPROOT}/vm/loc" build "${words[@]}" ctx
+    want="$(VM_PULL_OPTS="--platform ${case_args%%|*}" vm_calls ctx-image:1)
+--host ${VM_HOST} build ${case_args#*|} ctx"
+    if [ "$(cat "${TMPROOT}/vm-calls")" != "${want}" ]; then
+      bad+=("present=${present:-none} ${case_args#*|}: $(vm_got)")
+    fi
+  done
+done
+if [ "${#bad[@]}" -eq 0 ]; then
+  pass "docker_vm_platform"
+else
+  fail "docker_vm_platform" "${bad[*]}"
+fi
+
+# AC-3: 最初の FROM より前の ARG の既定値と --build-arg（--build-arg= 形式を含む）で $VAR / ${VAR} を展開する
+echo "- docker_vm_build_args"
+mkdir -p "${TMPROOT}/vm/args"
+cat >"${TMPROOT}/vm/args/Dockerfile" <<'EOF'
+ARG BASE=alpine
+ARG TAG="3.18"
+ARG REG
+ARG FULL=${BASE}:$TAG
+FROM ${BASE}:$TAG
+FROM $REG/tool:1
+FROM ${FULL}-slim
+EOF
+run_vm "${TMPROOT}/vm/args" build --build-arg TAG=3.19 --build-arg=REG=registry.example .
+want="$(vm_calls alpine:3.19 registry.example/tool:1 alpine:3.19-slim)
+--host ${VM_HOST} build --build-arg TAG=3.19 --build-arg=REG=registry.example ."
+got1="$(vm_got)"
+ok=0
+if [ "$(cat "${TMPROOT}/vm-calls")" = "${want}" ]; then
+  run_vm "${TMPROOT}/vm/args" build .
+  want="$(vm_calls alpine:3.18 alpine:3.18-slim)
+--host ${VM_HOST} build ."
+  if [ "$(cat "${TMPROOT}/vm-calls")" = "${want}" ]; then
+    ok=1
+  fi
+fi
+if [ "${ok}" = 1 ]; then
+  pass "docker_vm_build_args"
+else
+  fail "docker_vm_build_args" "with build-arg: ${got1} / defaults: $(vm_got)"
+fi
+
+# AC-4: 展開できない変数を含む参照は pull せず 1 行警告し、pull の失敗も警告して build はそのまま実行する
+echo "- docker_vm_warns_and_continues"
+mkdir -p "${TMPROOT}/vm/warn"
+cat >"${TMPROOT}/vm/warn/Dockerfile" <<'EOF'
+ARG REG
+FROM $REG/tool:1
+FROM ${TAG:-x}/y
+FROM alpine:3.18.6
+ARG LATE=1
+FROM busybox:$LATE
+FROM debian:12
+EOF
+FAKE_PULL_FAIL="alpine:3.18.6" run_vm "${TMPROOT}/vm/warn" build -t x .
+want="$(vm_calls alpine:3.18.6 debian:12)
+--host ${VM_HOST} build -t x ."
+# shellcheck disable=SC2016 # 意図的: Dockerfile の $ を文字列として探す
+if [ "$(cat "${TMPROOT}/vm-calls")" = "${want}" ] &&
+  [ "$(grep -c '^docker-vm: .*\$REG/tool:1$' "${TMPROOT}/vm-err")" = 1 ] &&
+  [ "$(grep -c '^docker-vm: .*\${TAG:-x}/y$' "${TMPROOT}/vm-err")" = 1 ] &&
+  [ "$(grep -c '^docker-vm: .*busybox:\$LATE$' "${TMPROOT}/vm-err")" = 1 ] &&
+  [ "$(grep -c '^docker-vm: .*alpine:3.18.6$' "${TMPROOT}/vm-err")" = 1 ] &&
+  [ "$(wc -l <"${TMPROOT}/vm-err" | tr -d ' ')" = 4 ]; then
+  pass "docker_vm_warns_and_continues"
+else
+  fail "docker_vm_warns_and_continues" "$(vm_got)"
+fi
+
+# AC-5: build 以外・-f -・context が - / URL / git・Dockerfile が無い / 読めないときは inspect も pull も呼ばずに素通しする
+echo "- docker_vm_passthrough"
+mkdir -p "${TMPROOT}/vm/pass/locked"
+echo "FROM alpine:3.18.6" >"${TMPROOT}/vm/pass/Dockerfile"
+echo "FROM alpine:3.18.6" >"${TMPROOT}/vm/pass/locked/Dockerfile"
+chmod 000 "${TMPROOT}/vm/pass/locked/Dockerfile"
+pass_cases=("ps -a" "buildx ls" "image ls" "build -f - ." "build -" "build https://github.com/example/app.git"
+  "build git@github.com:example/app.git" "build github.com/example/app" "build missing" "build -f nothere.Dockerfile .")
+if [ ! -r "${TMPROOT}/vm/pass/locked/Dockerfile" ]; then
+  pass_cases+=("build locked")
+fi
+bad=()
+for c in "${pass_cases[@]}"; do
+  read -r -a words <<<"${c}"
+  run_vm "${TMPROOT}/vm/pass" "${words[@]}"
+  if [ "$(cat "${TMPROOT}/vm-calls")" != "--host ${VM_HOST} ${c}" ]; then
+    bad+=("${c}: $(vm_got)")
+  fi
+done
+if [ "${#bad[@]}" -eq 0 ]; then
+  pass "docker_vm_passthrough"
+else
+  fail "docker_vm_passthrough" "${bad[*]}"
+fi
+
+# AC-5: --pull はそのまま渡し、CLI がトークンを取りにいくので sandbox 内では失敗しうると stderr に出す
+echo "- docker_vm_pull_flag_warns"
+run_vm "${TMPROOT}/vm/pass" build --pull -t x .
+if [ "$(cat "${TMPROOT}/vm-calls")" = "--host ${VM_HOST} build --pull -t x ." ] &&
+  grep -q -- '--pull では Mac 側の docker CLI がレジストリのトークンを取りにいくので、sandbox 内では失敗しうる' "${TMPROOT}/vm-err"; then
+  pass "docker_vm_pull_flag_warns"
+else
+  fail "docker_vm_pull_flag_warns" "$(vm_got)"
+fi
+
 echo ""
 echo "--- tier-2: limactl template copy --fill / home-manager (nix) ---"
 
@@ -234,7 +482,8 @@ else
 fi
 
 tier2=(filled_mounts_only_tmp_claude filled_port_forwards filled_egress_proxy provision_matches_docker_template
-  launchd_agent_uses_patched_limactl image_is_fixed_output docker_vm_in_home_packages docker_vm_keeps_buildx_config)
+  launchd_agent_uses_patched_limactl image_is_fixed_output docker_vm_in_home_packages docker_vm_keeps_buildx_config
+  docker_vm_pulls_via_vm)
 if [ "${system}" != "aarch64-darwin" ]; then
   for t in "${tier2[@]}"; do
     skip "${t}" "nix daemon unreachable or not aarch64-darwin"
@@ -445,8 +694,10 @@ echo "$*"
 echo "DOCKER_CONFIG=${DOCKER_CONFIG-<unset>}"
 EOF
   chmod +x "${TMPROOT}/fakebin/docker"
+  # Dockerfile の無いディレクトリで走らせる（build の前の inspect / pull を挟まない）
+  mkdir -p "${TMPROOT}/empty"
   run_docker_vm() {
-    [ -n "${out}" ] && PATH="${TMPROOT}/fakebin:${PATH}" "$@" "${out}/bin/docker-vm" build -t x . 2>&1
+    [ -n "${out}" ] && (cd "${TMPROOT}/empty" && PATH="${TMPROOT}/fakebin:${PATH}" "$@" "${out}/bin/docker-vm" build -t x . 2>&1)
   }
   got_full="$(run_docker_vm env -u BUILDX_CONFIG || true)"
   got="$(head -n 2 <<<"${got_full}")"
@@ -514,6 +765,37 @@ EOF
     pass "docker_vm_no_keychain"
   else
     fail "docker_vm_no_keychain" "DOCKER_CONFIG=${docker_config:-<none>} got=${got:-<none>} want=${want}"
+  fi
+
+  # ---------------------------------------------------------------------------
+  # docker_vm_pulls_via_vm: home.packages の docker-vm は、build の前の inspect / pull も build と同じ接続先
+  # （VM の docker.sock）と同じ DOCKER_CONFIG で叩く。docker-vm.sh の偽の docker（tier-1）で記録し、
+  # 呼び出しごとの DOCKER_CONFIG を DOCKER_CONFIG_LOG に残す
+  # ---------------------------------------------------------------------------
+  echo "- docker_vm_pulls_via_vm"
+  mkdir -p "${TMPROOT}/vmbin-env"
+  cat >"${TMPROOT}/vmbin-env/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "${DOCKER_CONFIG-<unset>}" >>"${DOCKER_CONFIG_LOG}"
+exec "${FAKE_DOCKER}" "$@"
+EOF
+  chmod +x "${TMPROOT}/vmbin-env/docker"
+  : >"${TMPROOT}/vm-calls"
+  : >"${TMPROOT}/vm-config"
+  if [ -n "${out}" ]; then
+    (cd "${TMPROOT}/vm/pass" && FAKE_LOG="${TMPROOT}/vm-calls" FAKE_PRESENT="" FAKE_PULL_FAIL="" \
+      FAKE_DOCKER="${TMPROOT}/vmbin/docker" DOCKER_CONFIG_LOG="${TMPROOT}/vm-config" \
+      PATH="${TMPROOT}/vmbin-env:${PATH}" "${out}/bin/docker-vm" build -t x . >/dev/null 2>&1) || true
+  fi
+  vm_socket="unix://${home}/.lima/sandbox-docker/sock/docker.sock"
+  want="--host ${vm_socket} image inspect -- alpine:3.18.6
+--host ${vm_socket} pull -- alpine:3.18.6
+--host ${vm_socket} build -t x ."
+  if [ -n "${home}" ] && [ -n "${docker_config}" ] && [ "$(cat "${TMPROOT}/vm-calls")" = "${want}" ] &&
+    [ "$(sort -u "${TMPROOT}/vm-config")" = "${docker_config}" ]; then
+    pass "docker_vm_pulls_via_vm"
+  else
+    fail "docker_vm_pulls_via_vm" "calls=$(tr '\n' ';' <"${TMPROOT}/vm-calls") configs=$(tr '\n' ';' <"${TMPROOT}/vm-config") want_config=${docker_config:-<none>}"
   fi
 fi
 
