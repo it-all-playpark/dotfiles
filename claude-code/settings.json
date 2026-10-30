@@ -43,6 +43,7 @@
     "DISABLE_AUTOUPDATER": "1",
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NODE_USE_ENV_PROXY": "1",
+    "PNPM_HOME": "~/.local/state/pnpm-sandbox",
     "UV_CACHE_DIR": "/private/tmp/claude/uv-cache",
     "WATCHPACK_POLLING": "true",
     "XDG_CACHE_HOME": "/private/tmp/claude/xdg-cache"
@@ -570,6 +571,7 @@
         "~/.cache/gh",
         "~/.local/state/nix",
         "~/.local/state/codex-sandbox",
+        "~/.local/state/pnpm-sandbox",
         "~/.claude/journal",
         "~/.claude/logs",
         "~/.claude/memory",
@@ -577,7 +579,6 @@
         "~/Documents/meetings",
         "~/Library/CloudStorage/Box-Box",
         "~/Library/Caches/treefmt",
-        "~/Library/pnpm",
         "~/.npm/_cacache",
         "/private/tmp/pnpm-store-operation-locks-*",
         "/private/tmp/pnpm-store-operation-locks-*/*",
