@@ -156,6 +156,7 @@ ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" 
   HOST_EXEC_ENV: ({HTTPS_PROXY: null, HTTP_PROXY: null, NO_PROXY: null,
     NODE_EXTRA_CA_CERTS: null, SSL_CERT_FILE: null, GIT_SSL_CAINFO: null,
     CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null, CLAUDE_GH_VAULT: null,
+    AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, UV_CACHE_DIR: null,
     GIT_CONFIG_KEY_0: "branch.autoSetupMerge", GIT_CONFIG_VALUE_0: "false"} | tojson)}')"
 INACTIVE_ENV='{
   "GIT_CONFIG_COUNT": "2",
@@ -203,6 +204,67 @@ if [ "${RC}" -eq 0 ] &&
   pass "vault_name_override"
 else
   fail "vault_name_override" "rc=${RC} out=$(cat "${out}" 2>/dev/null || echo '<missing>') err=${ERR}"
+fi
+
+echo ""
+echo "--- host-exec から外す env（settings.json の env で sandbox 内から書ける場所を指すもの） ---"
+
+# sandbox_writable_env <settings.json>: env のうち、値が sandbox.filesystem.allowWrite のいずれか（またはその配下）を
+# 指す変数名を JSON 配列（sort 済み）で出す。allowWrite の ** は任意の階層、* は 1 階層内の任意の文字列。
+# ~/ は展開せずに env と allowWrite の両方の表記のまま比べる
+sandbox_writable_env() {
+  # shellcheck disable=SC2016 # 意図的: jq の式（$v / $pat / $pats は jq の変数）
+  jq -c '.sandbox.filesystem.allowWrite as $pats
+    | [.env | to_entries[] | select((.value | type) == "string") | .value as $v
+      | select(any($pats[]; . as $pat | $v | test("^" + ($pat
+          | gsub("(?<c>[.+?^${}()|\\[\\]\\\\])"; "\\\(.c)")
+          | gsub("\\*\\*"; "\u0001") | gsub("\\*"; "[^/]*") | gsub("\u0001"; ".*")) + "(/.*)?$")))
+      | .key] | sort' "$1"
+}
+
+# not_nulled <names JSON> <HOST_EXEC_ENV JSON>: names のうち HOST_EXEC_ENV で null（取り除く）になっていないもの
+not_nulled() {
+  # shellcheck disable=SC2016 # 意図的: jq の式（$names / $spec / $s / $k は jq の変数）
+  jq -nc --argjson names "$1" --arg spec "$2" \
+    '($spec | fromjson) as $s | [$names[] as $k | select(($s | has($k) | not) or $s[$k] != null) | $k]'
+}
+
+# ---------------------------------------------------------------------------
+# sandbox_writable_env_is_enumerated: 列挙が allowWrite の配下・glob・~/ を拾い、隣の名前（/private/tmp/claudex）・
+# パスでない値・文字列でない値は拾わない
+# ---------------------------------------------------------------------------
+echo "- sandbox_writable_env_is_enumerated"
+cat >"${TMPROOT}/writable-settings.json" <<'EOF'
+{"env": {"UNDER_TMP": "/private/tmp/claude/x", "TMP_ROOT": "/private/tmp/claude", "UNDER_HOME": "~/.cache/gh/y",
+  "UNDER_GLOB": "~/.config/gcloud-a/b", "SIBLING": "/private/tmp/claudex", "OUTSIDE": "~/.cache/other",
+  "PLAIN": "1", "URL": "direct://", "NUM": 1},
+ "sandbox": {"filesystem": {"allowWrite": ["/private/tmp/claude", "~/.cache/gh", "~/.config/gcloud-*"]}}}
+EOF
+got="$(sandbox_writable_env "${TMPROOT}/writable-settings.json" 2>&1 || true)"
+if [ "${got}" = '["TMP_ROOT","UNDER_GLOB","UNDER_HOME","UNDER_TMP"]' ]; then
+  pass "sandbox_writable_env_is_enumerated"
+else
+  fail "sandbox_writable_env_is_enumerated" "got=${got}"
+fi
+
+# ---------------------------------------------------------------------------
+# host_exec_env_drops_sandbox_writable_env: repo の settings.json の env のうち sandbox 内から書ける場所を指す変数は、
+# wrapper（claude-code/bin/claude）と drop-in の両方の HOST_EXEC_ENV で null（host-exec の起動から外す）。
+# host-exec は sandbox の外で動くので、残すと sandbox 内のプロセスが書き換えたキャッシュ・設定を sandbox の外で使う
+# ---------------------------------------------------------------------------
+echo "- host_exec_env_drops_sandbox_writable_env"
+writable="$(sandbox_writable_env "${REPO_ROOT}/claude-code/settings.json")"
+out="${TMPROOT}/host-exec-env/managed-settings.d/50-agent-vault.json"
+run_script "${out}"
+dropin_spec="$(jq -r '.env.HOST_EXEC_ENV // empty' "${out}" 2>/dev/null || true)"
+wrapper_spec="$(wrapper_env | sed -n 's/^HOST_EXEC_ENV=//p')"
+if [ "${RC}" -eq 0 ] && [ "${writable}" != "[]" ] && [ -n "${dropin_spec}" ] && [ -n "${wrapper_spec}" ] &&
+  [ "$(not_nulled "${writable}" "${dropin_spec}")" = "[]" ] &&
+  [ "$(not_nulled "${writable}" "${wrapper_spec}")" = "[]" ]; then
+  pass "host_exec_env_drops_sandbox_writable_env"
+else
+  fail "host_exec_env_drops_sandbox_writable_env" \
+    "rc=${RC} writable=${writable} drop-in HOST_EXEC_ENV=${dropin_spec} wrapper HOST_EXEC_ENV=${wrapper_spec} err=${ERR}"
 fi
 
 echo ""
