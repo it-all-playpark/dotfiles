@@ -188,6 +188,12 @@ sandbox に塞がれたら:
 - 2026-10-14 dotfiles の .githooks を Claude でも動かす（#307）: #249 以降 git は sandbox 内なので、shim は CLAUDECODE=1 でも
   .git/hooks に probe を書けなければ（= sandbox 内）hook を実行し、書ければ（= excludedCommands 経由の sandbox 外）何もしない。
   あわせて uid 501 の sandbox TMPDIR に socket 専用の /private/tmp/claude-501/sock を allowUnixSockets に足した（pg-broker のテスト用）。
+- 2026-10-30（issue #441）uid 1387796573 の $TMPDIR/sock（/private/tmp/claude-1387796573/sock）を allowUnixSockets に足した:
+  uid 501 の entry しか無く、このユーザーの sandbox では docker.test.sh・docker-proxy / vm-egress-proxy のテストが
+  $TMPDIR/sock の下の bind で EPERM になり、pre-push が落ちていた。allowUnixSockets は glob を受け付けず
+  （/private/tmp/claude-*/sock では bind が失敗）、完全なパスかディレクトリの配下でだけ効く（2026-10-30 に実測。
+  /private/tmp と /tmp のどちらの表記でも通る）。$TMPDIR 全体は sandbox 外の Claude Code 本体も使うので socket 専用の sock だけを開ける。
+  ユーザーや uid が増えたら同じ形（/private/tmp/claude-<uid>/sock）の entry を足す。
 - dangerouslyDisableSandbox は policy で無効。
 - 2026-10-08 git / gh を excludedCommands から撤去（issue #249）: agent-vault（dotfiles#248）で sandbox 内のまま GitHub に
   認証できるようになったため。起動形（cd X && / VAR=x 前置 / リダイレクト / git -C）で一致が外れて EPERM になる問題と、
