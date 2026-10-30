@@ -90,7 +90,7 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 - docker-sb: OrbStack（ホストの docker）の状態を読む読み取り専用の docker。素の `docker` は VM に向くので、OrbStack の状態を読むときは host-exec や人間に回さず `docker-sb` を使う。`docker-sb ps` / `images` / `inspect` / `stats --no-stream` / `logs` / `top` / `info` / `system df` が sandbox 内で動く（docker-proxy が読み取りの GET だけを OrbStack に中継する）。`logs -f` と `--no-stream` なしの `stats` は通らず、inspect の応答からは `Config.Env` が取り除かれる。書き込み系（`run` / `stop` / `rm` / `rmi` / `prune` / `build` / `exec` 等）は proxy が 403 を返すので docker-sb では通らない。コンテナを動かす作業は `docker-vm` で行い、ホスト（OrbStack）のコンテナの停止・削除は人間に頼む
 - Postgres: sandbox 内で `initdb` は使わず、`pg-broker` に頼む。sandbox-docker VM（`docker-vm`）に digest 固定の postgres コンテナを起動する。`pg-broker create` が返す `database_url`（`127.0.0.1:5500〜5599`。`app` は superuser だが動くのは VM の中だけ、TTL 90 分・同時 4 つまで）に繋ぎ、終わったら `pg-broker delete <id>`
 - プロセス調査: 絶対パスで単独に叩くと sandbox 外で動く（`/usr/bin/top` `/usr/bin/pgrep` `/usr/sbin/lsof`）。`ps` は使わない（環境変数を出せるので hook が deny する）。一覧・CPU・メモリは `/usr/bin/top -l 1 -o mem -n 15 -stats pid,ppid,command,cpu,mem,time`、引数まで含むコマンドラインは `/usr/bin/pgrep -lf <pattern>`。見るだけで、止めるのは人間（PID を特定して `! kill <PID>` を示す）。bare 名・`| head` などのパイプ・リダイレクトを付けると sandbox 内に戻って EPERM になるので、件数は引数で絞る。メモリ総量は sandbox 内でも `memory_pressure -Q` / `vm_stat` で見える
-- pnpm と dev サーバー（localhost listen）は sandbox 内で動く。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / docker socket はホスト権限相当）
+- pnpm と dev サーバー（localhost listen）は sandbox 内で動く。sandbox 内の pnpm は settings.json の `env` の `PNPM_HOME`（`~/.local/state/pnpm-sandbox`）で sandbox 専用の store と `packageManager` の版の pnpm 本体を使い、sandbox の外の pnpm が使う `~/Library/pnpm` には書けない。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / `PNPM_HOME` が渡り、sandbox 内から差し替えられる pnpm 本体と store を sandbox の外で使う / docker socket はホスト権限相当）
 - gcloud（account-exec のアカウント別 `CLOUDSDK_CONFIG` を含む）は sandbox 内で動く。host-exec に回さず最初から Bash で叩き、sandbox の拒否で落ちたときだけ host-exec に回す。`Reauthentication failed` は sandbox ではなく認証切れなので、host-exec でも直らない（人間に `gcloud auth login` を頼む）
 - Postgres を使う E2E（Playwright 等）も sandbox 内で回す。人間や CI に回さない。DB は自分で docker compose や initdb で立てず、`pg-broker create` の `database_url` を、その repo が外部 DB を受け取る口（環境変数等。repo のテスト手順書で確かめる）に渡す。終わったら `pg-broker delete <id>`
 - 依存の install が postinstall / prepare の書き込みで EPERM になったら（`.husky` 等の denyWrite・`~/.cache/<tool>` 等の書けない場所）、その tool の無効化用の環境変数（husky は `HUSKY=0`）を付けるか、キャッシュを `XDG_CACHE_HOME="$TMPDIR/<一意名>"` に向けて入れ直す
@@ -126,6 +126,11 @@ sandbox に塞がれたら:
   一致せず、`-*` だけだと既存の all-stores.lock を開き直す 2 回目以降が落ちる。`-*/**` は末尾 `/**` が剥がされて `-*` と同じ。
   エラー文は相対名 "pnpm-store-operation-locks" しか出さず ERR_PNPM_STORE_DIR_OPEN_OPERATION_LOCK になる。
   /tmp 全体は hook が読む claude-skill-ctx-* や bridge のソケットと共有する領域なので開けない。
+  2026-10-31（issue #445）allowWrite の `~/Library/pnpm` を外し、env の PNPM_HOME を ~/.local/state/pnpm-sandbox に向けた:
+  ~/Library/pnpm/package-manager-store/v11/links/@pnpm/exe.darwin-arm64/<版>/…/pnpm（packageManager の版の pnpm 本体）を
+  sandbox の外の pnpm が実行し、store の中身も sandbox の外の install が使う（verifyStoreIntegrity: false の repo もある）のに、
+  sandbox 内から作成・削除できた。pnpm 12 は store（<PNPM_HOME>/store）と pnpm 本体（<PNPM_HOME>/package-manager-store）の
+  両方を PNPM_HOME から決める（実測）。値の ~/ は agent-vault-managed-env が 60-home-paths.json で展開する。
 - dev サーバー: 2026-09-25 `network.allowLocalBinding: true`。外向き通信の制限は変わらない。
 - neonctl: 2026-09-29 console.neon.tech / oauth2.neon.tech と ~/.config/neon を許可（API とトークン更新の書き戻し分だけ）。
   track.neon.tech は未許可なので --no-analytics がないと closeAndFlush が拒否された送信を待つ。

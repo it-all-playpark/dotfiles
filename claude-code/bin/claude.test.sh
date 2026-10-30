@@ -351,7 +351,7 @@ run_wrapper
 host_exec_env="$(printf '%s\n' "$OUT" | sed -n 's/^HOST_EXEC_ENV=//p')"
 shape="$("$PY" -I "$TMPROOT/host-exec-env-shape.py" "$host_exec_env" 2>&1 || true)"
 if [[ $RC -eq 0 ]] &&
-  [[ $shape == $'nulls=AGENT_BROWSER_SOCKET_DIR,CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,CODEX_HOME,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,SSL_CERT_FILE,UV_CACHE_DIR\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
+  [[ $shape == $'nulls=AGENT_BROWSER_SOCKET_DIR,CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,CODEX_HOME,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,PNPM_HOME,SSL_CERT_FILE,UV_CACHE_DIR\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
   ! contains "$host_exec_env" "tok_123"; then
   pass "11_vault_session_exports_host_exec_env_without_token"
 else

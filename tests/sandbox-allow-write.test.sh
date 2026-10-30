@@ -116,15 +116,41 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# pnpm_store_dir_writable
+# pnpm_home_is_sandbox_only
+# issue #445: ~/Library/pnpm は sandbox の外の pnpm の store と、packageManager の版の pnpm 本体
+# （package-manager-store/v11/links/@pnpm/exe.<platform>/<版>/…/pnpm）の置き場で、sandbox の外で実行される。
+# sandbox 内の pnpm は env の PNPM_HOME で sandbox 専用のディレクトリを使う（store は <PNPM_HOME>/store、
+# pnpm 本体は <PNPM_HOME>/package-manager-store に置かれる）。そこは allowWrite の配下で、
+# 再起動で消えない場所（/private/tmp の外）に置く。~/Library/pnpm は sandbox 内から書けない。
 # ---------------------------------------------------------------------------
-echo "- pnpm_store_dir_writable"
-store_file="${HOME}/Library/pnpm/store/v10/index/00/abc-index.json"
-if write_allowed "${store_file}"; then
-  pass "pnpm_store_dir_writable"
-else
-  fail "pnpm_store_dir_writable" "${store_file} is not covered by allowWrite"
-fi
+echo "- pnpm_home_is_sandbox_only"
+pnpm_home="$(jq -r '.env.PNPM_HOME // ""' "${SETTINGS}")"
+pnpm_home_abs="${pnpm_home/#\~\//${HOME}/}"
+pnpm_exe_rel="package-manager-store/v11/links/@pnpm/exe.darwin-arm64/12.15.0/f5b438855135/pnpm"
+pnpm_store_rel="store/v11/files/00/abc"
+missed=()
+for p in "${pnpm_home_abs}/${pnpm_store_rel}" "${pnpm_home_abs}/${pnpm_exe_rel}"; do
+  write_allowed "${p}" || missed+=("${p}")
+done
+leaked=()
+for p in "${HOME}/Library/pnpm/${pnpm_store_rel}" "${HOME}/Library/pnpm/${pnpm_exe_rel}" \
+  "${HOME}/Library/pnpm/.tools/pnpm/10.0.0/bin/pnpm"; do
+  write_allowed "${p}" && leaked+=("${p}")
+done
+case "${pnpm_home_abs}" in
+"" | /tmp | /tmp/* | /private/tmp | /private/tmp/* | "${HOME}/Library/pnpm" | "${HOME}/Library/pnpm/"*)
+  fail "pnpm_home_is_sandbox_only" "env.PNPM_HOME=${pnpm_home:-<unset>} must be a persistent sandbox-only dir (not under /private/tmp or ~/Library/pnpm)"
+  ;;
+*)
+  if [ "${#missed[@]}" -ne 0 ]; then
+    fail "pnpm_home_is_sandbox_only" "Not covered by allowWrite: ${missed[*]}"
+  elif [ "${#leaked[@]}" -ne 0 ]; then
+    fail "pnpm_home_is_sandbox_only" "Unexpectedly writable (used by pnpm outside the sandbox): ${leaked[*]}"
+  else
+    pass "pnpm_home_is_sandbox_only"
+  fi
+  ;;
+esac
 
 # ---------------------------------------------------------------------------
 # npm_cache_writable
