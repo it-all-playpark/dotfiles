@@ -45,7 +45,8 @@
 #                              settings.json の env のうち sandbox 内から書ける場所（allowWrite の配下）を指すもの
 #                              （AGENT_BROWSER_SOCKET_DIR / CODEX_HOME / NPM_CONFIG_CACHE / PNPM_HOME / UV_CACHE_DIR / XDG_CACHE_HOME）も外す。sandbox 内のプロセスが
 #                              書き換えたキャッシュ・設定を sandbox の外で使わせない
-#                              （tests/agent-vault-managed-env.test.sh が settings.json から列挙して突き合わせる）
+#                              （tests/agent-vault-managed-env.test.sh が settings.json から列挙して突き合わせる）。
+#                              この 6 つは agent-vault を使わないときも外す（HOST_EXEC_ENV が既にあるときは触らない）
 #
 # 付ける env（常に）:
 #   GIT_CONFIG_KEY_n=branch.autoSetupMerge / GIT_CONFIG_VALUE_n=false
@@ -88,6 +89,8 @@ token_file="${AGENT_VAULT_PROXY_TOKEN_FILE:-$HOME/.agent-vault/proxy-token}"
 ca_bundle="${AGENT_VAULT_CA_BUNDLE:-$HOME/.local/state/agent-vault/ca-bundle.pem}"
 port="${AGENT_VAULT_PROXY_PORT:-14322}"
 vault="${AGENT_VAULT_VAULT:-default}"
+# HOST_EXEC_ENV で常に外す、settings.json の env のうち sandbox 内から書ける場所を指すもの
+sandbox_env_nulls='"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null'
 
 # git -c 相当の設定を env で足す（既にある GIT_CONFIG_COUNT の後ろに積む）
 git_config_add() {
@@ -114,10 +117,17 @@ if [ -z "${HTTPS_PROXY:-}" ] && [ -r "$token_file" ]; then
     export CLAUDE_GH_VAULT=1
     n="${GIT_CONFIG_COUNT:-0}"
     git_config_add credential.https://github.com.helper ""
-    export HOST_EXEC_ENV='{"HTTPS_PROXY":null,"HTTP_PROXY":null,"NO_PROXY":null,"NODE_EXTRA_CA_CERTS":null,"SSL_CERT_FILE":null,"GIT_SSL_CAINFO":null,"CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE":null,"CLAUDE_GH_VAULT":null,"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null,"GIT_CONFIG_KEY_'"$n"'":"branch.autoSetupMerge","GIT_CONFIG_VALUE_'"$n"'":"false"}'
+    export HOST_EXEC_ENV='{"HTTPS_PROXY":null,"HTTP_PROXY":null,"NO_PROXY":null,"NODE_EXTRA_CA_CERTS":null,"SSL_CERT_FILE":null,"GIT_SSL_CAINFO":null,"CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE":null,"CLAUDE_GH_VAULT":null,'"$sandbox_env_nulls"',"GIT_CONFIG_KEY_'"$n"'":"branch.autoSetupMerge","GIT_CONFIG_VALUE_'"$n"'":"false"}'
   fi
   unset token proxy no_vault n
 fi
+
+# agent-vault を使わない起動でも、settings.json の env のうち sandbox 内から書ける場所を指すものは host-exec から外す
+# （上の header 参照）。sandbox 内から呼んだ claude は親が付けた HOST_EXEC_ENV をそのまま引き継ぐ
+if [ -z "${HOST_EXEC_ENV+x}" ]; then
+  export HOST_EXEC_ENV="{$sandbox_env_nulls}"
+fi
+unset sandbox_env_nulls
 
 # 起動元 repo の .git/config は sandbox が書かせない（下の header 参照）ので、upstream を書きに行かせない
 git_config_add branch.autoSetupMerge false
