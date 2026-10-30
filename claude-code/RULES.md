@@ -93,11 +93,12 @@ worktree 隔離中（bg job・dev-flow の `df-*`）は、組み込みガード�
 - pnpm と dev サーバー（localhost listen）は sandbox 内で動く。sandbox 内の pnpm は settings.json の `env` の `PNPM_HOME`（`~/.local/state/pnpm-sandbox`）で sandbox 専用の store と `packageManager` の版の pnpm 本体を使い、sandbox の外の pnpm が使う `~/Library/pnpm` には書けない。pnpm や docker を `excludedCommands` で sandbox 外に出さない（postinstall が `~/.ssh` や gh の資格情報を読める / `PNPM_HOME` が渡り、sandbox 内から差し替えられる pnpm 本体と store を sandbox の外で使う / docker socket はホスト権限相当）
 - gcloud（account-exec のアカウント別 `CLOUDSDK_CONFIG` を含む）は sandbox 内で動く。host-exec に回さず最初から Bash で叩き、sandbox の拒否で落ちたときだけ host-exec に回す。`Reauthentication failed` は sandbox ではなく認証切れなので、host-exec でも直らない（人間に `gcloud auth login` を頼む）
 - Postgres を使う E2E（Playwright 等）も sandbox 内で回す。人間や CI に回さない。DB は自分で docker compose や initdb で立てず、`pg-broker create` の `database_url` を、その repo が外部 DB を受け取る口（環境変数等。repo のテスト手順書で確かめる）に渡す。終わったら `pg-broker delete <id>`
-- 依存の install が postinstall / prepare の書き込みで EPERM になったら（`.husky` 等の denyWrite・`~/.cache/<tool>` 等の書けない場所）、その tool の無効化用の環境変数（husky は `HUSKY=0`）を付けるか、キャッシュを `XDG_CACHE_HOME="$TMPDIR/<一意名>"` に向けて入れ直す
+- 依存の install が postinstall / prepare の書き込みで EPERM になったら（`.husky` 等の denyWrite・`~/.cache/<tool>` 等の書けない場所）、その tool の無効化用の環境変数（husky は `HUSKY=0`）を付ける。`XDG_CACHE_HOME` に従うキャッシュ（`~/.cache/<tool>`。prisma の engine 等）は settings.json の `env` の `XDG_CACHE_HOME` が sandbox 専用の書ける場所に向けているので、手で向け直さずそのまま入れ直す
 
 sandbox に塞がれたら:
 - その場で回避せず、原因を特定して settings.json を直す。「編集できない」「手で足してください」とは返さない。dotfiles に worktree を切れば `claude-code/settings.json` は Edit ツールで編集できる（`denyWithinAllow` は Bash にしか効かない）。commit message と PR 本文まで用意し、許可を広げる変更は差分と理由を PR 本文に書いて merge 判断で確認を取る
 - `excludedCommands` に足してよいのは、sandbox 内から書けない場所にある実体だけ（mise / nix / plugin の `bin/` の CLI）。書ける場所（repo の作業ツリー・worktree・`$TMPDIR`）のスクリプトや、任意のファイルを実行するランナー（`bats`、`bash <相対パス>`）を足すと、書き換えて sandbox 外で実行できる脱出口になる。そうしないと動かない作業は、sandbox 内で動くように作業場所か手順を変える
+- `XDG_CACHE_HOME` のキャッシュを使うもの（prisma 等）を `excludedCommands` に足すときは、その起動で `XDG_CACHE_HOME` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/xdg-cache` の engine 等を sandbox 外で実行させることになる）
 - uv を使うものを `excludedCommands` に足すときは、その起動で `UV_CACHE_DIR` を外す（settings.json の `env` は sandbox 外の起動にも渡り、sandbox 内から書けるキャッシュ `/private/tmp/claude/uv-cache` を sandbox 外で読ませることになる）
 - settings.json の `env` で sandbox 内から書ける場所（`allowWrite` の配下）を指す変数は、`HOST_EXEC_ENV`（`claude-code/bin/claude` と `agent-vault-managed-env.sh` の両方）で host-exec の起動から外す（`env` は host-exec の子プロセスにも渡り、sandbox 内で書き換えられたキャッシュ・設定を sandbox の外で使うことになる）
 - plugin のスクリプトは bare 名（plugin の `bin/` 経由）か絶対パスの 1 本だけで足す。`<dir>/*` のようなパスの glob は `*` が `..` にも一致し、`<dir>/../../<書ける場所>/x.sh` で任意のスクリプトが sandbox 外で走る
@@ -139,6 +140,9 @@ sandbox に塞がれたら:
 - uv: 2026-10-15（issue #317）sandbox 内の uv run は ~/.cache/uv を初期化できず exit 2。env の UV_CACHE_DIR を /private/tmp/claude/uv-cache に
   向けた。~/.cache/uv を allowWrite に足すと sandbox 外の uv が使うキャッシュを sandbox 内から書き換えられるので足さない。
   /private/tmp/claude は Claude Code の組み込みで書けるが、settings.json の allowWrite にも明示した（組み込みが変わっても cache が書ける）。
+- prisma: 2026-10-31（issue #444）sandbox 内の prisma generate が ~/.cache/prisma の engine の utimes で EPERM。置き場を変える口は
+  XDG_CACHE_HOME だけなので env で /private/tmp/claude/xdg-cache に向け、engine の取得先 binaries.prisma.sh を allowedDomains に足した。
+  ~/.cache/prisma は engine と .sha256 が並び、sandbox 外の prisma が実行するので allowWrite に足さない。
 - ホーム基点の excludedCommands は `~/` で書く（絶対パスへの展開は agent-vault-managed-env が
   managed-settings.d/60-home-paths.json に書く。`/Users/<name>` の直書きはテストで落ちる）。
 - 2026-10-14 plugin cache の glob（`~/.claude/plugins/cache/playpark/*` の bare / bash / python3 形）を撤去: `*` が `..` に一致し、

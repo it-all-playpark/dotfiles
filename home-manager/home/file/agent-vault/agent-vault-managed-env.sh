@@ -101,6 +101,7 @@ if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>
       CODEX_HOME: null,
       PNPM_HOME: null,
       UV_CACHE_DIR: null,
+      XDG_CACHE_HOME: null,
       GIT_CONFIG_KEY_0: "branch.autoSetupMerge",
       GIT_CONFIG_VALUE_0: "false"
     } | tojson)

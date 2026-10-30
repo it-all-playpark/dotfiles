@@ -183,6 +183,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# xdg_cache_home_writable
+# issue #444: prisma は engine のキャッシュ（~/.cache/prisma）の utimes が EPERM だと例外で落ちる。
+# キャッシュ置き場を変える口は XDG_CACHE_HOME だけなので、env の XDG_CACHE_HOME を
+# allowWrite 内の sandbox 専用ディレクトリ（/private/tmp/claude/ 配下。uv のキャッシュとは別）に向ける。
+# ---------------------------------------------------------------------------
+echo "- xdg_cache_home_writable"
+xdg_cache_home="$(jq -r '.env.XDG_CACHE_HOME // ""' "${SETTINGS}")"
+engine="prisma/master/0123456789abcdef/darwin-arm64/schema-engine"
+if [[ ${xdg_cache_home} == /private/tmp/claude/?* ]] &&
+  [ "${xdg_cache_home}" != "${uv_cache_dir}" ] &&
+  write_allowed "${xdg_cache_home}/${engine}"; then
+  pass "xdg_cache_home_writable"
+else
+  fail "xdg_cache_home_writable" "env.XDG_CACHE_HOME=${xdg_cache_home:-<unset>} must be a dedicated dir under /private/tmp/claude/ covered by allowWrite"
+fi
+
+# ---------------------------------------------------------------------------
+# prisma_user_cache_not_writable
+# issue #444: ~/.cache/prisma には engine と検証用の .sha256 が並ぶ。sandbox 内から両方を差し替えると、
+# sandbox 外の prisma（ターミナル・host-exec の pre-push）がそれを実行するので、~/.cache/prisma も
+# 親の ~/.cache も開けない。
+# ---------------------------------------------------------------------------
+echo "- prisma_user_cache_not_writable"
+leaked=()
+for p in "${HOME}/.cache" "${HOME}/.cache/prisma" "${HOME}/.cache/${engine}" "${HOME}/.cache/${engine}.sha256"; do
+  write_allowed "${p}" && leaked+=("${p}")
+done
+if [ "${#leaked[@]}" -eq 0 ]; then
+  pass "prisma_user_cache_not_writable"
+else
+  fail "prisma_user_cache_not_writable" "Unexpectedly writable: ${leaked[*]}"
+fi
+
+# ---------------------------------------------------------------------------
 # gh_cache_writable
 # issue #352: gh run view --log / --log-failed はログの zip を ~/.cache/gh/run-log-*.zip に
 # キャッシュし、書けないと `creating cache entry: … operation not permitted` で落ちる。

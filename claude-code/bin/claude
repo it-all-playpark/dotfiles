@@ -43,7 +43,7 @@
 #                              GIT_CONFIG_* は取り除くと番号が飛んで git がエラーになるので、helper を空にした n 番を
 #                              後ろで付ける branch.autoSetupMerge=false と同じ設定に差し替える。proxy token は入れない。
 #                              settings.json の env のうち sandbox 内から書ける場所（allowWrite の配下）を指すもの
-#                              （AGENT_BROWSER_SOCKET_DIR / CODEX_HOME / PNPM_HOME / UV_CACHE_DIR）も外す。sandbox 内のプロセスが
+#                              （AGENT_BROWSER_SOCKET_DIR / CODEX_HOME / PNPM_HOME / UV_CACHE_DIR / XDG_CACHE_HOME）も外す。sandbox 内のプロセスが
 #                              書き換えたキャッシュ・設定を sandbox の外で使わせない
 #                              （tests/agent-vault-managed-env.test.sh が settings.json から列挙して突き合わせる）
 #
@@ -114,7 +114,7 @@ if [ -z "${HTTPS_PROXY:-}" ] && [ -r "$token_file" ]; then
     export CLAUDE_GH_VAULT=1
     n="${GIT_CONFIG_COUNT:-0}"
     git_config_add credential.https://github.com.helper ""
-    export HOST_EXEC_ENV='{"HTTPS_PROXY":null,"HTTP_PROXY":null,"NO_PROXY":null,"NODE_EXTRA_CA_CERTS":null,"SSL_CERT_FILE":null,"GIT_SSL_CAINFO":null,"CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE":null,"CLAUDE_GH_VAULT":null,"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"GIT_CONFIG_KEY_'"$n"'":"branch.autoSetupMerge","GIT_CONFIG_VALUE_'"$n"'":"false"}'
+    export HOST_EXEC_ENV='{"HTTPS_PROXY":null,"HTTP_PROXY":null,"NO_PROXY":null,"NODE_EXTRA_CA_CERTS":null,"SSL_CERT_FILE":null,"GIT_SSL_CAINFO":null,"CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE":null,"CLAUDE_GH_VAULT":null,"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null,"GIT_CONFIG_KEY_'"$n"'":"branch.autoSetupMerge","GIT_CONFIG_VALUE_'"$n"'":"false"}'
   fi
   unset token proxy no_vault n
 fi
