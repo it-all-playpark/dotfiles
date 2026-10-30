@@ -44,7 +44,8 @@
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NODE_USE_ENV_PROXY": "1",
     "UV_CACHE_DIR": "/private/tmp/claude/uv-cache",
-    "WATCHPACK_POLLING": "true"
+    "WATCHPACK_POLLING": "true",
+    "XDG_CACHE_HOME": "/private/tmp/claude/xdg-cache"
   },
   "extraKnownMarketplaces": {
     "playpark": {
@@ -677,6 +678,7 @@
         "sum.golang.org",
         "go.dev",
         "registry.opentofu.org",
+        "binaries.prisma.sh",
         "storage.googleapis.com",
         "zernio.com",
         "*.amazonaws.com",

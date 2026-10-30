@@ -132,6 +132,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# prisma_engine_host_exact: binaries.prisma.sh が完全一致のエントリで入っている（issue #444）。
+# env の XDG_CACHE_HOME で prisma の engine のキャッシュを sandbox 専用の空の場所に向けたので、
+# 初回の prisma generate はそこへ engine を取りに行く
+# ---------------------------------------------------------------------------
+echo "- prisma_engine_host_exact"
+if jq -e '.sandbox.network.allowedDomains | index("binaries.prisma.sh") != null' "${SETTINGS}" >/dev/null; then
+  pass "prisma_engine_host_exact"
+else
+  fail "prisma_engine_host_exact" "missing=binaries.prisma.sh"
+fi
+
+# ---------------------------------------------------------------------------
 # wildcard_entries_fixed: wildcard（*.）のエントリはこの一覧だけ。サブドメインをまとめて開くので、
 # 増やすときはここも直して、その理由を PR で確かめる
 # ---------------------------------------------------------------------------

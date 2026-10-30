@@ -398,6 +398,22 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# xdg_cache_home_rules
+# issue #444: env の XDG_CACHE_HOME（sandbox 内から書ける場所）も excludedCommands の sandbox 外の起動に渡る。
+# XDG_CACHE_HOME のキャッシュを使うものを excludedCommands に足すときは外す旨と、postinstall の EPERM の行で
+# 手で向け直さずに env の XDG_CACHE_HOME で済む旨を RULES.md の Sandbox 節に残す。
+# ---------------------------------------------------------------------------
+echo "- xdg_cache_home_rules"
+# shellcheck disable=SC2016
+if ! grep -E '^- `XDG_CACHE_HOME` のキャッシュを使うもの.*`excludedCommands`.*`XDG_CACHE_HOME` を外す' <<<"${sandbox_section}" >/dev/null; then
+  fail "xdg_cache_home_rules" "RULES.md の Sandbox 節に「XDG_CACHE_HOME のキャッシュを使うものを excludedCommands に足すときは XDG_CACHE_HOME を外す」行が無い"
+elif ! grep -E '^- 依存の install が postinstall.*EPERM.*settings\.json の `env` の `XDG_CACHE_HOME`' <<<"${sandbox_section}" >/dev/null; then
+  fail "xdg_cache_home_rules" "RULES.md の Sandbox 節の postinstall の EPERM の行が settings.json の env の XDG_CACHE_HOME を案内していない"
+else
+  pass "xdg_cache_home_rules"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
