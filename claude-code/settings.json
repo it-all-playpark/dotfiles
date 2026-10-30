@@ -629,6 +629,7 @@
         "~/.lima/sandbox-docker/sock/docker.sock",
         "/private/tmp/claude/agent-browser",
         "/private/tmp/claude-501/sock",
+        "/private/tmp/claude-1387796573/sock",
         "/private/tmp/claude-502"
       ],
       "allowedDomains": [

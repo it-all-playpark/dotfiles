@@ -5,7 +5,7 @@
 # Run from anywhere: bash tests/sandbox-docker.test.sh
 # Requires: jq, yq（mikefarah/yq）。nix（daemon に届くときだけ。届かなければ tier-2 を skip）
 #
-# tier-1: lima.yaml の定義と vm-egress-proxy の設定、claude-code/settings.json の allowUnixSockets / allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）、
+# tier-1: lima.yaml の定義と vm-egress-proxy の設定、claude-code/settings.json の allowUnixSockets（uid ごとの $TMPDIR/sock を含む）/ allowedDomains、RULES.md の docker-vm、start.sh（偽の limactl で動かす）、
 #         docker-vm.sh（build の前の参照イメージの pull。偽の docker で動かす）
 # tier-2: パッチ版 limactl の template copy --fill で展開した mounts / portForwards、
 #         Lima の docker template との手順の突き合わせ、home-manager の評価結果（launchd agent・docker-vm・image）
@@ -139,6 +139,20 @@ if [ "${got}" = "${want}" ]; then
   pass "settings_allow_unix_sockets"
 else
   fail "settings_allow_unix_sockets" "got=${got} want=${want}"
+fi
+
+# -----------------------------------------------------------------------------
+# settings_allow_unix_sockets_tmpdir_sock: uid ごとの sandbox $TMPDIR/sock（テストのソケットの置き場。
+# docker.test.sh・docker-proxy / vm-egress-proxy のテスト）を通す。allowUnixSockets は glob を受け付けないので
+# uid ごとに完全なパスで書き、$TMPDIR 全体（sandbox 外の Claude Code 本体も使う）は開けない（issue #441）
+# -----------------------------------------------------------------------------
+echo "- settings_allow_unix_sockets_tmpdir_sock"
+got="$(jq -c '[.sandbox.network.allowUnixSockets[] | select(test("^/private/tmp/claude-(501|1387796573)(/|$)") or test("[*?\\[]"))]' "${SETTINGS}")"
+want='["/private/tmp/claude-501/sock","/private/tmp/claude-1387796573/sock"]'
+if [ "${got}" = "${want}" ]; then
+  pass "settings_allow_unix_sockets_tmpdir_sock"
+else
+  fail "settings_allow_unix_sockets_tmpdir_sock" "got=${got} want=${want}"
 fi
 
 # -----------------------------------------------------------------------------
