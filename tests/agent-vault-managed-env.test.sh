@@ -156,12 +156,14 @@ ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" 
   HOST_EXEC_ENV: ({HTTPS_PROXY: null, HTTP_PROXY: null, NO_PROXY: null,
     NODE_EXTRA_CA_CERTS: null, SSL_CERT_FILE: null, GIT_SSL_CAINFO: null,
     CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null, CLAUDE_GH_VAULT: null,
-    AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, PNPM_HOME: null, UV_CACHE_DIR: null, XDG_CACHE_HOME: null,
+    AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, NPM_CONFIG_CACHE: null, PNPM_HOME: null, UV_CACHE_DIR: null, XDG_CACHE_HOME: null,
     GIT_CONFIG_KEY_0: "branch.autoSetupMerge", GIT_CONFIG_VALUE_0: "false"} | tojson)}')"
-INACTIVE_ENV='{
-  "GIT_CONFIG_COUNT": "2",
-  "GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false",
-  "GIT_CONFIG_KEY_1": "push.default", "GIT_CONFIG_VALUE_1": "current"}'
+INACTIVE_ENV="$(jq -n '{
+  GIT_CONFIG_COUNT: "2",
+  GIT_CONFIG_KEY_0: "branch.autoSetupMerge", GIT_CONFIG_VALUE_0: "false",
+  GIT_CONFIG_KEY_1: "push.default", GIT_CONFIG_VALUE_1: "current",
+  HOST_EXEC_ENV: ({AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, NPM_CONFIG_CACHE: null, PNPM_HOME: null,
+    UV_CACHE_DIR: null, XDG_CACHE_HOME: null} | tojson)}')"
 
 echo "=== agent-vault-managed-env tests ==="
 echo ""
@@ -250,22 +252,30 @@ fi
 # ---------------------------------------------------------------------------
 # host_exec_env_drops_sandbox_writable_env: repo の settings.json の env のうち sandbox 内から書ける場所を指す変数は、
 # wrapper（claude-code/bin/claude）と drop-in の両方の HOST_EXEC_ENV で null（host-exec の起動から外す）。
-# host-exec は sandbox の外で動くので、残すと sandbox 内のプロセスが書き換えたキャッシュ・設定を sandbox の外で使う
+# host-exec は sandbox の外で動くので、残すと sandbox 内のプロセスが書き換えたキャッシュ・設定を sandbox の外で使う。
+# settings.json の env は agent-vault の有無に関係なく渡るので、agent-vault を使わない起動（port が閉じている）でも外す
 # ---------------------------------------------------------------------------
-echo "- host_exec_env_drops_sandbox_writable_env"
 writable="$(sandbox_writable_env "${REPO_ROOT}/claude-code/settings.json")"
-out="${TMPROOT}/host-exec-env/managed-settings.d/50-agent-vault.json"
-run_script "${out}"
-dropin_spec="$(jq -r '.env.HOST_EXEC_ENV // empty' "${out}" 2>/dev/null || true)"
-wrapper_spec="$(wrapper_env | sed -n 's/^HOST_EXEC_ENV=//p')"
-if [ "${RC}" -eq 0 ] && [ "${writable}" != "[]" ] && [ -n "${dropin_spec}" ] && [ -n "${wrapper_spec}" ] &&
-  [ "$(not_nulled "${writable}" "${dropin_spec}")" = "[]" ] &&
-  [ "$(not_nulled "${writable}" "${wrapper_spec}")" = "[]" ]; then
-  pass "host_exec_env_drops_sandbox_writable_env"
-else
-  fail "host_exec_env_drops_sandbox_writable_env" \
-    "rc=${RC} writable=${writable} drop-in HOST_EXEC_ENV=${dropin_spec} wrapper HOST_EXEC_ENV=${wrapper_spec} err=${ERR}"
-fi
+for vault_state in active closed_port; do
+  name="host_exec_env_drops_sandbox_writable_env (${vault_state})"
+  echo "- ${name}"
+  vars=()
+  if [ "${vault_state}" = closed_port ]; then
+    vars=(AGENT_VAULT_PROXY_PORT="${CLOSED_PORT}")
+  fi
+  out="${TMPROOT}/host-exec-env-${vault_state}/managed-settings.d/50-agent-vault.json"
+  run_script "${out}" ${vars[@]+"${vars[@]}"}
+  dropin_spec="$(jq -r '.env.HOST_EXEC_ENV // empty' "${out}" 2>/dev/null || true)"
+  wrapper_spec="$(wrapper_env ${vars[@]+"${vars[@]}"} | sed -n 's/^HOST_EXEC_ENV=//p')"
+  if [ "${RC}" -eq 0 ] && [ "${writable}" != "[]" ] && [ -n "${dropin_spec}" ] && [ -n "${wrapper_spec}" ] &&
+    [ "$(not_nulled "${writable}" "${dropin_spec}")" = "[]" ] &&
+    [ "$(not_nulled "${writable}" "${wrapper_spec}")" = "[]" ]; then
+    pass "${name}"
+  else
+    fail "${name}" \
+      "rc=${RC} writable=${writable} drop-in HOST_EXEC_ENV=${dropin_spec} wrapper HOST_EXEC_ENV=${wrapper_spec} err=${ERR}"
+  fi
+done
 
 echo ""
 echo "--- token ファイルの検査（root で読むので、リンクと他人のファイルは読まない） ---"

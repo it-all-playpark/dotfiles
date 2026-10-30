@@ -159,6 +159,10 @@ run_wrapper() {
   ERR="$(cat "$TMPROOT/err")"
 }
 
+# agent-vault を使わない起動の HOST_EXEC_ENV: settings.json の env のうち sandbox 内から書ける場所を指すものだけを外す
+# （npm・uv・XDG のキャッシュを sandbox の外の host-exec で使わせない）
+SANDBOX_ONLY_HOST_EXEC_ENV='{"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null}'
+
 echo "=== claude (agent-vault wrapper) tests ==="
 
 # ---------------------------------------------------------------------------
@@ -196,11 +200,12 @@ fi
 # ---------------------------------------------------------------------------
 # 3. HTTPS_PROXY が既にある（sandbox 内から呼んだ claude 等）→ 触らない
 # ---------------------------------------------------------------------------
-RUN_ENV=("HTTPS_PROXY=http://localhost:9999")
+#    親（agent-vault 経由の claude）が付けた HOST_EXEC_ENV はそのまま引き継ぐ
+RUN_ENV=("HTTPS_PROXY=http://localhost:9999" 'HOST_EXEC_ENV={"HTTPS_PROXY":null}')
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=http://localhost:9999" &&
   contains "$OUT" "HTTP_PROXY=<unset>" && contains "$OUT" "SSL_CERT_FILE=<unset>" &&
-  contains "$OUT" "CLAUDE_GH_VAULT=<unset>" && contains "$OUT" "HOST_EXEC_ENV=<unset>" && [[ -z $ERR ]]; then
+  contains "$OUT" "CLAUDE_GH_VAULT=<unset>" && contains "$OUT" 'HOST_EXEC_ENV={"HTTPS_PROXY":null}' && [[ -z $ERR ]]; then
   pass "03_preset_https_proxy_is_kept"
 else
   fail "03_preset_https_proxy_is_kept" "rc=$RC out=$OUT err=$ERR"
@@ -212,7 +217,7 @@ fi
 RUN_ENV=("AGENT_VAULT_PROXY_TOKEN_FILE=$TMPROOT/missing-token")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" &&
-  contains "$OUT" "NODE_EXTRA_CA_CERTS=<unset>" && contains "$OUT" "HOST_EXEC_ENV=<unset>" && [[ -z $ERR ]]; then
+  contains "$OUT" "NODE_EXTRA_CA_CERTS=<unset>" && contains "$OUT" "HOST_EXEC_ENV=$SANDBOX_ONLY_HOST_EXEC_ENV" && [[ -z $ERR ]]; then
   pass "04_no_token_file_passthrough"
 else
   fail "04_no_token_file_passthrough" "rc=$RC out=$OUT err=$ERR"
@@ -224,7 +229,7 @@ fi
 RUN_ENV=("AGENT_VAULT_PROXY_PORT=$CLOSED_PORT")
 run_wrapper
 if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "CLAUDE_GH_VAULT=<unset>" &&
-  contains "$OUT" "HOST_EXEC_ENV=<unset>" &&
+  contains "$OUT" "HOST_EXEC_ENV=$SANDBOX_ONLY_HOST_EXEC_ENV" &&
   contains "$OUT" $'GIT_CONFIG_COUNT=2\ngit_config=branch.autoSetupMerge=false\ngit_config=push.default=current\n' &&
   contains "$ERR" "not listening on 127.0.0.1:$CLOSED_PORT" &&
   contains "$ERR" "cannot authenticate to GitHub"; then
@@ -238,7 +243,7 @@ fi
 # ---------------------------------------------------------------------------
 RUN_ENV=("AGENT_VAULT_CA_BUNDLE=$TMPROOT/missing-ca.pem")
 run_wrapper
-if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "HOST_EXEC_ENV=<unset>" &&
+if [[ $RC -eq 0 ]] && contains "$OUT" "HTTPS_PROXY=<unset>" && contains "$OUT" "HOST_EXEC_ENV=$SANDBOX_ONLY_HOST_EXEC_ENV" &&
   contains "$ERR" "CA bundle not found: $TMPROOT/missing-ca.pem" &&
   contains "$ERR" "cannot authenticate to GitHub"; then
   pass "06_missing_ca_bundle_passthrough_with_warning"
@@ -351,7 +356,7 @@ run_wrapper
 host_exec_env="$(printf '%s\n' "$OUT" | sed -n 's/^HOST_EXEC_ENV=//p')"
 shape="$("$PY" -I "$TMPROOT/host-exec-env-shape.py" "$host_exec_env" 2>&1 || true)"
 if [[ $RC -eq 0 ]] &&
-  [[ $shape == $'nulls=AGENT_BROWSER_SOCKET_DIR,CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,CODEX_HOME,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,PNPM_HOME,SSL_CERT_FILE,UV_CACHE_DIR,XDG_CACHE_HOME\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
+  [[ $shape == $'nulls=AGENT_BROWSER_SOCKET_DIR,CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,CODEX_HOME,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,NPM_CONFIG_CACHE,PNPM_HOME,SSL_CERT_FILE,UV_CACHE_DIR,XDG_CACHE_HOME\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
   ! contains "$host_exec_env" "tok_123"; then
   pass "11_vault_session_exports_host_exec_env_without_token"
 else
