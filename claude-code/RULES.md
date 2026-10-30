@@ -73,7 +73,6 @@ permissions.deny 側の規則は 2026-08-16 に撤去: `Bash(git push *:main)` �
 - `~/ghq` 深さ 3 の全 repo（`~/ghq/<host>/<org>/<repo>`）の `.git/config`（worktree も共有）・`.git/hooks`・`.claude/settings*.json`・`.claude/hooks` は書けない（起動元 repo は Claude Code の組み込み保護で設定で外せず、他の repo は settings.json の denyWrite）。`~/ghq/<host>/<org>/` への新規 clone は host-exec の `ghq get` か人間が行い、pull / switch で `unable to unlink old .claude/settings*.json` が出たら、その repo を起動元にするか host-exec でやり直して `git status` を確かめる。push は `-u` を付けず素の `git push`（wrapper が `push.default=current` / `branch.autoSetupMerge=false` を入れている）、PR の branch は `gh pr checkout` ではなく `git fetch origin <branch>` → `git switch <branch>`。`git config --local`・remote の変更は人間に頼む
 - `.githooks` / `.husky`（denyWrite）や組み込み保護の対象ファイル（`.ripgreprc` 等）を追跡する repo の worktree は、`git worktree add` ではなく `wt-add <repo> <path> <branch> [<start>]`（`~/.claude/bin`）で作る。取り出せないパスに skip-worktree を付け、付けたパスを stdout に出す。既存の worktree でブランチを切り替えて取り出せないパスが増えるときも、`git switch` ではなく新しく wt-add で作る
 - worktree の削除（`git worktree remove`）は sandbox 内では組み込み保護で `failed to delete '<repo>/.claude/worktrees/<name>': Operation not permitted` になるので、人間に頼まず host-exec の argv（`git -C <repo> worktree remove <path>`）で行う。`--force` は付けず、未コミットの変更がある worktree は消さずに人間に判断を渡す
-- `nix fmt` は `nix fmt -- --no-cache`（treefmt のキャッシュ書き込みが落ちる）
 - `neonctl` は `--no-analytics` を付ける（テレメトリ先が未許可で終了時に待たされる）。`neonctl auth` は通常ターミナルで人間が行う
 - `&` で起動したプロセスは名前で止められない（`pkill` / `killall` はプロセス一覧が塞がれて落ちる）。CPU 負荷などの道具は `timeout 60 yes > /dev/null &` のように寿命を付けるか、`$!` を控えて同じ呼び出しの中で `kill` → `wait` する。取り残したら `/usr/bin/pgrep -l <名前>` で PID を確かめ、`! kill <PID>` を示して人間に止めてもらう（下の「プロセス調査」）
 
@@ -138,6 +137,7 @@ sandbox に塞がれたら:
   track.neon.tech は未許可なので --no-analytics がないと closeAndFlush が拒否された送信を待つ。
   代償: sandbox 内のプロセスが Neon の API を持ち主の権限で叩ける（branch / DB の削除も可能）。
 - nix fmt: treefmt が ~/Library/Caches/treefmt にキャッシュ DB を書こうとして落ちる。allowWrite に足せば通るが、キャッシュなので --no-cache で足りる。
+  2026-10-31（issue #446 の後）treefmt は XDG_CACHE_HOME の下に書くようになり、sandbox 内の素の `nix fmt` が通るのを実測したので --no-cache の指示を撤去した。
 - uv: 2026-10-15（issue #317）sandbox 内の uv run は ~/.cache/uv を初期化できず exit 2。env の UV_CACHE_DIR を /private/tmp/claude/uv-cache に
   向けた。~/.cache/uv を allowWrite に足すと sandbox 外の uv が使うキャッシュを sandbox 内から書き換えられるので足さない。
   /private/tmp/claude は Claude Code の組み込みで書けるが、settings.json の allowWrite にも明示した（組み込みが変わっても cache が書ける）。
