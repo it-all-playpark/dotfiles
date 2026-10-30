@@ -266,14 +266,19 @@ run_vm() {
     PATH="${TMPROOT}/vmbin:${PATH}" bash "${VM_SH}" --host "${VM_HOST}" "$@") >/dev/null 2>"${TMPROOT}/vm-err"
 }
 
-# vm_calls <ref>...: 参照ごとの inspect と pull（FAKE_PRESENT にあるものは inspect だけ）の呼び出し列
+# vm_calls <ref>...: 参照ごとの inspect と pull（FAKE_PRESENT にあるものは inspect だけ）の呼び出し列。
+# VM_PULL_OPTS（--platform）があるときは inspect せず、FAKE_PRESENT に関わらず常に pull する
 vm_calls() {
   local ref
   for ref in "$@"; do
+    if [ -n "${VM_PULL_OPTS-}" ]; then
+      echo "--host ${VM_HOST} pull ${VM_PULL_OPTS} -- ${ref}"
+      continue
+    fi
     echo "--host ${VM_HOST} image inspect -- ${ref}"
     case " ${FAKE_PRESENT-} " in
     *" ${ref} "*) ;;
-    *) echo "--host ${VM_HOST} pull ${VM_PULL_OPTS:+${VM_PULL_OPTS} }-- ${ref}" ;;
+    *) echo "--host ${VM_HOST} pull -- ${ref}" ;;
     esac
   done
 }
@@ -353,17 +358,20 @@ else
   fail "docker_vm_dockerfile_location" "${bad[*]}"
 fi
 
-# AC-3: --platform（--platform= 形式を含む）は pull にも同じ値を渡す
+# AC-3: --platform（--platform= 形式を含む）は pull にも同じ値を渡す。VM に（別プラットフォーム版が）あって
+# inspect が見つかったと返す参照でも、inspect に頼らず --platform 付きで pull する
 echo "- docker_vm_platform"
 bad=()
-for case_args in "linux/amd64|--platform linux/amd64" "linux/arm64|--platform=linux/arm64"; do
-  read -r -a words <<<"${case_args#*|}"
-  run_vm "${TMPROOT}/vm/loc" build "${words[@]}" ctx
-  want="$(VM_PULL_OPTS="--platform ${case_args%%|*}" vm_calls ctx-image:1)
+for present in "" "ctx-image:1"; do
+  for case_args in "linux/amd64|--platform linux/amd64" "linux/arm64|--platform=linux/arm64"; do
+    read -r -a words <<<"${case_args#*|}"
+    FAKE_PRESENT="${present}" run_vm "${TMPROOT}/vm/loc" build "${words[@]}" ctx
+    want="$(VM_PULL_OPTS="--platform ${case_args%%|*}" vm_calls ctx-image:1)
 --host ${VM_HOST} build ${case_args#*|} ctx"
-  if [ "$(cat "${TMPROOT}/vm-calls")" != "${want}" ]; then
-    bad+=("${case_args#*|}: $(vm_got)")
-  fi
+    if [ "$(cat "${TMPROOT}/vm-calls")" != "${want}" ]; then
+      bad+=("present=${present:-none} ${case_args#*|}: $(vm_got)")
+    fi
+  done
 done
 if [ "${#bad[@]}" -eq 0 ]; then
   pass "docker_vm_platform"

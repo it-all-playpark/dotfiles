@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # docker-vm（home-manager/programs/sandbox-docker.nix）の本体。受けた引数（先頭の --host 等のグローバルオプションを
 # 含む）を変えずに docker へ exec する。build（build / buildx build / image build）のときは、その前に Dockerfile が
-# 参照するイメージ（# syntax=・FROM・COPY --from・RUN --mount の from）のうち `image inspect` で見つからないものを、
+# 参照するイメージ（# syntax=・FROM・COPY --from・RUN --mount の from）のうち `image inspect` で見つからないもの
+# （--platform 指定時はすべて）を、
 # 同じグローバルオプション（同じ接続先）と同じ環境（DOCKER_CONFIG）で pull しておく。
 # BuildKit はレジストリのトークンを session の auth provider、つまり Mac 側の docker CLI で取りにいく。その証明書の
 # 検証は sandbox から閉じてある macOS の trustd に回るので、手元に無いイメージを使う build は sandbox 内で落ちる。
@@ -286,13 +287,16 @@ for ins in "${instructions[@]}"; do
   esac
 done
 
-# 5. VM に無いものだけを pull する。pull の出力は build の stdout（-q のイメージ ID 等）に混ぜない
+# 5. VM に無いものだけを pull する。pull の出力は build の stdout（-q のイメージ ID 等）に混ぜない。
+# --platform があるときは inspect を使わず常に pull する: inspect は別プラットフォーム版しか無くても（--platform を
+# 付けても）見つかったと返すので、指定のプラットフォームが無いまま build が元の障害で落ちる。既にあれば pull は
+# manifest の確認だけで済む
 pull_opts=()
 if [ -n "${platform}" ]; then
   pull_opts=(--platform "${platform}")
 fi
 for ref in "${refs[@]}"; do
-  if docker "${global[@]}" image inspect -- "${ref}" >/dev/null 2>&1; then
+  if [ -z "${platform}" ] && docker "${global[@]}" image inspect -- "${ref}" >/dev/null 2>&1; then
     continue
   fi
   if ! docker "${global[@]}" pull "${pull_opts[@]}" -- "${ref}" >&2; then
