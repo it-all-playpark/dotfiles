@@ -41,6 +41,7 @@
     "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/moshi-plugin",
     "CODEX_HOME": "~/.local/state/codex-sandbox",
     "DISABLE_AUTOUPDATER": "1",
+    "E2E_BROWSER_SINGLE_PROCESS": "1",
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NODE_USE_ENV_PROXY": "1",
     "NPM_CONFIG_CACHE": "/private/tmp/claude/npm-cache",
