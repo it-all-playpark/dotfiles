@@ -144,13 +144,15 @@
               # 更新後の入力でビルド検証し、失敗したら flake.lock をロールバックする。
               # nixos-unstable は darwin 全パッケージのビルド成功を保証しないため、
               # 壊れた rev を踏んだ場合は既知の正常な入力のまま switch を続行する。
-              # macOS で入力が変わったときは linux-builder VM を動かして build する。
+              # macOS で Linux 向けの derivation の build が要るときは linux-builder VM を動かして build する。
               # VM 自体の aarch64-linux derivation は VM の中でしか build できず、
               # VM は常駐させていないため（darwin/nix.nix）、止まったままだと毎回ロールバックになる。
+              # flake.lock が変わらなくても、merge 済みで未反映の lock を初めて build するときは VM が要るので、
+              # lock の差分ではなく build される derivation で判定する（scripts/needs-linux-builder.sh）。
               verify_or_rollback() {
                 echo "Verifying build with updated inputs..."
                 local build=(nix build --no-link)
-                if [[ "$(uname)" == "Darwin" ]] && ! cmp -s flake.lock "$LOCK_BACKUP"; then
+                if [[ "$(uname)" == "Darwin" ]] && bash scripts/needs-linux-builder.sh "$@"; then
                   build=(bash scripts/with-linux-builder.sh "''${build[@]}")
                 fi
                 if "''${build[@]}" "$@"; then
@@ -245,13 +247,15 @@
               # 更新後の入力でビルド検証し、失敗したら flake.lock をロールバックする。
               # nixos-unstable は darwin 全パッケージのビルド成功を保証しないため、
               # 壊れた rev を踏んだ場合は既知の正常な入力のまま switch を続行する。
-              # macOS で入力が変わったときは linux-builder VM を動かして build する。
+              # macOS で Linux 向けの derivation の build が要るときは linux-builder VM を動かして build する。
               # VM 自体の aarch64-linux derivation は VM の中でしか build できず、
               # VM は常駐させていないため（darwin/nix.nix）、止まったままだと毎回ロールバックになる。
+              # flake.lock が変わらなくても、merge 済みで未反映の lock を初めて build するときは VM が要るので、
+              # lock の差分ではなく build される derivation で判定する（scripts/needs-linux-builder.sh）。
               verify_or_rollback() {
                 echo "Verifying build with updated inputs..."
                 local build=(nix build --no-link)
-                if [[ "$(uname)" == "Darwin" ]] && ! cmp -s flake.lock "$LOCK_BACKUP"; then
+                if [[ "$(uname)" == "Darwin" ]] && bash scripts/needs-linux-builder.sh "$@"; then
                   build=(bash scripts/with-linux-builder.sh "''${build[@]}")
                 fi
                 if "''${build[@]}" "$@"; then
