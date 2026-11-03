@@ -104,8 +104,13 @@ fi
 
 echo "- interrupt_still_stops_vm"
 reset "not running"
-# 子から親（script）に SIGINT を送り、Ctrl-C で中断された状況を作る
-run bash -c 'kill -INT $PPID; sleep 0.2'
+# 子から親（script）に SIGINT を送り、Ctrl-C で中断された状況を作る。
+# run-all.sh はテストを & で走らせるので SIGINT が無視された状態で始まり、bash はそれに trap を張れない。
+# 端末から前面で動く update と同じ条件にするため、perl で SIGINT を既定に戻してから script を起動する
+set +e
+OUT="$(perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV' bash "$SCRIPT" bash -c 'kill -INT $PPID; sleep 0.2' 2>&1)"
+RC=$?
+set -e
 if [ "$RC" -eq 130 ] && [ "$(final_state)" = "not running" ] && [[ "$(sudo_log)" == *"launchctl kill TERM"* ]]; then
   pass "interrupt_still_stops_vm"
 else
