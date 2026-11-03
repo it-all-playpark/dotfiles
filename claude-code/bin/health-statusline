@@ -6,14 +6,15 @@
 # stdin の JSON（statusLine の入力）は読み捨てる。読むのは次のファイルだけで、何も書かない:
 #   - ~/.claude/logs/dev-flow-health.log・~/.claude/logs/dev-flow-health.watch-journal.log
 #     （1 行 1 JSON。最終行の report が report JSON のパスを指す）と、その report
-#   - ~/.claude/logs/sandbox-tune/runs.jsonl（1 行 1 JSON。成功行は ts と recurring（今も再発している型の数）、
+#   - ~/.claude/logs/sandbox-tune/runs.jsonl（1 行 1 JSON。成功行は ts と recurring（今も再発している型の数）と
+#     unreadable（読めずに集計から外した transcript の数）、
 #     失敗行は ts と error。recurring の無い古い成功行は sbx の値として使わない）
 #   - runs.jsonl の最後の drafts_root（日次ジョブの issue 下書き置き場）の <実行時刻>/sandbox-tune-issue-*.md（未処理の下書き）
 #
 # 出力（health・sbx の順に ` · ` で繋ぐ。出すものが無い部分は省き、両方無ければ空行）:
 #   health ✓ <経過> / health ⚠ new<N> regressed<M> <経過> / health ⚠ 止まっている? <経過>（26 時間を超えたら）
 #   sbx 再発<N>(+d|-d|±0) <経過> / sbx 再発<N> <経過>（recurring を持つ比べる成功行が無いとき） / sbx ⚠ 失敗 <経過>
-#   （未処理の下書きがあれば <経過> の前に ` 下書き<N>` を入れる。最後の成功行に recurring が無ければ sbx の部分は出さない）
+#   （最後の成功行の unreadable が 1 以上なら <経過> の前に ` 読めず<N>` を、未処理の下書きがあれば ` 下書き<N>` を入れる。最後の成功行に recurring が無ければ sbx の部分は出さない）
 # statusLine は頻繁に呼ばれるので jq 4 回で終える。どの入力が壊れていても exit 0。
 set -uo pipefail
 
@@ -77,11 +78,12 @@ jq -nr --arg runs "$runs" --argjson drafts "$drafts" '
       | (.ts | strings | epoch) as $ts
       | select($ts != null)
       | if .error != null then {ts: $ts, error: true}
-        else {ts: $ts, recurring: ((.recurring | numbers) // null)}
+        else {ts: $ts, recurring: ((.recurring | numbers) // null), unreadable: ((.unreadable | numbers) // 0)}
         end
     ] | select(length > 0)
       | last as $last
-      | ((if $drafts > 0 then "下書き\($drafts) " else "" end) + ($last.ts | ago)) as $age
+      | ((if ($last.unreadable // 0) > 0 then "読めず\($last.unreadable) " else "" end)
+         + (if $drafts > 0 then "下書き\($drafts) " else "" end) + ($last.ts | ago)) as $age
       | if $last.error then "sbx ⚠ 失敗 \($age)"
         elif $last.recurring == null then empty
         else (.[:-1] | map(select(.recurring != null)) | last) as $prev
