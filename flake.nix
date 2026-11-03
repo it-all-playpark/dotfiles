@@ -173,6 +173,8 @@
               if [[ "$(uname)" == "Darwin" ]]; then
                 # macOS系の場合
                 echo "Detected macOS environment"
+                # VM の起動・停止と nix-darwin の switch で使う sudo の認証を最初の 1 回にまとめる
+                bash scripts/sudo-keepalive.sh
                 verify_or_rollback \
                   ".#homeConfigurations.''${USERNAME}-darwin.activationPackage" \
                   ".#darwinConfigurations.MyMBP-''${USERNAME}.system"
@@ -272,6 +274,8 @@
               if [[ "$(uname)" == "Darwin" ]]; then
                 # macOS系の場合
                 echo "Detected macOS environment"
+                # VM の起動・停止と nix-darwin の switch で使う sudo の認証を最初の 1 回にまとめる
+                bash scripts/sudo-keepalive.sh
 
                 # 全ユーザー分のビルドをまとめて検証
                 VERIFY_TARGETS=()
