@@ -36,6 +36,7 @@
   # 常駐を外し、Linux 向け build の前後だけ手動で起動・停止する:
   #   sudo launchctl kickstart system/org.nixos.linux-builder   # 起動（ssh 待受まで数十秒）
   #   sudo launchctl kill TERM system/org.nixos.linux-builder   # 停止
+  # nix run .#update の build 検証は scripts/with-linux-builder.sh で起動・停止を自動で行う。
   nix.linux-builder = {
     enable = true;
     ephemeral = true;

@@ -144,9 +144,16 @@
               # 更新後の入力でビルド検証し、失敗したら flake.lock をロールバックする。
               # nixos-unstable は darwin 全パッケージのビルド成功を保証しないため、
               # 壊れた rev を踏んだ場合は既知の正常な入力のまま switch を続行する。
+              # macOS で入力が変わったときは linux-builder VM を動かして build する。
+              # VM 自体の aarch64-linux derivation は VM の中でしか build できず、
+              # VM は常駐させていないため（darwin/nix.nix）、止まったままだと毎回ロールバックになる。
               verify_or_rollback() {
                 echo "Verifying build with updated inputs..."
-                if nix build --no-link "$@"; then
+                local build=(nix build --no-link)
+                if [[ "$(uname)" == "Darwin" ]] && ! cmp -s flake.lock "$LOCK_BACKUP"; then
+                  build=(bash scripts/with-linux-builder.sh "''${build[@]}")
+                fi
+                if "''${build[@]}" "$@"; then
                   rm -f "$LOCK_BACKUP"
                 else
                   echo "WARNING: updated inputs failed to build. Rolling back flake.lock to the previous (working) revision..."
@@ -236,9 +243,16 @@
               # 更新後の入力でビルド検証し、失敗したら flake.lock をロールバックする。
               # nixos-unstable は darwin 全パッケージのビルド成功を保証しないため、
               # 壊れた rev を踏んだ場合は既知の正常な入力のまま switch を続行する。
+              # macOS で入力が変わったときは linux-builder VM を動かして build する。
+              # VM 自体の aarch64-linux derivation は VM の中でしか build できず、
+              # VM は常駐させていないため（darwin/nix.nix）、止まったままだと毎回ロールバックになる。
               verify_or_rollback() {
                 echo "Verifying build with updated inputs..."
-                if nix build --no-link "$@"; then
+                local build=(nix build --no-link)
+                if [[ "$(uname)" == "Darwin" ]] && ! cmp -s flake.lock "$LOCK_BACKUP"; then
+                  build=(bash scripts/with-linux-builder.sh "''${build[@]}")
+                fi
+                if "''${build[@]}" "$@"; then
                   rm -f "$LOCK_BACKUP"
                 else
                   echo "WARNING: updated inputs failed to build. Rolling back flake.lock to the previous (working) revision..."
