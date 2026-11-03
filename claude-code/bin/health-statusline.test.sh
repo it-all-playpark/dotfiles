@@ -250,6 +250,15 @@ mkdir -p "$HOME_DIR/drafts/20261028T213000Z"
 jq -nc --arg ts "$(ago $((3 * H)))" --arg root "$HOME_DIR/drafts" '{recurring: 5, drafts_root: $root, ts: $ts}' >>"$LOGS/sandbox-tune/runs.jsonl"
 expect "21f_sbx_no_pending_drafts" "sbx 再発5 3h前"
 
+# 最後の成功行の unreadable（読めずに集計から外した transcript の数）が 1 以上なら経過の前に出す
+setup_home sbx_unreadable
+root="$HOME_DIR/drafts"
+mkdir -p "$root/20261028T213000Z"
+touch "$root/20261028T213000Z/sandbox-tune-issue-1.md"
+jq -nc --arg ts "$(ago $((3 * H)))" --arg root "$root" '{recurring: 5, unreadable: 2, drafts_root: $root, ts: $ts}' \
+  >>"$LOGS/sandbox-tune/runs.jsonl"
+expect "21g_sbx_unreadable_transcripts" "sbx 再発5 読めず2 下書き1 3h前"
+
 # --- 1 行にまとめる ----------------------------------------------------------
 setup_home both
 log_line "$DAILY" "$(report a $((2 * H)))"
