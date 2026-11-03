@@ -102,19 +102,36 @@ else
   fail "command_failure_still_stops_vm_and_keeps_exit_code" "rc=$RC state=$(final_state) sudo=$(sudo_log) out=$OUT"
 fi
 
-echo "- interrupt_still_stops_vm"
+echo "- interrupt_stops_vm_and_caller_does_not_continue"
 reset "not running"
-# 子から親（script）に SIGINT を送り、Ctrl-C で中断された状況を作る。
+# Ctrl-C は前面のプロセスグループ全体に SIGINT を送る。update（外側の bash）から script を呼び、
+# コマンドがグループ全体に SIGINT を送って同じ状況を作る。外側の bash が後続を実行しないことを確かめる。
 # run-all.sh はテストを & で走らせるので SIGINT が無視された状態で始まり、bash はそれに trap を張れない。
-# 端末から前面で動く update と同じ条件にするため、perl で SIGINT を既定に戻してから script を起動する
+# 端末から前面で動く update と同じ条件にするため、perl で SIGINT を既定に戻し、テスト自身を巻き込まないよう
+# 新しいプロセスグループを作ってから外側の bash を起動する
 set +e
-OUT="$(perl -e '$SIG{INT} = "DEFAULT"; exec @ARGV' bash "$SCRIPT" bash -c 'kill -INT $PPID; sleep 0.2' 2>&1)"
+OUT="$(perl -e '$SIG{INT} = "DEFAULT"; setpgrp(0, 0); exec @ARGV' \
+  bash -c 'bash "$1" bash -c "kill -INT 0; sleep 0.2"; echo after-build' _ "$SCRIPT" 2>&1)"
 RC=$?
 set -e
-if [ "$RC" -eq 130 ] && [ "$(final_state)" = "not running" ] && [[ "$(sudo_log)" == *"launchctl kill TERM"* ]]; then
-  pass "interrupt_still_stops_vm"
+if [ "$RC" -eq 130 ] && [[ $OUT != *after-build* ]] && [ "$(final_state)" = "not running" ] &&
+  [[ "$(sudo_log)" == *"launchctl kill TERM"* ]]; then
+  pass "interrupt_stops_vm_and_caller_does_not_continue"
 else
-  fail "interrupt_still_stops_vm" "rc=$RC state=$(final_state) sudo=$(sudo_log) out=$OUT"
+  fail "interrupt_stops_vm_and_caller_does_not_continue" "rc=$RC state=$(final_state) sudo=$(sudo_log) out=$OUT"
+fi
+
+echo "- term_stops_vm_and_dies_by_signal"
+reset "not running"
+# exit 143 と SIGTERM による終了は $? では区別できないので、perl の wait status から終了シグナルの番号を取る
+set +e
+OUT="$(perl -e 'system(@ARGV); print "signal=", $? & 127, "\n"' bash "$SCRIPT" bash -c 'kill -TERM $PPID; sleep 0.2' 2>&1)"
+RC=$?
+set -e
+if [ "$RC" -eq 0 ] && [[ $OUT == *"signal=15"* ]] && [ "$(final_state)" = "not running" ] && [[ "$(sudo_log)" == *"launchctl kill TERM"* ]]; then
+  pass "term_stops_vm_and_dies_by_signal"
+else
+  fail "term_stops_vm_and_dies_by_signal" "rc=$RC state=$(final_state) sudo=$(sudo_log) out=$OUT"
 fi
 
 echo "- running_vm_is_left_alone"

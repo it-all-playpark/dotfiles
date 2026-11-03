@@ -43,9 +43,17 @@ stop_builder() {
   sudo launchctl kill TERM "$LABEL" ||
     echo "WARNING: linux-builder VM を止められなかった。手で止める: sudo launchctl kill TERM $LABEL" >&2
 }
+# shellcheck disable=SC2329 # 下の trap から呼ぶ
+# 中断のシグナルでは VM を止めてから同じシグナルで自分を終える。exit 130 のように通常終了すると、
+# 呼び出し元の bash は子がシグナルで死んでいないと判断して後続（switch 等）に進んでしまう
+die_by_signal() {
+  trap - EXIT INT TERM
+  stop_builder
+  kill -s "$1" "$$"
+}
 trap stop_builder EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'die_by_signal INT' INT
+trap 'die_by_signal TERM' TERM
 
 deadline=$((SECONDS + WAIT_SECS))
 until ssh_ready; do
