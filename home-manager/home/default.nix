@@ -109,6 +109,9 @@ in
         source = ./file/mise;
         recursive = true;
       };
+      # mise が python を入れるたびに、その python 自体へ入れるパッケージ
+      # (mise の python.default_packages_file の既定の場所)。既に入っている版には入らない。
+      ".default-python-packages".source = ./file/.default-python-packages;
       "Library/Application Support/lazygit" = {
         source = ./file/lazygit;
         recursive = true;
