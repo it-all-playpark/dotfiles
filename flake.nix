@@ -168,7 +168,10 @@
               brew_full_upgrade() {
                 echo "Upgrading Homebrew packages..."
                 brew update
-                brew upgrade
+                brew upgrade --formula
+                # .pkg の cask はインストーラ / アンインストールのスクリプトが y/n を聞いて止まるので、
+                # stdin に y を流し続けて無人で進める。sudo は /dev/tty から読むのでパスワード入力は従来どおり
+                yes | brew upgrade --cask
               }
 
               # システムタイプに基づいて適切な設定を使用
@@ -271,7 +274,10 @@
               brew_full_upgrade() {
                 echo "Upgrading Homebrew packages..."
                 brew update
-                brew upgrade
+                brew upgrade --formula
+                # .pkg の cask はインストーラ / アンインストールのスクリプトが y/n を聞いて止まるので、
+                # stdin に y を流し続けて無人で進める。sudo は /dev/tty から読むのでパスワード入力は従来どおり
+                yes | brew upgrade --cask
               }
 
               # システムタイプに基づいて処理
