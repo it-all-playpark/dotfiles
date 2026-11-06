@@ -104,18 +104,30 @@ fi
 
 echo "- interrupt_stops_vm_and_caller_does_not_continue"
 reset "not running"
-# Ctrl-C は前面のプロセスグループ全体に SIGINT を送る。update（外側の bash）から script を呼び、
-# コマンドがグループ全体に SIGINT を送って同じ状況を作る。外側の bash が後続を実行しないことを確かめる。
+# Ctrl-C は端末が前面のプロセスグループ全体に外から SIGINT を送る。update（外側の bash）から script を呼び、
+# コマンドが始まったら perl がグループ全体へ外から SIGINT を送って同じ状況を作る。外側の bash が後続を実行せず
+# SIGINT で死ぬこと（wait status から終了シグナルの番号を取る）を確かめる。
+# グループ内のコマンド自身が kill -INT 0 を打つ形は、外側の bash に SIGINT と子の終了が同時に届き、
+# 子の終了を先に処理する OS（macOS 27 で確認）では script が正しくても外側の bash が後続へ進むので使わない。
 # run-all.sh はテストを & で走らせるので SIGINT が無視された状態で始まり、bash はそれに trap を張れない。
 # 端末から前面で動く update と同じ条件にするため、perl で SIGINT を既定に戻し、テスト自身を巻き込まないよう
 # 新しいプロセスグループを作ってから外側の bash を起動する
 set +e
-OUT="$(perl -e '$SIG{INT} = "DEFAULT"; setpgrp(0, 0); exec @ARGV' \
-  bash -c 'bash "$1" bash -c "kill -INT 0; sleep 0.2"; echo after-build' _ "$SCRIPT" 2>&1)"
+OUT="$(STARTED="$STUB/started" perl -e '
+  $SIG{INT} = "DEFAULT";
+  my $pid = fork;
+  if (!$pid) { setpgrp(0, 0); exec @ARGV or die "exec: $!" }
+  # 負荷が高いと script がコマンドに届くまで数秒かかる。印より先に送ると trap の前に死ぬので長めに待つ
+  for (1 .. 6000) { last if -e $ENV{STARTED}; select(undef, undef, undef, 0.01) }
+  kill "INT", -$pid;
+  waitpid $pid, 0;
+  print "signal=", $? & 127, "\n";
+' bash -c 'bash "$1" bash -c "touch \"\$STARTED\"; sleep 5"; echo after-build' _ "$SCRIPT" 2>&1)"
 RC=$?
 set -e
-if [ "$RC" -eq 130 ] && [[ $OUT != *after-build* ]] && [ "$(final_state)" = "not running" ] &&
-  [[ "$(sudo_log)" == *"launchctl kill TERM"* ]]; then
+rm -f "$STUB/started"
+if [ "$RC" -eq 0 ] && [[ $OUT == *"signal=2"* ]] && [[ $OUT != *after-build* ]] &&
+  [ "$(final_state)" = "not running" ] && [[ "$(sudo_log)" == *"launchctl kill TERM"* ]]; then
   pass "interrupt_stops_vm_and_caller_does_not_continue"
 else
   fail "interrupt_stops_vm_and_caller_does_not_continue" "rc=$RC state=$(final_state) sudo=$(sudo_log) out=$OUT"
