@@ -43,6 +43,7 @@
     "DISABLE_AUTOUPDATER": "1",
     "E2E_BROWSER_SINGLE_PROCESS": "1",
     "FORCE_AUTOUPDATE_PLUGINS": "1",
+    "NEXT_DEV_POLL_INTERVAL_MS": "1000",
     "NODE_USE_ENV_PROXY": "1",
     "NPM_CONFIG_CACHE": "/private/tmp/claude/npm-cache",
     "PNPM_HOME": "~/.local/state/pnpm-sandbox",
