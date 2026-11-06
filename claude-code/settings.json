@@ -699,7 +699,8 @@
         "api-accounting.moneyforward.com",
         "api.box.moneyforward.com",
         "chatgpt.com",
-        "api.openai.com"
+        "api.openai.com",
+        "auth.openai.com"
       ],
       "strictAllowlist": true
     }

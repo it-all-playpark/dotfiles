@@ -28,6 +28,9 @@
 # sandbox が `host is not on the allow list` で拒否していた（thdexd/shakenkan-dev の infra）。
 # 配布物（zip・SHA256SUMS・署名）は github.com の Releases から取り、実体は *.githubusercontent.com に
 # リダイレクトされる。どちらも許可済みなので、足すのは registry.opentofu.org の完全一致 1 件だけ。
+#
+# Codex CLI の sandbox 内の実行（dev-flow の security review）: API は chatgpt.com / api.openai.com、token の更新は
+# auth.openai.com へ行く。auth.openai.com が無いと token の期限切れの後は 401 で起動できない。*.openai.com にはしない。
 
 set -euo pipefail
 
@@ -115,6 +118,22 @@ if jq -e '.sandbox.network.allowedDomains | index("registry.opentofu.org") != nu
   pass "opentofu_registry_host_exact"
 else
   fail "opentofu_registry_host_exact" "missing=registry.opentofu.org"
+fi
+
+# ---------------------------------------------------------------------------
+# codex_hosts_exact: Codex の API と token の更新の 3 ホストが完全一致のエントリで入っている
+# ---------------------------------------------------------------------------
+echo "- codex_hosts_exact"
+missing=()
+for host in chatgpt.com api.openai.com auth.openai.com; do
+  if ! jq -e --arg h "${host}" '.sandbox.network.allowedDomains | index($h) != null' "${SETTINGS}" >/dev/null; then
+    missing+=("${host}")
+  fi
+done
+if [ "${#missing[@]}" -eq 0 ]; then
+  pass "codex_hosts_exact"
+else
+  fail "codex_hosts_exact" "missing=${missing[*]}"
 fi
 
 # ---------------------------------------------------------------------------
