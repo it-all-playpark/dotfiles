@@ -210,6 +210,10 @@ sandbox に塞がれたら:
   （/private/tmp/claude-*/sock では bind が失敗）、完全なパスかディレクトリの配下でだけ効く（2026-10-30 に実測。
   /private/tmp と /tmp のどちらの表記でも通る）。$TMPDIR 全体は sandbox 外の Claude Code 本体も使うので socket 専用の sock だけを開ける。
   ユーザーや uid が増えたら同じ形（/private/tmp/claude-<uid>/sock）の entry を足す。
+- 2026-11-10 tsx の IPC ソケットの置き場 $TMPDIR/tsx-<uid>（/private/tmp/claude-501/tsx-501・/private/tmp/claude-1387796573/tsx-1387796573）を
+  allowUnixSockets に足した: tsx の CLI は起動ごとに os.tmpdir()/tsx-<uid>/<pid>.pipe を listen する（置き場は変えられない）ので、
+  sandbox 内の `tsx prisma/seed.ts` が `listen EPERM` で落ち、shift-bud の pre-push（E2E の seed）が止まっていた。
+  開けるのは tsx 専用のディレクトリだけで、$TMPDIR 全体は開けない。uid が増えたら sock と同じく /private/tmp/claude-<uid>/tsx-<uid> を足す。
 - dangerouslyDisableSandbox は policy で無効。
 - 2026-10-08 git / gh を excludedCommands から撤去（issue #249）: agent-vault（dotfiles#248）で sandbox 内のまま GitHub に
   認証できるようになったため。起動形（cd X && / VAR=x 前置 / リダイレクト / git -C）で一致が外れて EPERM になる問題と、
