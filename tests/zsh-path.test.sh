@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # tests/zsh-path.test.sh
-# home-manager/programs/zsh.nix の envExtra（.zshenv）と initContent（.zshrc）が作る PATH の順序を確かめる。
+# home-manager/programs/zsh.nix の envExtra（.zshenv）と initContent（.zshrc）が作る PATH の順序と、
+# envExtra が export する mise の data / state / config ディレクトリを確かめる。
 # Run from the repo root: bash tests/zsh-path.test.sh
 # Requires: awk, zsh
 #
@@ -60,6 +61,21 @@ run_zsh_path() {
   ' zsh "$@"
 }
 
+# envExtra を source した子プロセスの環境の MISE_DATA_DIR:MISE_STATE_DIR:MISE_CONFIG_DIR を出す。
+# 引数（VAR=value）は親が渡す環境変数として足す
+run_zsh_mise_dirs() {
+  # shellcheck disable=SC2016 # 意図的: 子の zsh が展開する
+  env -i HOME="${FAKE_HOME}" USER=zsh-path-test PATH=/usr/bin:/bin "$@" "${ZSH_BIN}" -f -c '
+    source "$1"
+    env | awk -F= '\''
+      $1 == "MISE_DATA_DIR" { d = substr($0, length($1) + 2) }
+      $1 == "MISE_STATE_DIR" { s = substr($0, length($1) + 2) }
+      $1 == "MISE_CONFIG_DIR" { c = substr($0, length($1) + 2) }
+      END { print d ":" s ":" c }
+    '\''
+  ' zsh "${WORK}/zshenv"
+}
+
 # 1 始まりの位置。無ければ 0
 index_of() {
   local needle="$1" list="$2"
@@ -91,6 +107,28 @@ else
       "${CLAUDE_BIN} が先頭（mise の shims より前）に無い: $(printf '%s' "${noninteractive}" | tr '\n' ':')"
   else
     pass "noninteractive_envExtra_has_mise_shims_after_claude_bin"
+  fi
+
+  # -------------------------------------------------------------------------
+  # mise の data / state / config ディレクトリ（.zshenv だけ）
+  # -------------------------------------------------------------------------
+  echo "- noninteractive_envExtra_sets_mise_dirs_under_home"
+  mise_dirs="$(run_zsh_mise_dirs)"
+  expected_dirs="${FAKE_HOME}/.local/share/mise:${FAKE_HOME}/.local/state/mise:${FAKE_HOME}/.config/mise"
+  if [ "${mise_dirs}" != "${expected_dirs}" ]; then
+    fail "noninteractive_envExtra_sets_mise_dirs_under_home" \
+      "MISE_DATA_DIR:MISE_STATE_DIR:MISE_CONFIG_DIR が ${expected_dirs} でない: ${mise_dirs}"
+  else
+    pass "noninteractive_envExtra_sets_mise_dirs_under_home"
+  fi
+
+  echo "- noninteractive_envExtra_keeps_given_mise_dirs"
+  given_dirs="$(run_zsh_mise_dirs MISE_DATA_DIR=/real/data MISE_STATE_DIR=/real/state MISE_CONFIG_DIR=/real/config)"
+  if [ "${given_dirs}" != "/real/data:/real/state:/real/config" ]; then
+    fail "noninteractive_envExtra_keeps_given_mise_dirs" \
+      "親が渡した値（/real/data:/real/state:/real/config）が残っていない: ${given_dirs}"
+  else
+    pass "noninteractive_envExtra_keeps_given_mise_dirs"
   fi
 
   # -------------------------------------------------------------------------

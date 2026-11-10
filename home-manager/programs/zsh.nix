@@ -19,6 +19,12 @@ in
       # mise の shims。.zshrc を読まない非対話 zsh（launchd 由来の Claude Code セッションの Bash 等）でも
       # node などの mise のツールを見つけられるようにする。fish.nix と同じ shims 方式（理由は fish.nix のコメント）
       export PATH="$HOME/.local/share/mise/shims:$PATH"
+      # mise の data / state / config を既定の場所の絶対パスで固定する。HOME を一時ディレクトリに差し替えるテストの
+      # 子プロセスでも、shims の python3 / node が本物のホームの設定・trust・installs を使う。すでに値があれば
+      # 上書きしない（HOME を差し替えた子の zsh が .zshenv を読み直しても、親が渡した値を保つ）
+      export MISE_DATA_DIR="''${MISE_DATA_DIR:-$HOME/.local/share/mise}"
+      export MISE_STATE_DIR="''${MISE_STATE_DIR:-$HOME/.local/state/mise}"
+      export MISE_CONFIG_DIR="''${MISE_CONFIG_DIR:-$HOME/.config/mise}"
 
       # gh / gcloud / tofu の cwd 連動アカウント shim (dotfiles/claude-code/bin → ~/.claude/bin)。
       # nix-profile の実体より前に置く。設計: docs/specs/2026-09-19-claude-account-env-design.md
