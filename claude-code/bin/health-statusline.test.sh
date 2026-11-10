@@ -259,12 +259,34 @@ jq -nc --arg ts "$(ago $((3 * H)))" --arg root "$root" '{recurring: 5, unreadabl
   >>"$LOGS/sandbox-tune/runs.jsonl"
 expect "21g_sbx_unreadable_transcripts" "sbx 再発5 読めず2 下書き1 3h前"
 
+# --- advisor ---------------------------------------------------------------
+# ~/.claude/settings.json の advisorModel（/advisor が保存する）が文字列のときだけ先頭に出す
+setup_home advisor_only
+printf '%s' '{"advisorModel":"fable","model":"opus"}' >"$HOME_DIR/.claude/settings.json"
+expect "21h_advisor_shown" "advisor fable"
+
+setup_home advisor_off
+printf '%s' '{"model":"opus"}' >"$HOME_DIR/.claude/settings.json"
+log_line "$DAILY" "$(report a $((2 * H)))"
+expect "21i_advisor_omitted_when_unset" "health ✓ 2h前"
+
+setup_home advisor_broken_settings
+printf '{"advisorModel":' >"$HOME_DIR/.claude/settings.json"
+log_line "$DAILY" "$(report a $((2 * H)))"
+expect "21j_advisor_omitted_when_settings_broken" "health ✓ 2h前"
+
 # --- 1 行にまとめる ----------------------------------------------------------
 setup_home both
 log_line "$DAILY" "$(report a $((2 * H)))"
 ok_run $((26 * H)) 3
 ok_run $((3 * H)) 5
 expect "22_both_joined_health_first" "health ✓ 2h前 · sbx 再発5(+2) 3h前"
+
+setup_home all_with_advisor
+printf '%s' '{"advisorModel":"claude-fable-5-2"}' >"$HOME_DIR/.claude/settings.json"
+log_line "$DAILY" "$(report a $((2 * H)))"
+ok_run $((3 * H)) 5
+expect "22b_advisor_joined_first" "advisor claude-fable-5-2 · health ✓ 2h前 · sbx 再発5 3h前"
 
 # ファイルが無ければ空行を出して exit 0。何も書かない
 setup_home no_files

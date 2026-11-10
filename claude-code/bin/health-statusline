@@ -10,8 +10,10 @@
 #     unreadable（読めずに集計から外した transcript の数）、
 #     失敗行は ts と error。recurring の無い古い成功行は sbx の値として使わない）
 #   - runs.jsonl の最後の drafts_root（日次ジョブの issue 下書き置き場）の <実行時刻>/sandbox-tune-issue-*.md（未処理の下書き）
+#   - ~/.claude/settings.json の advisorModel（/advisor が保存する。statusLine の入力 JSON には advisor が無い）
 #
-# 出力（health・sbx の順に ` · ` で繋ぐ。出すものが無い部分は省き、両方無ければ空行）:
+# 出力（advisor・health・sbx の順に ` · ` で繋ぐ。出すものが無い部分は省き、どれも無ければ空行）:
+#   advisor <advisorModel>（/advisor off の戻し忘れに気付くため。文字列で無ければ出さない）
 #   health ✓ <経過> / health ⚠ new<N> regressed<M> <経過> / health ⚠ 止まっている? <経過>（26 時間を超えたら）
 #   sbx 再発<N>(+d|-d|±0) <経過> / sbx 再発<N> <経過>（recurring を持つ比べる成功行が無いとき） / sbx ⚠ 失敗 <経過>
 #   （最後の成功行の unreadable が 1 以上なら <経過> の前に ` 読めず<N>` を、未処理の下書きがあれば ` 下書き<N>` を入れる。最後の成功行に recurring が無ければ sbx の部分は出さない）
@@ -45,8 +47,13 @@ if [ -f "$LOGS/sandbox-tune/runs.jsonl" ]; then
   fi
 fi
 
-# shellcheck disable=SC2016 # $runs / $ARGS は jq の変数
-jq -nr --arg runs "$runs" --argjson drafts "$drafts" '
+settings=""
+if [ -f "$HOME/.claude/settings.json" ]; then
+  settings="$(<"$HOME/.claude/settings.json")"
+fi
+
+# shellcheck disable=SC2016 # $runs / $settings / $ARGS は jq の変数
+jq -nr --arg runs "$runs" --argjson drafts "$drafts" --arg settings "$settings" '
   def epoch: try fromdateiso8601 catch null;
   def ago:
     ([now - ., 0] | max | floor) as $s
@@ -94,7 +101,10 @@ jq -nr --arg runs "$runs" --argjson drafts "$drafts" '
         end
   ] | first) as $sbx
 
-  | [$health, $sbx] | map(strings) | join(" · ")
+  | ([$settings | try fromjson catch null | objects | .advisorModel | strings | select(. != "") | "advisor \(.)"]
+    | first) as $advisor
+
+  | [$advisor, $health, $sbx] | map(strings) | join(" · ")
 ' --args ${reports[@]+"${reports[@]}"} 2>/dev/null || echo
 
 exit 0
