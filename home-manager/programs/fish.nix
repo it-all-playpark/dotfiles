@@ -20,6 +20,11 @@ in
       # activate の前に PATH から外しても同じ。2026-10-08 実測）。shims 方式ではシェルに JAVA_HOME / GOROOT /
       # CARGO_HOME 等が入らない（shims 経由で起動したツールには付く）。mise 外で足したコマンドは mise reshim が要る
       mise activate fish --shims | source
+      # mise の data / state / config を既定の場所の絶対パスで固定する（zsh.nix の envExtra と同じ値・同じ規則）。
+      # すでに値があれば上書きしない
+      set -q MISE_DATA_DIR; or set -gx MISE_DATA_DIR $HOME/.local/share/mise
+      set -q MISE_STATE_DIR; or set -gx MISE_STATE_DIR $HOME/.local/state/mise
+      set -q MISE_CONFIG_DIR; or set -gx MISE_CONFIG_DIR $HOME/.config/mise
 
       # gh / gcloud / tofu の cwd 連動アカウント shim と claude の wrapper (~/.claude/bin)。
       # mise の shims より前に置く（後ろだと mise の claude-code が wrapper より先に見つかる）。
