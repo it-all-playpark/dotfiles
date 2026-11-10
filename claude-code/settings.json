@@ -631,6 +631,8 @@
         "/private/tmp/claude/agent-browser",
         "/private/tmp/claude-501/sock",
         "/private/tmp/claude-1387796573/sock",
+        "/private/tmp/claude-501/tsx-501",
+        "/private/tmp/claude-1387796573/tsx-1387796573",
         "/private/tmp/claude-502"
       ],
       "allowedDomains": [

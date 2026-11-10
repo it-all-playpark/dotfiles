@@ -144,11 +144,13 @@ fi
 # -----------------------------------------------------------------------------
 # settings_allow_unix_sockets_tmpdir_sock: uid ごとの sandbox $TMPDIR/sock（テストのソケットの置き場。
 # docker.test.sh・docker-proxy / vm-egress-proxy のテスト）を通す。allowUnixSockets は glob を受け付けないので
-# uid ごとに完全なパスで書き、$TMPDIR 全体（sandbox 外の Claude Code 本体も使う）は開けない（issue #441）
+# uid ごとに完全なパスで書き、$TMPDIR 全体（sandbox 外の Claude Code 本体も使う）は開けない（issue #441）。
+# tsx の CLI が起動ごとに作る IPC ソケットの置き場 $TMPDIR/tsx-<uid> も uid ごとに通す（tsx prisma/seed.ts 等が
+# listen EPERM で落ち、pre-push の E2E が止まっていた）
 # -----------------------------------------------------------------------------
 echo "- settings_allow_unix_sockets_tmpdir_sock"
 got="$(jq -c '[.sandbox.network.allowUnixSockets[] | select(test("^/private/tmp/claude-(501|1387796573)(/|$)") or test("[*?\\[]"))]' "${SETTINGS}")"
-want='["/private/tmp/claude-501/sock","/private/tmp/claude-1387796573/sock"]'
+want='["/private/tmp/claude-501/sock","/private/tmp/claude-1387796573/sock","/private/tmp/claude-501/tsx-501","/private/tmp/claude-1387796573/tsx-1387796573"]'
 if [ "${got}" = "${want}" ]; then
   pass "settings_allow_unix_sockets_tmpdir_sock"
 else
