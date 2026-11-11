@@ -17,5 +17,6 @@
     ./lima-sandbox.nix
     ./sandbox-docker.nix
     ./vm-egress-proxy.nix
+    ./resource-watchdog.nix
   ];
 }
