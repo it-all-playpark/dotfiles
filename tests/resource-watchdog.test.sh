@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # tests/resource-watchdog.test.sh
-# メモリ逼迫時に mem-triage の safe_kill だけを止める resource-watchdog
+# メモリ逼迫時に mem-triage の safe_kill だけを止め、ディスク逼迫時に docker-vm の dangling image と build cache を
+# prune する resource-watchdog
 # （home-manager/programs/resource-watchdog.nix / home-manager/home/file/resource-watchdog/resource_watchdog.py）を確かめる。
 # Run from anywhere: bash tests/resource-watchdog.test.sh
 # Requires: python3, jq。nix（daemon に届くときだけ。届かなければ tier-2 を skip）
 #
-# tier-1: resource_watchdog.py を一時ディレクトリの HOME で走らせる。本物のプロセスは kill しない
-#         （mem-triage・kill・ps・osascript はスタブ）
+# tier-1: resource_watchdog.py を一時ディレクトリの HOME で走らせる。本物のプロセスは kill せず、本物の docker も呼ばない
+#         （mem-triage・kill・ps・osascript・df・docker はスタブ）
 # tier-2: launchd agent の評価結果
 
 set -euo pipefail
@@ -84,6 +85,35 @@ for a in "$@"; do
   printf '%s' "${a}" >"${WD_CASE}/notify/${n}/${i}"
 done
 EOF
+
+# df -Pk /System/Volumes/Data: n 回目の呼び出しで df-<n>（空きの GB）を返す（無ければ最後にあったもの。
+# 1 つも無ければ 1000GB = 逼迫していない）
+cat >"${STUBS}/df" <<'EOF'
+#!/bin/bash
+[ "$*" = "-Pk /System/Volumes/Data" ] || exit 2
+n=$(($(cat "${WD_CASE}/df.calls" 2>/dev/null || echo 0) + 1))
+echo "${n}" >"${WD_CASE}/df.calls"
+while [ "${n}" -gt 1 ] && [ ! -f "${WD_CASE}/df-${n}" ]; do n=$((n - 1)); done
+gb="$(cat "${WD_CASE}/df-${n}" 2>/dev/null || echo 1000)"
+echo "Filesystem     1024-blocks      Used  Available Capacity Mounted on"
+echo "/dev/disk3s1    1948455240 412455240 $((gb * 1024 * 1024))      22% /System/Volumes/Data"
+EOF
+
+# docker: watchdog は環境を引き継がずに呼ぶので WD_CASE は届かない。ケースのディレクトリは HOME（<case>/home）から
+# 決める。argv と、受け取った DOCKER_CONFIG・BUILDX_CONFIG・DOCKER_HOST を残す。docker.fail があれば
+# VM に届かないときと同じく非 0 で終わる
+cat >"${STUBS}/docker" <<'EOF'
+#!/bin/bash
+case_dir="${HOME%/home}"
+printf '%s\n' "$*" >>"${case_dir}/docker.log"
+printf 'DOCKER_CONFIG=%s BUILDX_CONFIG=%s DOCKER_HOST=%s\n' "${DOCKER_CONFIG-}" "${BUILDX_CONFIG-}" "${DOCKER_HOST-}" \
+  >>"${case_dir}/docker.env"
+if [ -e "${case_dir}/docker.fail" ]; then
+  echo "Cannot connect to the Docker daemon at $2. Is the docker daemon running?" >&2
+  exit 1
+fi
+echo "Total reclaimed space: 0B"
+EOF
 chmod +x "${STUBS}"/*
 
 # report <free_percent> [<4 番目の unit の name>]: mem-triage の JSON。
@@ -126,23 +156,51 @@ new_case() {
   printf '  501 ttys002  fourth\n' >"${CASE}/ps/302"
 }
 
-# run_wd: 実行する。終了コードは RC、stdout + stderr は ${CASE}/out.log
+# run_wd: 実行する。終了コードは RC、stdout + stderr は ${CASE}/out.log。
+# DOCKER_HOST は「呼び出し元の環境を docker に引き継がない」ことを確かめるために入れておく
 run_wd() {
   RC=0
   env -i PATH="${PATH}" HOME="${CASE}/home" WD_CASE="${CASE}" \
     RESOURCE_WATCHDOG_KILL="${STUBS}/kill" \
     RESOURCE_WATCHDOG_PS="${STUBS}/ps" \
     RESOURCE_WATCHDOG_OSASCRIPT="${STUBS}/osascript" \
+    RESOURCE_WATCHDOG_DF="${STUBS}/df" \
+    RESOURCE_WATCHDOG_DOCKER="${STUBS}/docker" \
     RESOURCE_WATCHDOG_RECHECK_DELAY=0 \
+    DOCKER_HOST="unix:///from/the/caller.sock" \
     python3 -I -B "${SCRIPT}" >"${CASE}/out.log" 2>&1 || RC=$?
 }
 
 kills() { cat "${CASE}/kill.log" 2>/dev/null || true; }
 triage_calls() { cat "${CASE}/triage.calls" 2>/dev/null || echo 0; }
+df_calls() { cat "${CASE}/df.calls" 2>/dev/null || echo 0; }
+prunes() { cat "${CASE}/docker.log" 2>/dev/null || true; }
 notifications() { find "${CASE}/notify" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' '; }
-state() { echo "RC=${RC} kills=[$(kills | tr '\n' ',')] triage_calls=$(triage_calls) notifications=$(notifications) log=$(tail -n 5 "${CASE}/out.log")"; }
+# notifications_titled <title>: その title（osascript の 7 番目の引数）の通知の数
+notifications_titled() {
+  local d count=0
+  for d in "${CASE}"/notify/*/; do
+    if [ "$(cat "${d}7" 2>/dev/null || true)" = "$1" ]; then
+      count=$((count + 1))
+    fi
+  done
+  echo "${count}"
+}
+# notification_body <title>: その title の最初の通知の本文
+notification_body() {
+  local d
+  for d in "${CASE}"/notify/*/; do
+    if [ "$(cat "${d}7" 2>/dev/null || true)" = "$1" ]; then
+      cat "${d}8"
+      return
+    fi
+  done
+}
+state() { echo "RC=${RC} kills=[$(kills | tr '\n' ',')] triage_calls=$(triage_calls) df_calls=$(df_calls) prunes=[$(prunes | tr '\n' ',')] notifications=$(notifications) log=$(tail -n 5 "${CASE}/out.log")"; }
 
 ONLY_SAFE_KILL=$'-TERM 201\n-TERM 202'
+MEM_TITLE="resource-watchdog: メモリ逼迫"
+DISK_TITLE="resource-watchdog: ディスク逼迫"
 
 echo "=== resource-watchdog tests ==="
 echo ""
@@ -341,16 +399,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# config_disabled_calls_nothing（AC-7）: enabled=false なら、逼迫していても mem-triage・kill・通知を
-# 一切呼ばずに終了 0 で終わる
+# config_disabled_calls_nothing（AC-7 / #473 AC-5）: enabled=false なら、メモリもディスクも逼迫していても
+# mem-triage・kill・df・docker・通知を一切呼ばずに終了 0 で終わる
 # ---------------------------------------------------------------------------
 echo "- config_disabled_calls_nothing"
 new_case config-disabled
 report 5 >"${CASE}/triage-1.json"
+echo 1 >"${CASE}/df-1"
 mkdir -p "${CASE}/home/.config/resource-watchdog"
 echo 'enabled=false' >"${CASE}/home/.config/resource-watchdog/config"
 run_wd
-if [ "${RC}" -eq 0 ] && [ "$(triage_calls)" = 0 ] && [ -z "$(kills)" ] && [ "$(notifications)" = 0 ]; then
+if [ "${RC}" -eq 0 ] && [ "$(triage_calls)" = 0 ] && [ -z "$(kills)" ] && [ "$(notifications)" = 0 ] &&
+  [ "$(df_calls)" = 0 ] && [ -z "$(prunes)" ]; then
   pass "config_disabled_calls_nothing"
 else
   fail "config_disabled_calls_nothing" "$(state)"
@@ -380,6 +440,141 @@ if [ "${RC}" -eq 0 ] && [ "$(notifications)" = 1 ] && [ "${argc}" = 8 ] && [ "${
   pass "notification_passes_names_as_argv_data"
 else
   fail "notification_passes_names_as_argv_data" "argc=${argc} script=${got_script} body=${body} canaries=${canaries} $(state)"
+fi
+
+echo ""
+echo "--- tier-1: ディスクの段（#473） ---"
+
+DISK_STATE_REL="home/.local/state/resource-watchdog"
+
+# ---------------------------------------------------------------------------
+# disk_prunes_and_notifies_below_threshold（#473 AC-1）: Data ボリュームの空きが既定の閾値 50GB 未満なら、
+# sandbox-docker VM の docker socket に向けて dangling image の prune と build cache の prune を 1 回ずつ呼び
+# （-a・volume・system prune は呼ばない）、掃除の前（49GB）と後（60GB）の空きを 1 回通知する。
+# docker には watchdog 専用の DOCKER_CONFIG・BUILDX_CONFIG を渡し、呼び出し元の DOCKER_HOST は引き継がない。
+# メモリは逼迫していないので kill もメモリの通知も無い
+# ---------------------------------------------------------------------------
+echo "- disk_prunes_and_notifies_below_threshold"
+new_case disk-prune
+report 50 >"${CASE}/triage-1.json"
+echo 49 >"${CASE}/df-1"
+echo 60 >"${CASE}/df-2"
+run_wd
+host="unix://${CASE}/home/.lima/sandbox-docker/sock/docker.sock"
+want_prunes="--host ${host} image prune --force
+--host ${host} builder prune --force"
+want_env="DOCKER_CONFIG=${CASE}/${DISK_STATE_REL}/docker-config BUILDX_CONFIG=${CASE}/${DISK_STATE_REL}/buildx DOCKER_HOST="
+body="$(notification_body "${DISK_TITLE}")"
+if [ "${RC}" -eq 0 ] && [ "$(prunes)" = "${want_prunes}" ] &&
+  [ "$(sort -u "${CASE}/docker.env" 2>/dev/null || true)" = "${want_env}" ] &&
+  [ -d "${CASE}/${DISK_STATE_REL}/docker-config" ] && [ -d "${CASE}/${DISK_STATE_REL}/buildx" ] &&
+  [ "$(notifications)" = 1 ] && [ "$(notifications_titled "${DISK_TITLE}")" = 1 ] &&
+  [[ ${body} == *"49.0GB"*"60.0GB"* ]] && [ -z "$(kills)" ]; then
+  pass "disk_prunes_and_notifies_below_threshold"
+else
+  fail "disk_prunes_and_notifies_below_threshold" "body=${body} env=$(cat "${CASE}/docker.env" 2>/dev/null || true) $(state)"
+fi
+
+# ---------------------------------------------------------------------------
+# disk_noop_at_or_above_threshold（#473 AC-2 / AC-5 の既定値）: config が無ければ閾値は 50GB。空きが 50GB 以上なら
+# prune も通知も呼ばず、測り直しもせず、ディスクの状態ファイルも作らない
+# ---------------------------------------------------------------------------
+echo "- disk_noop_at_or_above_threshold"
+bad=""
+for gb in 50 60; do
+  new_case "disk-noop-${gb}"
+  report 50 >"${CASE}/triage-1.json"
+  echo "${gb}" >"${CASE}/df-1"
+  run_wd
+  if [ "${RC}" -ne 0 ] || [ -n "$(prunes)" ] || [ "$(notifications)" != 0 ] || [ "$(df_calls)" != 1 ] ||
+    [ -e "${CASE}/${DISK_STATE_REL}/disk-last-notified" ]; then
+    bad="${bad} gb=${gb}: $(state)"
+  fi
+done
+if [ -z "${bad}" ]; then
+  pass "disk_noop_at_or_above_threshold"
+else
+  fail "disk_noop_at_or_above_threshold" "${bad}"
+fi
+
+# ---------------------------------------------------------------------------
+# disk_prune_failure_keeps_memory_stage（#473 AC-3）: docker-vm に届かない（prune が非 0 で終わる）ときも、
+# メモリの段は safe_kill の 2 件に SIGTERM を送り、測り直して候補を通知する。prune が失敗した理由
+# （docker の stderr）はログに残る。メモリの状態ファイルは今までどおり時刻 1 行だけで、ディスクの通知時刻は入らない
+# ---------------------------------------------------------------------------
+echo "- disk_prune_failure_keeps_memory_stage"
+new_case disk-prune-fails
+report 19 >"${CASE}/triage-1.json"
+report 18 >"${CASE}/triage-2.json"
+echo 10 >"${CASE}/df-1"
+touch "${CASE}/docker.fail"
+run_wd
+body="$(notification_body "${MEM_TITLE}")"
+mem_state="$(cat "${CASE}/${DISK_STATE_REL}/last-notified" 2>/dev/null || true)"
+if [ "${RC}" -eq 0 ] && [ "$(kills)" = "${ONLY_SAFE_KILL}" ] && [ "$(triage_calls)" = 2 ] &&
+  [ "$(notifications_titled "${MEM_TITLE}")" = 1 ] &&
+  [[ ${body} == *"18%"*"big-app (5G) / claude (2G) / node-dev (1G)" ]] &&
+  [ "$(prunes | wc -l | tr -d ' ')" = 2 ] &&
+  grep -q 'prune できない: docker image prune --force が終了 1: Cannot connect to the Docker daemon' "${CASE}/out.log" &&
+  grep -q 'prune できない: docker builder prune --force が終了 1: Cannot connect to the Docker daemon' "${CASE}/out.log" &&
+  [[ ${mem_state} =~ ^[0-9]+$ ]]; then
+  pass "disk_prune_failure_keeps_memory_stage"
+else
+  fail "disk_prune_failure_keeps_memory_stage" "body=${body} mem_state=${mem_state} $(state)"
+fi
+
+# ---------------------------------------------------------------------------
+# disk_notification_rate_limit（#473 AC-4）: ディスクの通知時刻は、メモリの状態ファイル（last-notified）とは別の
+# ~/.local/state/resource-watchdog/disk-last-notified に残す。メモリの状態ファイルが「さっき通知した」でも
+# ディスクの通知は出て、メモリの状態ファイルは 1 バイトも変わらない。逼迫が続いても 30 分以内は 2 回目を出さず
+# （prune は毎回呼ぶ）、30 分を過ぎたらまた出す
+# ---------------------------------------------------------------------------
+echo "- disk_notification_rate_limit"
+new_case disk-rate-limit
+report 50 >"${CASE}/triage-1.json"
+echo 10 >"${CASE}/df-1"
+mem_state_file="${CASE}/${DISK_STATE_REL}/last-notified"
+disk_state_file="${CASE}/${DISK_STATE_REL}/disk-last-notified"
+mkdir -p "${CASE}/${DISK_STATE_REL}"
+now="$(date +%s)"
+echo "${now}" >"${mem_state_file}"
+cp "${mem_state_file}" "${CASE}/last-notified.orig"
+run_wd
+after_first="$(notifications_titled "${DISK_TITLE}")"
+recorded="$(cat "${disk_state_file}" 2>/dev/null || echo 0)"
+run_wd
+after_second="$(notifications_titled "${DISK_TITLE}")"
+echo "$((now - 1700))" >"${disk_state_file}"
+run_wd
+after_28min="$(notifications_titled "${DISK_TITLE}")"
+echo "$((now - 1801))" >"${disk_state_file}"
+run_wd
+after_30min="$(notifications_titled "${DISK_TITLE}")"
+if [ "${after_first}" = 1 ] && [[ ${recorded} =~ ^[0-9]+$ ]] &&
+  [ "$((recorded - now))" -ge 0 ] && [ "$((recorded - now))" -le 60 ] &&
+  [ "${after_second}" = 1 ] && [ "${after_28min}" = 1 ] && [ "${after_30min}" = 2 ] &&
+  [ "$(($(cat "${disk_state_file}") - now))" -ge 0 ] && [ "$(prunes | wc -l | tr -d ' ')" = 8 ] &&
+  cmp -s "${mem_state_file}" "${CASE}/last-notified.orig" && [ "$(notifications)" = 2 ]; then
+  pass "disk_notification_rate_limit"
+else
+  fail "disk_notification_rate_limit" "recorded=${recorded} now=${now} first=${after_first} second=${after_second} 28min=${after_28min} 30min=${after_30min} mem_state=$(cat "${mem_state_file}") $(state)"
+fi
+
+# ---------------------------------------------------------------------------
+# config_overrides_disk_threshold（#473 AC-5）: config の disk_free_min_gb で閾値を上書きできる。空き 60GB は
+# 既定（50）では何もしない（disk_noop_at_or_above_threshold）が、閾値 100 なら prune して通知する
+# ---------------------------------------------------------------------------
+echo "- config_overrides_disk_threshold"
+new_case config-disk-threshold
+report 50 >"${CASE}/triage-1.json"
+echo 60 >"${CASE}/df-1"
+mkdir -p "${CASE}/home/.config/resource-watchdog"
+printf '# 空きがこれ未満なら逼迫\ndisk_free_min_gb = 100\n' >"${CASE}/home/.config/resource-watchdog/config"
+run_wd
+if [ "${RC}" -eq 0 ] && [ "$(prunes | wc -l | tr -d ' ')" = 2 ] && [ "$(notifications_titled "${DISK_TITLE}")" = 1 ]; then
+  pass "config_overrides_disk_threshold"
+else
+  fail "config_overrides_disk_threshold" "$(state)"
 fi
 
 echo ""
@@ -418,6 +613,7 @@ fi
 
 if [ "${system}" != "aarch64-darwin" ]; then
   skip "launchd_agent_runs_every_120s" "nix daemon unreachable or not aarch64-darwin"
+  skip "launchd_agent_passes_nix_store_docker" "nix daemon unreachable or not aarch64-darwin"
 else
   # ---------------------------------------------------------------------------
   # launchd_agent_runs_every_120s（AC-1）: home-manager/programs/default.nix が import する module が
@@ -438,6 +634,7 @@ else
       out = agent.config.StandardOutPath == \"\${home}/.local/state/resource-watchdog.out.log\";
       err = agent.config.StandardErrorPath == \"\${home}/.local/state/resource-watchdog.err.log\";
       script = hm.pkgs.lib.last agent.config.ProgramArguments;
+      docker = agent.config.EnvironmentVariables.RESOURCE_WATCHDOG_DOCKER;
     }
   " >"${TMPROOT}/agent.json" 2>"${TMPROOT}/nix.err" || echo '{}' >"${TMPROOT}/agent.json"
   got="$(jq -c '{enable, Label, StartInterval, out, err}' "${TMPROOT}/agent.json")"
@@ -447,6 +644,18 @@ else
     pass "launchd_agent_runs_every_120s"
   else
     fail "launchd_agent_runs_every_120s" "got=${got} script=${script:-<none>} err=$(tail -n 3 "${TMPROOT}/nix.err")"
+  fi
+
+  # ---------------------------------------------------------------------------
+  # launchd_agent_passes_nix_store_docker（#473）: watchdog が prune に使う docker CLI は nix store のもの
+  # （docker-vm の wrapper でも、PATH の docker でもない）
+  # ---------------------------------------------------------------------------
+  echo "- launchd_agent_passes_nix_store_docker"
+  docker="$(jq -r '.docker // empty' "${TMPROOT}/agent.json")"
+  if [[ ${docker} =~ ^/nix/store/[^/]+/bin/docker$ ]]; then
+    pass "launchd_agent_passes_nix_store_docker"
+  else
+    fail "launchd_agent_passes_nix_store_docker" "docker=${docker:-<none>} err=$(tail -n 3 "${TMPROOT}/nix.err")"
   fi
 fi
 

@@ -1,30 +1,50 @@
 """resource-watchdog: メモリが逼迫したら、mem-triage が「聞かずに消してよい」と判定したもの（safe_kill）だけを止める。
+ディスクが逼迫したら、docker-vm（sandbox-docker VM）の dangling image と build cache だけを prune する。
 
 launchd agent com.playpark.resource-watchdog（home-manager/programs/resource-watchdog.nix）が 120 秒ごとに起動する。
+config（~/.config/resource-watchdog/config）を読み、enabled=false ならそこで終わる。そうでなければメモリの段、
+ディスクの段の順に走らせる。片方が何もせずに終わっても（解決できない・測れない・prune が失敗した）、もう片方は走る。
 
-  1. config（~/.config/resource-watchdog/config）を読む。enabled=false ならここで終わる
-  2. ~/.claude/plugins/installed_plugins.json の playpark-skills の installPath から mem-triage を解決して実行する
-  3. summary.free_percent が閾値以上なら何もしない
-  4. 閾値未満なら safe_kill[] の pid にだけ SIGTERM を送る（SIGKILL は送らない）。送る直前に、その pid の今の
+メモリの段:
+
+  1. ~/.claude/plugins/installed_plugins.json の playpark-skills の installPath から mem-triage を解決して実行する
+  2. summary.free_percent が閾値以上なら何もしない
+  3. 閾値未満なら safe_kill[] の pid にだけ SIGTERM を送る（SIGKILL は送らない）。送る直前に、その pid の今の
      ppid・tty・コマンドラインが mem-triage の出力と同じか（pid が再利用されていないか）を確かめる
-  5. kill したら測り直す。まだ閾値未満なら（kill するものが無かったときは最初の計測のまま）、safe_kill 以外の units[] の上位 3 件を通知する（kill はしない）。
+  4. kill したら測り直す。まだ閾値未満なら（kill するものが無かったときは最初の計測のまま）、safe_kill 以外の units[] の上位 3 件を通知する（kill はしない）。
      通知は 30 分に 1 回まで（最後に通知した時刻を状態ファイルに残す）
 
 orphan かどうかの判定はここに持たない（mem-triage の safe_kill に従うだけ）。
 
+ディスクの段:
+
+  1. df で Data ボリューム（/System/Volumes/Data）の空きを測る。閾値以上なら何もしない
+  2. 閾値未満なら `docker image prune --force` と `docker builder prune --force` を sandbox-docker VM の docker socket
+     （~/.lima/sandbox-docker/sock/docker.sock）に向けて実行する。消えるのは dangling image と build cache だけで、
+     タグ付きのイメージ・volume・コンテナは消さない（-a / --volumes / system prune は使わない）。
+     逼迫している間は起動のたびに prune する
+  3. 測り直して、掃除の前後の空きを通知する。prune が失敗しても（VM が止まっている等）理由を stderr に書いて通知する。
+     通知は 30 分に 1 回まで。最後に通知した時刻はメモリの段の状態ファイル（last-notified）とは別の
+     disk-last-notified に残す
+
 sandbox の外で動くので、sandbox の中から書ける場所のプログラムや設定は実行も source もしない。config は
 key=value として読むだけ。mem-triage の出力（unit の name・args）は sandbox の中のプロセスが決められる文字列なので、
 通知には argv のデータとしてだけ渡し、AppleScript やシェルの式には埋め込まない。
+docker は docker-vm の wrapper を使わず（wrapper の BUILDX_CONFIG は sandbox の中からも書ける /private/tmp/claude の下）、
+RESOURCE_WATCHDOG_DOCKER の docker CLI（nix store）を、DOCKER_CONFIG と BUILDX_CONFIG を sandbox から書けない
+~/.local/state/resource-watchdog/ の下に向けて呼ぶ。PATH の docker は探さない。
 
-解決できない・読めない・測れないときは、kill も通知もせず、理由を stderr に書いて終了 0 で終わる
+解決できない・読めない・測れないときは、その段では kill も prune も通知もせず、理由を stderr に書いて終了 0 で終わる
 （launchd に失敗として扱わせない。次の起動でまた試す）。
 
 設定（key=value。# 以降はコメント）:
-  enabled=false               次の起動から何もしない
+  enabled=false               次の起動から何もしない（メモリの段もディスクの段も）
   free_percent_threshold=20   memory_pressure の空き % がこれ未満なら逼迫とみなす
+  disk_free_min_gb=50         Data ボリュームの空き（GiB）がこれ未満なら逼迫とみなす
 
 installed_plugins.json・config・状態ファイルの場所は HOME から決まる（テストは HOME を一時ディレクトリにする）。
-環境変数 RESOURCE_WATCHDOG_KILL / _PS / _OSASCRIPT / _RECHECK_DELAY はテストがコマンドと待ち時間を差し替えるための
+環境変数 RESOURCE_WATCHDOG_DOCKER は launchd agent が nix store の docker CLI を渡す（無ければ prune しない）。
+RESOURCE_WATCHDOG_KILL / _PS / _OSASCRIPT / _DF / _RECHECK_DELAY はテストがコマンドと待ち時間を差し替えるための
 もの。launchd agent では設定しない。
 """
 
@@ -44,6 +64,16 @@ TRIAGE_TIMEOUT_SEC = 60
 # mem-triage が args を切り詰める長さ（117 文字 + "..."）
 SHORT_LEN = 120
 NOTIFY_TITLE = "resource-watchdog: メモリ逼迫"
+DEFAULT_DISK_FREE_MIN_GB = 50
+DISK_VOLUME = "/System/Volumes/Data"
+DISK_NOTIFY_TITLE = "resource-watchdog: ディスク逼迫"
+DF_TIMEOUT_SEC = 30
+DOCKER_TIMEOUT_SEC = 300
+# dangling image と build cache だけ。-a / --volumes / system prune は足さない（タグ付きのイメージ・volume・コンテナは消さない）
+DOCKER_PRUNES = [
+    ["image", "prune", "--force"],
+    ["builder", "prune", "--force"],
+]
 # 文字列はすべて argv で受け取る。この 3 行にデータを埋め込まない
 NOTIFY_SCRIPT = [
     "on run argv",
@@ -69,7 +99,11 @@ def env_command(name, default):
 
 
 def load_config(path):
-    config = {"enabled": True, "threshold": DEFAULT_THRESHOLD}
+    config = {
+        "enabled": True,
+        "threshold": DEFAULT_THRESHOLD,
+        "disk_free_min_gb": DEFAULT_DISK_FREE_MIN_GB,
+    }
     try:
         with open(path, encoding="utf-8") as f:
             lines = f.read().splitlines()
@@ -88,6 +122,14 @@ def load_config(path):
             else:
                 log(
                     f"config の free_percent_threshold が整数でない（既定値 {DEFAULT_THRESHOLD} を使う）: {value!r}",
+                    sys.stderr,
+                )
+        elif key == "disk_free_min_gb":
+            if value.isdigit():
+                config["disk_free_min_gb"] = int(value)
+            else:
+                log(
+                    f"config の disk_free_min_gb が整数でない（既定値 {DEFAULT_DISK_FREE_MIN_GB} を使う）: {value!r}",
                     sys.stderr,
                 )
     return config
@@ -242,11 +284,11 @@ def notified_recently(state_file, now):
     return 0 <= now - last < NOTIFY_INTERVAL_SEC
 
 
-def notify(body, osascript, state_file, now):
+def notify(title, body, osascript, state_file, now):
     argv = [osascript]
     for line in NOTIFY_SCRIPT:
         argv += ["-e", line]
-    argv += [NOTIFY_TITLE, body]
+    argv += [title, body]
     try:
         code = subprocess.run(argv, stdin=subprocess.DEVNULL, check=False).returncode
     except OSError as e:
@@ -261,11 +303,111 @@ def notify(body, osascript, state_file, now):
         log(f"通知した: {json.dumps(body, ensure_ascii=False)}")
 
 
-def run():
-    home = os.path.expanduser("~")
-    config = load_config(os.path.join(home, ".config", "resource-watchdog", "config"))
-    if not config["enabled"]:
+def disk_free_gb(df):
+    """Data ボリュームの空き（GiB）。"""
+    try:
+        result = subprocess.run(
+            [df, "-Pk", DISK_VOLUME],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=DF_TIMEOUT_SEC,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Skip(f"df を実行できない: {e}") from e
+    if result.returncode != 0:
+        raise Skip(f"df が終了 {result.returncode}: {result.stderr.strip()[-300:]}")
+    # 2 行目が Filesystem / 1024-blocks / Used / Available / …
+    lines = result.stdout.strip().splitlines()
+    fields = lines[-1].split() if len(lines) >= 2 else []
+    if len(fields) < 4 or not fields[3].isdigit():
+        raise Skip(f"df の出力を読めない: {result.stdout.strip()[-300:]!r}")
+    return int(fields[3]) / (1024 * 1024)
+
+
+def prune_docker(docker, home):
+    """dangling image と build cache を prune する。失敗した理由のリストを返す（空なら全部成功）。"""
+    if not docker:
+        return ["RESOURCE_WATCHDOG_DOCKER が無い"]
+    state_dir = os.path.join(home, ".local", "state", "resource-watchdog")
+    # docker CLI が読む設定・plugin と buildx の状態を、sandbox から書けない watchdog 専用の場所にする。
+    # 環境は引き継がない（DOCKER_HOST / DOCKER_CONTEXT 等で接続先や設定を差し替えさせない）
+    env = {
+        "HOME": home,
+        "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+        "DOCKER_CONFIG": os.path.join(state_dir, "docker-config"),
+        "BUILDX_CONFIG": os.path.join(state_dir, "buildx"),
+    }
+    try:
+        os.makedirs(env["DOCKER_CONFIG"], exist_ok=True)
+        os.makedirs(env["BUILDX_CONFIG"], exist_ok=True)
+    except OSError as e:
+        return [f"{state_dir} の下にディレクトリを作れない: {e}"]
+    host = "unix://" + os.path.join(
+        home, ".lima", "sandbox-docker", "sock", "docker.sock"
+    )
+    failures = []
+    for prune in DOCKER_PRUNES:
+        label = "docker " + " ".join(prune)
+        try:
+            result = subprocess.run(
+                [docker, "--host", host, *prune],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=DOCKER_TIMEOUT_SEC,
+                env=env,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            failures.append(f"{label} を実行できない: {e}")
+            continue
+        if result.returncode != 0:
+            failures.append(
+                f"{label} が終了 {result.returncode}: {result.stderr.strip()[-300:]}"
+            )
+            continue
+        # 最後の行が "Total reclaimed space: …" / "Total: …"
+        last = result.stdout.strip().splitlines()[-1:]
+        log(f"{label}: {json.dumps(last[0] if last else '', ensure_ascii=False)}")
+    return failures
+
+
+def disk_stage(config, home):
+    df = env_command("DF", "/bin/df")
+    threshold = config["disk_free_min_gb"]
+    before = disk_free_gb(df)
+    if before >= threshold:
         return
+    log(f"ディスクの空き {before:.1f}GB が閾値 {threshold}GB 未満")
+    failures = prune_docker(os.environ.get("RESOURCE_WATCHDOG_DOCKER"), home)
+    for failure in failures:
+        log(f"prune できない: {failure}", sys.stderr)
+    after = disk_free_gb(df)
+    state_file = os.path.join(
+        home, ".local", "state", "resource-watchdog", "disk-last-notified"
+    )
+    now = int(time.time())
+    if notified_recently(state_file, now):
+        return
+    body = (
+        f"docker-vm の prune 前 {before:.1f}GB → 後 {after:.1f}GB（閾値 {threshold}GB）"
+    )
+    if failures:
+        body += "。prune に失敗（resource-watchdog.err.log）"
+    notify(
+        DISK_NOTIFY_TITLE,
+        body,
+        env_command("OSASCRIPT", "/usr/bin/osascript"),
+        state_file,
+        now,
+    )
+
+
+def memory_stage(config, home):
     threshold = config["threshold"]
     mem_triage = resolve_mem_triage(
         os.path.join(home, ".claude", "plugins", "installed_plugins.json")
@@ -293,14 +435,26 @@ def run():
     if notified_recently(state_file, now):
         return
     body = f"空き {free}%（閾値 {threshold}%）。候補: " + " / ".join(candidates(report))
-    notify(body, env_command("OSASCRIPT", "/usr/bin/osascript"), state_file, now)
+    notify(
+        NOTIFY_TITLE,
+        body,
+        env_command("OSASCRIPT", "/usr/bin/osascript"),
+        state_file,
+        now,
+    )
 
 
 def main():
-    try:
-        run()
-    except Skip as e:
-        log(f"何もしない: {e}", sys.stderr)
+    home = os.path.expanduser("~")
+    config = load_config(os.path.join(home, ".config", "resource-watchdog", "config"))
+    if not config["enabled"]:
+        return 0
+    # メモリの段が先（prune は時間がかかりうる）。片方が何もせずに終わっても、もう片方は走らせる
+    for name, stage in (("メモリ", memory_stage), ("ディスク", disk_stage)):
+        try:
+            stage(config, home)
+        except Skip as e:
+            log(f"{name}の段は何もしない: {e}", sys.stderr)
     return 0
 
 
