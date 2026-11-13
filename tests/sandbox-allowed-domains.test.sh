@@ -31,6 +31,10 @@
 #
 # Codex CLI の sandbox 内の実行（dev-flow の security review）: API は chatgpt.com / api.openai.com、token の更新は
 # auth.openai.com へ行く。auth.openai.com が無いと token の期限切れの後は 401 で起動できない。*.openai.com にはしない。
+#
+# issue #478: sandbox 内の `playwright install` はブラウザを cdn.playwright.dev から取り、sandbox が
+# `host is not on the allow list` で拒否していた。実測で拒否されたこの 1 ホストだけを完全一致で足し、
+# *.playwright.dev や予備の配布元（ミラー）は足さない。
 
 set -euo pipefail
 
@@ -160,6 +164,18 @@ if jq -e '.sandbox.network.allowedDomains | index("binaries.prisma.sh") != null'
   pass "prisma_engine_host_exact"
 else
   fail "prisma_engine_host_exact" "missing=binaries.prisma.sh"
+fi
+
+# ---------------------------------------------------------------------------
+# playwright_cdn_host_exact: cdn.playwright.dev が完全一致のエントリで入っている（issue #478）。
+# env の PLAYWRIGHT_BROWSERS_PATH でブラウザの置き場を sandbox 専用の空の場所に向けたので、
+# sandbox 内の playwright install はそこへブラウザを取りに行く。*.playwright.dev にはしない（wildcard_entries_fixed）
+# ---------------------------------------------------------------------------
+echo "- playwright_cdn_host_exact"
+if jq -e '.sandbox.network.allowedDomains | index("cdn.playwright.dev") != null' "${SETTINGS}" >/dev/null; then
+  pass "playwright_cdn_host_exact"
+else
+  fail "playwright_cdn_host_exact" "missing=cdn.playwright.dev"
 fi
 
 # ---------------------------------------------------------------------------

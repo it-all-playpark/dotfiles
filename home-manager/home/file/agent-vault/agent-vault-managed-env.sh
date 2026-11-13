@@ -101,6 +101,7 @@ if [ -n "$token" ] && [ -s "$ca_bundle" ] && (: <>"/dev/tcp/127.0.0.1/$port") 2>
       AGENT_BROWSER_SOCKET_DIR: null,
       CODEX_HOME: null,
       NPM_CONFIG_CACHE: null,
+      PLAYWRIGHT_BROWSERS_PATH: null,
       PNPM_HOME: null,
       UV_CACHE_DIR: null,
       XDG_CACHE_HOME: null,
@@ -120,6 +121,7 @@ else
       AGENT_BROWSER_SOCKET_DIR: null,
       CODEX_HOME: null,
       NPM_CONFIG_CACHE: null,
+      PLAYWRIGHT_BROWSERS_PATH: null,
       PNPM_HOME: null,
       UV_CACHE_DIR: null,
       XDG_CACHE_HOME: null

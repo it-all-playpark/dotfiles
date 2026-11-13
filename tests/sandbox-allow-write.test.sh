@@ -253,6 +253,26 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# playwright_browsers_path_is_sandbox_only
+# issue #478: Playwright の版が上がって手元に無い rev のブラウザが要るとき、sandbox 内の playwright install は
+# 既定の置き場 ~/Library/Caches/ms-playwright に書けない。そこは sandbox の外の Playwright が実行するブラウザの
+# 置き場なので開けない。env の PLAYWRIGHT_BROWSERS_PATH で sandbox 専用の場所（/private/tmp/claude/ 配下。
+# uv・XDG・npm のキャッシュとは別）に向ける。
+# ---------------------------------------------------------------------------
+echo "- playwright_browsers_path_is_sandbox_only"
+playwright_browsers="$(jq -r '.env.PLAYWRIGHT_BROWSERS_PATH // ""' "${SETTINGS}")"
+playwright_rel="chromium_headless_shell-1254/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+if [[ ${playwright_browsers} == /private/tmp/claude/?* ]] &&
+  [ "${playwright_browsers}" != "${uv_cache_dir}" ] && [ "${playwright_browsers}" != "${xdg_cache_home}" ] &&
+  [ "${playwright_browsers}" != "${npm_cache}" ] &&
+  write_allowed "${playwright_browsers}/${playwright_rel}" &&
+  ! write_allowed "${HOME}/Library/Caches/ms-playwright/${playwright_rel}"; then
+  pass "playwright_browsers_path_is_sandbox_only"
+else
+  fail "playwright_browsers_path_is_sandbox_only" "env.PLAYWRIGHT_BROWSERS_PATH=${playwright_browsers:-<unset>} must be a dedicated dir under /private/tmp/claude/ covered by allowWrite, and ~/Library/Caches/ms-playwright must not be writable"
+fi
+
+# ---------------------------------------------------------------------------
 # gcloud_account_config_dirs_writable
 # account-exec はアカウントごとの CLOUDSDK_CONFIG（account-map の gcloud_config_dir、
 # ~/.config/gcloud-<account>）で gcloud を起動する。gcloud は読み取り系のコマンドでも
