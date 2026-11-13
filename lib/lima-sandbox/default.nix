@@ -4,8 +4,10 @@
 # どこにも VM から直接は届かない。
 #
 # 素の Lima（vz）の usernet は 3 か所で VM を外に通す。どれも設定項目が無いのでパッチで塞ぐ:
-#   1. pkg/networks/usernet/gvproxy.go の NAT `gatewayIP: "127.0.0.1"`（ハードコード）で、
-#      192.168.5.2 / host.lima.internal 宛てが Mac の 127.0.0.1 に届く → NAT の行を消す
+#   1. pkg/networks/usernet/gvproxy.go の natTable() が返す NAT `gatewayIP: "127.0.0.1"` で、
+#      192.168.5.2 / host.lima.internal 宛てが Mac の 127.0.0.1 に届く → NAT を空にする。
+#      上流の DisableHostLoopback は宛先を 0.0.0.1 に書き換え、deny.go が 192.168.5.2:3128 を
+#      見分けられなくなるので使わない
 #   2. vendor の gvisor-tap-vsock の TCP / UDP forwarder は、VM が指定した宛先に host のプロセスから
 #      net.Dial する → deny.go で、TCP は 192.168.5.2:3128 だけを vm-egress-proxy の Unix ソケットに繋ぎ、
 #      それ以外（UDP は全部）を拒否する。deny_test.go を checkPhase で走らせる
@@ -20,7 +22,7 @@
 pkgs.lima.overrideAttrs (old: {
   postPatch = (old.postPatch or "") + ''
     substituteInPlace pkg/networks/usernet/gvproxy.go \
-      --replace-fail 'gatewayIP: "127.0.0.1",' ""
+      --replace-fail 'return map[string]string{gatewayIP: "127.0.0.1"}' 'return map[string]string{}'
   '';
 
   # vendor は configurePhase が goModules から写すので、置くのはその後（読み取り専用で写るので u+w）
@@ -32,11 +34,11 @@ pkgs.lima.overrideAttrs (old: {
     cp ${./dns_deny.go} "$svc/dns/dns_deny.go"
     cp ${./dns_deny_test.go} "$svc/dns/dns_deny_test.go"
     substituteInPlace "$svc/forwarder/tcp.go" \
-      --replace-fail 'outbound, err := net.Dial("tcp",' 'outbound, err := dialTCP("tcp",'
+      --replace-fail 'outbound, err := net.DialTimeout("tcp",' 'outbound, err := dialTCP("tcp",'
     substituteInPlace "$svc/forwarder/udp.go" \
       --replace-fail 'natLock.Unlock()' 'natLock.Unlock()
     		if deniedUDP(net.JoinHostPort(localAddress.String(), strconv.Itoa(int(r.ID().LocalPort)))) {
-    			return
+    			return true
     		}'
     substituteInPlace "$svc/dns/dns.go" \
       --replace-fail 'resolver := h.upstream' 'if h.refuseUpstream(m, q) {
