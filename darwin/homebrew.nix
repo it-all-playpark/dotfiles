@@ -34,6 +34,8 @@ in
     ];
     casks = [
       # インストールするCaskアプリケーションのリスト
+      # Antigravity 2.0 のデスクトップアプリ（旧エディタは別 cask の antigravity-ide）
+      "antigravity"
       "box-drive"
       "box-tools"
       "chatgpt"
