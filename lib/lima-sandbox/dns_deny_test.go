@@ -62,10 +62,10 @@ func TestOnlyInternalNamesAreAnswered(t *testing.T) {
 	}{
 		{"host.lima.internal.", dns.TypeA, dns.RcodeSuccess, "192.168.5.2"},
 		{"lima-sandbox-docker.internal.", dns.TypeA, dns.RcodeSuccess, "192.168.5.15"},
-		// zone 内の名前でも A 以外（TXT 等）は、素の dns.go では上流に回る。答えなし（NOERROR）にする
+		// zone 内にある名前の A 以外（TXT 等）は答えなし（NOERROR）、zone 内に無い名前は NXDOMAIN
 		{"host.lima.internal.", dns.TypeAAAA, dns.RcodeSuccess, ""},
 		{"host.lima.internal.", dns.TypeTXT, dns.RcodeSuccess, ""},
-		{"c2VjcmV0.lima.internal.", dns.TypeTXT, dns.RcodeSuccess, ""},
+		{"c2VjcmV0.lima.internal.", dns.TypeTXT, dns.RcodeNameError, ""},
 		{"unknown.internal.", dns.TypeA, dns.RcodeNameError, ""},
 		{"example.com.", dns.TypeA, dns.RcodeNameError, ""},
 		{"example.com.", dns.TypeAAAA, dns.RcodeNameError, ""},

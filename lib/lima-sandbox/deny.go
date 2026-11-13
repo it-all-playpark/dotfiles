@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -33,10 +34,10 @@ var proxySocket = func() (string, error) {
 
 var errDenied = errors.New("lima-sandbox: only the egress proxy is reachable from the VM")
 
-// tcp.go の net.Dial("tcp", address) の代わり。address は tcp.go が組み立てる host:port
+// tcp.go の net.DialTimeout("tcp", address, timeout) の代わり。address は tcp.go が組み立てる host:port
 // （IPv6 は IPv4-mapped も含めて [addr]:port）で、プロキシの宛先と文字列で完全に一致するものだけ通す。
 // 拒否すると tcp.go が RST を返すので、VM 側では接続の拒否として見える
-func dialTCP(network, address string) (net.Conn, error) {
+func dialTCP(network, address string, timeout time.Duration) (net.Conn, error) {
 	if network != "tcp" || address != proxyAddress {
 		log.Warnf("lima-sandbox: denied %s to %s (only tcp %s is reachable)", network, address, proxyAddress)
 		return nil, fmt.Errorf("%w: %s %s", errDenied, network, address)
@@ -45,7 +46,7 @@ func dialTCP(network, address string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, err := net.Dial("unix", path)
+	conn, err := net.DialTimeout("unix", path, timeout)
 	if err != nil {
 		log.Warnf("lima-sandbox: egress proxy %s is unreachable: %v", path, err)
 	}

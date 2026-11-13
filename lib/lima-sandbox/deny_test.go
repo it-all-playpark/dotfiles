@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"gvisor.dev/gvisor/pkg/tcpip"
 )
@@ -60,7 +61,7 @@ func listenProxy(t *testing.T) net.Listener {
 func TestDialTCPReachesOnlyTheProxy(t *testing.T) {
 	listenProxy(t)
 
-	conn, err := dialTCP("tcp", tcpAddress(v4("192.168.5.2"), 3128))
+	conn, err := dialTCP("tcp", tcpAddress(v4("192.168.5.2"), 3128), time.Second)
 	if err != nil {
 		t.Fatalf("dialTCP(192.168.5.2:3128) = %v, want the proxy socket", err)
 	}
@@ -95,7 +96,7 @@ func TestDialTCPReachesOnlyTheProxy(t *testing.T) {
 		{"IPv4-mapped proxy address", tcpAddress(v6("::ffff:192.168.5.2"), 3128)},
 	}
 	for _, c := range denied {
-		conn, err := dialTCP("tcp", c.addr)
+		conn, err := dialTCP("tcp", c.addr, time.Second)
 		if err == nil {
 			conn.Close()
 			t.Errorf("dialTCP(%s) [%s] succeeded, want denied", c.addr, c.what)
@@ -105,7 +106,7 @@ func TestDialTCPReachesOnlyTheProxy(t *testing.T) {
 	}
 
 	// tcp.go は "tcp" でしか呼ばないが、ほかの network ではプロキシの宛先でも通さない
-	if conn, err := dialTCP("udp", tcpAddress(v4("192.168.5.2"), 3128)); err == nil {
+	if conn, err := dialTCP("udp", tcpAddress(v4("192.168.5.2"), 3128), time.Second); err == nil {
 		conn.Close()
 		t.Errorf("dialTCP(udp, 192.168.5.2:3128) succeeded, want denied")
 	}
@@ -114,7 +115,7 @@ func TestDialTCPReachesOnlyTheProxy(t *testing.T) {
 func TestDialTCPFailsWhenTheProxyIsDown(t *testing.T) {
 	ln := listenProxy(t)
 	ln.Close()
-	if conn, err := dialTCP("tcp", tcpAddress(v4("192.168.5.2"), 3128)); err == nil {
+	if conn, err := dialTCP("tcp", tcpAddress(v4("192.168.5.2"), 3128), time.Second); err == nil {
 		conn.Close()
 		t.Errorf("dialTCP to a closed proxy socket succeeded")
 	}
