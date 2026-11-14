@@ -75,19 +75,10 @@ exec "$(command -v mv)" "\$@"
 EOF
 chmod +x "${STUB_BIN}/chown" "${STUB_BIN}/mv"
 
-# wrapper が exec する偽の実体: wrapper が付ける env のうち、付いているものを K=V で 1 行ずつ出す
+# wrapper が exec する偽の実体: 受け取った env 全体を K=V で 1 行ずつ出す（変数名を決め打ちしない）
 cat >"${FAKE_BIN}/claude" <<'EOF'
 #!/usr/bin/env bash
-for v in HTTPS_PROXY HTTP_PROXY NO_PROXY NODE_EXTRA_CA_CERTS SSL_CERT_FILE GIT_SSL_CAINFO \
-  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE CLAUDE_GH_VAULT HOST_EXEC_ENV GIT_CONFIG_COUNT; do
-  if [ -n "${!v+x}" ]; then printf '%s=%s\n' "$v" "${!v}"; fi
-done
-i=0
-while [ "$i" -lt "${GIT_CONFIG_COUNT:-0}" ]; do
-  k="GIT_CONFIG_KEY_$i" v="GIT_CONFIG_VALUE_$i"
-  printf '%s=%s\n%s=%s\n' "$k" "${!k}" "$v" "${!v}"
-  i=$((i + 1))
-done
+env
 EOF
 chmod +x "${FAKE_BIN}/claude"
 # wrapper のシェバン（#!/usr/bin/env bash）と内部で使うコマンドだけを置いた dir
@@ -132,11 +123,17 @@ run_script() {
   ERR="$(cat "${TMPROOT}/err")"
 }
 
-# wrapper_env [VAR=value...]: 同じ条件で wrapper が実体に付ける env（K=V を sort したもの）
+# wrapper_env [VAR=value...]: 同じ条件で wrapper が実体に付ける env（K=V を sort したもの）。
+# 偽の実体を直接起動したときの env（起動前の env）と、wrapper 経由の env を比べ、wrapper 経由にだけある行
+# （起動前に無かった変数・値が変わった変数）を出す。wrapper が付ける変数名をここに並べない
 wrapper_env() {
   env -i HOME="${HOME_T}" PATH="${FAKE_BIN}:${UTIL_BIN}" \
     AGENT_VAULT_PROXY_PORT="${OPEN_PORT}" \
-    "$@" "${WRAPPER}" 2>/dev/null | sort
+    "$@" "${FAKE_BIN}/claude" 2>/dev/null | sort >"${TMPROOT}/env-before"
+  env -i HOME="${HOME_T}" PATH="${FAKE_BIN}:${UTIL_BIN}" \
+    AGENT_VAULT_PROXY_PORT="${OPEN_PORT}" \
+    "$@" "${WRAPPER}" 2>/dev/null | sort >"${TMPROOT}/env-after"
+  comm -13 "${TMPROOT}/env-before" "${TMPROOT}/env-after"
 }
 
 # dropin_env <out>: drop-in の env（K=V を sort したもの）
@@ -147,7 +144,7 @@ dropin_env() {
 ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" --arg ca "${CA_BUNDLE}" '{
   HTTPS_PROXY: $proxy, HTTP_PROXY: $proxy, NO_PROXY: "localhost,127.0.0.1,::1,fonts.googleapis.com,fonts.gstatic.com,zernio.com,api.anthropic.com",
   NODE_EXTRA_CA_CERTS: $ca, SSL_CERT_FILE: $ca, GIT_SSL_CAINFO: $ca,
-  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: $ca,
+  CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: $ca, NIX_SSL_CERT_FILE: $ca,
   CLAUDE_GH_VAULT: "1",
   GIT_CONFIG_COUNT: "3",
   GIT_CONFIG_KEY_0: "credential.https://github.com.helper", GIT_CONFIG_VALUE_0: "",
@@ -155,7 +152,7 @@ ACTIVE_ENV="$(jq -n --arg proxy "http://tok_123:default@127.0.0.1:${OPEN_PORT}" 
   GIT_CONFIG_KEY_2: "push.default", GIT_CONFIG_VALUE_2: "current",
   HOST_EXEC_ENV: ({HTTPS_PROXY: null, HTTP_PROXY: null, NO_PROXY: null,
     NODE_EXTRA_CA_CERTS: null, SSL_CERT_FILE: null, GIT_SSL_CAINFO: null,
-    CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null, CLAUDE_GH_VAULT: null,
+    CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE: null, NIX_SSL_CERT_FILE: null, CLAUDE_GH_VAULT: null,
     AGENT_BROWSER_SOCKET_DIR: null, CODEX_HOME: null, NPM_CONFIG_CACHE: null, PLAYWRIGHT_BROWSERS_PATH: null, PNPM_HOME: null, UV_CACHE_DIR: null, XDG_CACHE_HOME: null,
     GIT_CONFIG_KEY_0: "branch.autoSetupMerge", GIT_CONFIG_VALUE_0: "false"} | tojson)}')"
 INACTIVE_ENV="$(jq -n '{
@@ -276,6 +273,32 @@ for vault_state in active closed_port; do
       "rc=${RC} writable=${writable} drop-in HOST_EXEC_ENV=${dropin_spec} wrapper HOST_EXEC_ENV=${wrapper_spec} err=${ERR}"
   fi
 done
+
+# ---------------------------------------------------------------------------
+# host_exec_env_drops_ca_bundle_env: wrapper と drop-in のそれぞれで、値が agent-vault の CA bundle のパスに等しい
+# env 変数はすべて、その HOST_EXEC_ENV で null（host-exec の起動から外す）。host-exec は sandbox の外で動くので、
+# 残すと sandbox の外のプロセスに agent-vault の CA を信頼させる。変数名は出力から導く（ここに並べない）
+# ---------------------------------------------------------------------------
+echo "- host_exec_env_drops_ca_bundle_env"
+out="${TMPROOT}/host-exec-env-ca/managed-settings.d/50-agent-vault.json"
+run_script "${out}"
+dropin_spec="$(jq -r '.env.HOST_EXEC_ENV // empty' "${out}" 2>/dev/null || true)"
+# shellcheck disable=SC2016 # 意図的: jq の式（$ca は jq の変数）
+dropin_ca="$(jq -c --arg ca "${CA_BUNDLE}" '[.env | to_entries[] | select(.value == $ca) | .key] | sort' "${out}" 2>/dev/null || true)"
+wrapper_out="$(wrapper_env)"
+wrapper_spec="$(printf '%s\n' "${wrapper_out}" | sed -n 's/^HOST_EXEC_ENV=//p')"
+# shellcheck disable=SC2016 # 意図的: jq の式（$ca は jq の変数）
+wrapper_ca="$(printf '%s\n' "${wrapper_out}" | jq -Rnc --arg ca "${CA_BUNDLE}" \
+  '[inputs | capture("^(?<k>[^=]+)=(?<v>.*)$") | select(.v == $ca) | .k] | sort')"
+if [ "${RC}" -eq 0 ] && [ -n "${dropin_spec}" ] && [ -n "${wrapper_spec}" ] &&
+  [ -n "${dropin_ca}" ] && [ "${dropin_ca}" != "[]" ] && [ -n "${wrapper_ca}" ] && [ "${wrapper_ca}" != "[]" ] &&
+  [ "$(not_nulled "${dropin_ca}" "${dropin_spec}")" = "[]" ] &&
+  [ "$(not_nulled "${wrapper_ca}" "${wrapper_spec}")" = "[]" ]; then
+  pass "host_exec_env_drops_ca_bundle_env"
+else
+  fail "host_exec_env_drops_ca_bundle_env" \
+    "rc=${RC} drop-in CA env=${dropin_ca} drop-in HOST_EXEC_ENV=${dropin_spec} wrapper CA env=${wrapper_ca} wrapper HOST_EXEC_ENV=${wrapper_spec} err=${ERR}"
+fi
 
 echo ""
 echo "--- token ファイルの検査（root で読むので、リンクと他人のファイルは読まない） ---"
