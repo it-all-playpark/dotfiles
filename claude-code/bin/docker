@@ -49,7 +49,8 @@ if [ "$explicit" = 0 ] && [ ! -S "$HOME/.orbstack/run/docker.sock" ]; then
   exec docker-vm "$@"
 fi
 
-# 3. PATH から shim dir（$HOME/.claude/bin と自身の物理 dir）を除いて実体を解決
+# 3. PATH から shim dir（$HOME/.claude/bin と自身の物理 dir）を除いて実体を解決。PATH に無ければ
+#    システムの PATH 定義から探す
 self="$0"
 if resolved="$(readlink -f "$0" 2>/dev/null)" && [ -n "$resolved" ]; then
   self="$resolved"
@@ -60,22 +61,44 @@ if home_bin_phys="$(cd "$HOME/.claude/bin" 2>/dev/null && pwd -P)"; then
   shim_dirs="$shim_dirs$home_bin_phys:"
 fi
 
+# add_lookup_dir <dir>: shim dir でなければ lookup_path の末尾に足す
 lookup_path=""
-p_rest="$PATH:"
-while [ -n "$p_rest" ]; do
-  p="${p_rest%%:*}"
-  p_rest="${p_rest#*:}"
-  [ -z "$p" ] && continue
+add_lookup_dir() {
+  local p="$1" p_phys
+  [ -z "$p" ] && return 0
   p_phys="$(cd "$p" 2>/dev/null && pwd -P)" || p_phys="$p"
   case "$shim_dirs" in
-  *":$p:"* | *":$p_phys:"*) continue ;;
+  *":$p:"* | *":$p_phys:"*) return 0 ;;
   esac
   lookup_path="${lookup_path:+$lookup_path:}$p"
+}
+
+p_rest="$PATH:"
+while [ -n "$p_rest" ]; do
+  add_lookup_dir "${p_rest%%:*}"
+  p_rest="${p_rest#*:}"
 done
 
 real=""
 if [ -n "$lookup_path" ]; then
   real="$(PATH="$lookup_path" command -v docker 2>/dev/null || true)"
+fi
+
+# PATH に無ければ、システムの PATH 定義（/etc/paths と /etc/paths.d/* をファイル名順。1 行 1 ディレクトリ）が
+# 指すディレクトリから探す。ログインシェルを通らずに起動したセッション（claude --bg 等）の PATH には
+# /usr/local/bin（OrbStack が docker を置く）が入らないことがある。shim dir は PATH と同じく除く。
+# 読み先は DOCKER_SHIM_PATHS_FILE / DOCKER_SHIM_PATHS_DIR で差し替えられる（テスト用）
+if [ -z "$real" ]; then
+  lookup_path=""
+  for f in "${DOCKER_SHIM_PATHS_FILE:-/etc/paths}" "${DOCKER_SHIM_PATHS_DIR:-/etc/paths.d}"/*; do
+    [ -f "$f" ] || continue
+    while IFS= read -r p || [ -n "$p" ]; do
+      add_lookup_dir "$p"
+    done <"$f"
+  done
+  if [ -n "$lookup_path" ]; then
+    real="$(PATH="$lookup_path" command -v docker 2>/dev/null || true)"
+  fi
 fi
 if [ -z "$real" ]; then
   echo "docker: real 'docker' not found in PATH (shim dirs excluded: $HOME/.claude/bin, $self_dir)" >&2
