@@ -114,6 +114,7 @@ UNREGISTERED_BINS=(
   "ensure-worktree-deps|detect-and-install を呼ぶ。sandbox 外に出すと脱出口になる（skills #868）"
   "redgreen-verify|repo のテストを実行する。sandbox 外に出すと脱出口になる（skills #868）"
   "pre-commit-hook|repo の pre-commit hook（repo の任意コード）を git hook run で実行する。sandbox 外に出すと脱出口になる（claude-plugins #1188）"
+  "pre-push-hook|repo の pre-push hook（repo の任意コード）を git hook run で実行する。sandbox 外に出すと脱出口になる（claude-plugins #1435）"
   "local-verify|repo が宣言した検証コマンドを worktree で bash -c 実行する。sandbox 外に出すと脱出口になる（skills #863）"
   "ci-wait|gh も git 書き込みも呼ばない"
   "ac-lint|git / gh は sandbox 内で認証され、.git/config を書かない（skills #871）"
