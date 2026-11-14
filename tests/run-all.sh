@@ -17,6 +17,16 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR GIT_OBJECT_
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}" || exit 1
 
+# macOS 既定の TMPDIR（/var/folders/.../T/）は末尾に / がある。残すと、各テストの
+# mktemp -d "${TMPDIR:-/tmp}/..." が // 入りのパスを作り、パスを文字列で比べるテストが落ちる
+# （fish は HOME の // を / に正規化する）。全テストの入口で末尾の / を除いて揃える
+if [ -n "${TMPDIR:-}" ]; then
+  while [ "${TMPDIR}" != "${TMPDIR%/}" ]; do
+    TMPDIR="${TMPDIR%/}"
+  done
+  export TMPDIR
+fi
+
 LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/run-all-tests.XXXXXX")"
 trap 'rm -rf "${LOG_DIR}"' EXIT
 
