@@ -7,8 +7,9 @@
 #
 # nix の '' 文字列を awk で取り出し（インデントを外し、''${ を ${ に戻す）、ユーザーの rc を読まない zsh -f で source する。
 # - 非対話: launchd 由来のセッションの Bash は .zshrc を読まないので、.zshenv だけで mise の shims が PATH に入り、
-#   ~/.claude/bin がその前（先頭）にあること
-# - 対話: .zshenv → .zprofile（loginExtra の /opt/homebrew/bin）→ .zshrc の後も ~/.claude/bin → mise の shims → その他
+#   ~/.claude/bin がその前（先頭）にあること。path_helper の entry（/usr/local/bin 等）が nix の entry の後に入ること
+# - 対話: .zshenv → .zprofile（loginExtra の /opt/homebrew/bin）→ .zshrc の後も ~/.claude/bin → mise の shims → その他で、
+#   同じ entry が 2 回現れないこと
 
 set -euo pipefail
 
@@ -51,11 +52,13 @@ extract_nix_string() {
 }
 
 ZSH_BIN="$(command -v zsh || true)"
+# launchd が子プロセスに渡す既定の PATH
+LAUNCHD_PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
-# PATH=/usr/bin:/bin から始めて、引数のファイルを順に source した後の PATH を 1 行 1 要素で出す
+# launchd の既定と同じ PATH（LAUNCHD_PATH）から始めて、引数のファイルを順に source した後の PATH を 1 行 1 要素で出す
 run_zsh_path() {
   # shellcheck disable=SC2016 # 意図的: 子の zsh が展開する
-  env -i HOME="${FAKE_HOME}" USER=zsh-path-test PATH=/usr/bin:/bin "${ZSH_BIN}" -f -c '
+  env -i HOME="${FAKE_HOME}" USER=zsh-path-test PATH="${LAUNCHD_PATH}" "${ZSH_BIN}" -f -c '
     for f in "$@"; do source "$f"; done
     print -rl -- $path
   ' zsh "$@"
@@ -109,6 +112,43 @@ else
     pass "noninteractive_envExtra_has_mise_shims_after_claude_bin"
   fi
 
+  # path_helper が /etc/paths・/etc/paths.d から組む entry（/usr/local/bin 等）が、envExtra の足す nix の entry の後に
+  # その順のまま入る。期待値は envExtra を通さず、同じ PATH から path_helper を直接呼んで作る
+  # （path_helper が無い環境では LAUNCHD_PATH のまま）
+  echo "- noninteractive_envExtra_has_path_helper_entries_after_nix"
+  # shellcheck disable=SC2016 # 意図的: 子の zsh が展開する
+  system_entries="$(env -i PATH="${LAUNCHD_PATH}" "${ZSH_BIN}" -f -c '
+    [[ -x /usr/libexec/path_helper ]] && eval "$(/usr/libexec/path_helper -s)"
+    print -rl -- $path
+  ')"
+  last_nix_idx=0
+  nix_missing=""
+  for nix_entry in "${FAKE_HOME}/.nix-profile/bin" /etc/profiles/per-user/zsh-path-test/bin \
+    /run/current-system/sw/bin /nix/var/nix/profiles/default/bin; do
+    idx="$(index_of "${nix_entry}" "${noninteractive}")"
+    [ "${idx}" -eq 0 ] && nix_missing="${nix_entry}"
+    [ "${idx}" -gt "${last_nix_idx}" ] && last_nix_idx="${idx}"
+  done
+  prev_idx="${last_nix_idx}"
+  out_of_order=""
+  while IFS= read -r entry; do
+    idx="$(index_of "${entry}" "${noninteractive}")"
+    if [ "${idx}" -le "${prev_idx}" ]; then
+      out_of_order="${entry}"
+      break
+    fi
+    prev_idx="${idx}"
+  done <<<"${system_entries}"
+  if [ -n "${nix_missing}" ]; then
+    fail "noninteractive_envExtra_has_path_helper_entries_after_nix" \
+      "envExtra の PATH に ${nix_missing} が無い: $(printf '%s' "${noninteractive}" | tr '\n' ':')"
+  elif [ -n "${out_of_order}" ]; then
+    fail "noninteractive_envExtra_has_path_helper_entries_after_nix" \
+      "${out_of_order} が無いか、path_helper の順（nix の entry の後）に並んでいない: $(printf '%s' "${noninteractive}" | tr '\n' ':')"
+  else
+    pass "noninteractive_envExtra_has_path_helper_entries_after_nix"
+  fi
+
   # -------------------------------------------------------------------------
   # mise の data / state / config ディレクトリ（.zshenv だけ）
   # -------------------------------------------------------------------------
@@ -140,12 +180,16 @@ else
   interactive="$(run_zsh_path "${WORK}/zshenv" "${WORK}/zprofile" "${WORK}/zshrc")"
   first_three="$(printf '%s\n' "${interactive}" | awk 'NR <= 3' | tr '\n' ':')"
   shims_count="$(printf '%s\n' "${interactive}" | awk -v n="${MISE_SHIMS}" '$0 == n { c++ } END { print c + 0 }')"
+  duplicates="$(printf '%s\n' "${interactive}" | sort | uniq -d | tr '\n' ':')"
   if [ "${first_three}" != "${CLAUDE_BIN}:${MISE_SHIMS}:/opt/homebrew/bin:" ]; then
     fail "interactive_initContent_keeps_claude_bin_then_mise_shims" \
       "PATH の先頭が ~/.claude/bin → mise の shims → その他 になっていない: $(printf '%s' "${interactive}" | tr '\n' ':')"
   elif [ "${shims_count}" -ne 1 ]; then
     fail "interactive_initContent_keeps_claude_bin_then_mise_shims" \
       "mise の shims が PATH に ${shims_count} 個ある: $(printf '%s' "${interactive}" | tr '\n' ':')"
+  elif [ -n "${duplicates}" ]; then
+    fail "interactive_initContent_keeps_claude_bin_then_mise_shims" \
+      "PATH に同じ entry が 2 回ある（${duplicates}）: $(printf '%s' "${interactive}" | tr '\n' ':')"
   else
     pass "interactive_initContent_keeps_claude_bin_then_mise_shims"
   fi

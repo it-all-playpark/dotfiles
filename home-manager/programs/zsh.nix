@@ -13,6 +13,15 @@ in
     envExtra = ''
       unsetopt GLOBAL_RCS
 
+      # /etc/paths・/etc/paths.d（/usr/local/bin・/opt/homebrew/bin 等）を PATH に入れる。入れるのは /etc/zprofile の
+      # path_helper だが、非対話 zsh は読まず、上の unsetopt GLOBAL_RCS で対話 zsh も読まない。launchd 由来の
+      # セッション（claude --bg・host-exec の子）でも PATH から実体を探す道具（docker-vm 等）が対話シェルと同じ実体に届く。
+      # 下の nix・mise の shims・~/.claude/bin より先に組む。-U は .zprofile の /opt/homebrew/bin 等との重複を外す
+      if [[ -x /usr/libexec/path_helper ]]; then
+        eval "$(/usr/libexec/path_helper -s)"
+        typeset -U path PATH
+      fi
+
       # SSH remote commands such as mosh-server run under non-interactive zsh.
       export PATH="$HOME/.nix-profile/bin:/etc/profiles/per-user/$USER/bin:/run/current-system/sw/bin:/nix/var/nix/profiles/default/bin:$PATH"
 
