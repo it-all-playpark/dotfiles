@@ -161,7 +161,7 @@ run_wrapper() {
 
 # agent-vault を使わない起動の HOST_EXEC_ENV: settings.json の env のうち sandbox 内から書ける場所を指すものだけを外す
 # （npm・uv・XDG のキャッシュを sandbox の外の host-exec で使わせない）
-SANDBOX_ONLY_HOST_EXEC_ENV='{"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null}'
+SANDBOX_ONLY_HOST_EXEC_ENV='{"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PLAYWRIGHT_BROWSERS_PATH":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null}'
 
 echo "=== claude (agent-vault wrapper) tests ==="
 
@@ -356,7 +356,7 @@ run_wrapper
 host_exec_env="$(printf '%s\n' "$OUT" | sed -n 's/^HOST_EXEC_ENV=//p')"
 shape="$("$PY" -I "$TMPROOT/host-exec-env-shape.py" "$host_exec_env" 2>&1 || true)"
 if [[ $RC -eq 0 ]] &&
-  [[ $shape == $'nulls=AGENT_BROWSER_SOCKET_DIR,CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,CODEX_HOME,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,NPM_CONFIG_CACHE,PNPM_HOME,SSL_CERT_FILE,UV_CACHE_DIR,XDG_CACHE_HOME\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
+  [[ $shape == $'nulls=AGENT_BROWSER_SOCKET_DIR,CLAUDE_GH_VAULT,CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE,CODEX_HOME,GIT_SSL_CAINFO,HTTPS_PROXY,HTTP_PROXY,NODE_EXTRA_CA_CERTS,NO_PROXY,NPM_CONFIG_CACHE,PLAYWRIGHT_BROWSERS_PATH,PNPM_HOME,SSL_CERT_FILE,UV_CACHE_DIR,XDG_CACHE_HOME\nstrings={"GIT_CONFIG_KEY_0": "branch.autoSetupMerge", "GIT_CONFIG_VALUE_0": "false"}' ]] &&
   ! contains "$host_exec_env" "tok_123"; then
   pass "11_vault_session_exports_host_exec_env_without_token"
 else

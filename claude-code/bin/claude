@@ -43,10 +43,10 @@
 #                              GIT_CONFIG_* は取り除くと番号が飛んで git がエラーになるので、helper を空にした n 番を
 #                              後ろで付ける branch.autoSetupMerge=false と同じ設定に差し替える。proxy token は入れない。
 #                              settings.json の env のうち sandbox 内から書ける場所（allowWrite の配下）を指すもの
-#                              （AGENT_BROWSER_SOCKET_DIR / CODEX_HOME / NPM_CONFIG_CACHE / PNPM_HOME / UV_CACHE_DIR / XDG_CACHE_HOME）も外す。sandbox 内のプロセスが
+#                              （AGENT_BROWSER_SOCKET_DIR / CODEX_HOME / NPM_CONFIG_CACHE / PLAYWRIGHT_BROWSERS_PATH / PNPM_HOME / UV_CACHE_DIR / XDG_CACHE_HOME）も外す。sandbox 内のプロセスが
 #                              書き換えたキャッシュ・設定を sandbox の外で使わせない
 #                              （tests/agent-vault-managed-env.test.sh が settings.json から列挙して突き合わせる）。
-#                              この 6 つは agent-vault を使わないときも外す（HOST_EXEC_ENV が既にあるときは触らない）
+#                              この 7 つは agent-vault を使わないときも外す（HOST_EXEC_ENV が既にあるときは触らない）
 #
 # 付ける env（常に）:
 #   GIT_CONFIG_KEY_n=branch.autoSetupMerge / GIT_CONFIG_VALUE_n=false
@@ -90,7 +90,7 @@ ca_bundle="${AGENT_VAULT_CA_BUNDLE:-$HOME/.local/state/agent-vault/ca-bundle.pem
 port="${AGENT_VAULT_PROXY_PORT:-14322}"
 vault="${AGENT_VAULT_VAULT:-default}"
 # HOST_EXEC_ENV で常に外す、settings.json の env のうち sandbox 内から書ける場所を指すもの
-sandbox_env_nulls='"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null'
+sandbox_env_nulls='"AGENT_BROWSER_SOCKET_DIR":null,"CODEX_HOME":null,"NPM_CONFIG_CACHE":null,"PLAYWRIGHT_BROWSERS_PATH":null,"PNPM_HOME":null,"UV_CACHE_DIR":null,"XDG_CACHE_HOME":null'
 
 # git -c 相当の設定を env で足す（既にある GIT_CONFIG_COUNT の後ろに積む）
 git_config_add() {
