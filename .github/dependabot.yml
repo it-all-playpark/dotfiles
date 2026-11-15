@@ -1,0 +1,12 @@
+# Dependabot は Nix flake (flake.lock) に対応していないため、対象は GitHub Actions のみ。
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Asia/Tokyo"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
