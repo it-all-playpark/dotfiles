@@ -26,7 +26,7 @@ jobs:
       GIT_COMMITTER_NAME: ci
       GIT_COMMITTER_EMAIL: ci@example.invalid
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # lima-sandbox の判定で、PR の merge commit の 1 つ目の親（base）・push 前の commit と diff を取る
           fetch-depth: 2
