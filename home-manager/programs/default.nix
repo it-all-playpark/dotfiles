@@ -18,5 +18,6 @@
     ./sandbox-docker.nix
     ./vm-egress-proxy.nix
     ./resource-watchdog.nix
+    ./openpost.nix
   ];
 }
