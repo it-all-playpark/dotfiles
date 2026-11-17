@@ -61,7 +61,9 @@ in
       "zoom"
       "1password"
       "1password-cli"
-    ];
+    ]
+    # 個人機（naramotoyuuji の MacBook と、同じユーザー名の Mac Studio）にだけ入れる
+    ++ lib.optional (username == "naramotoyuuji") "grok-bot";
     masApps = lib.optionalAttrs installMasApps {
       # Mac App Storeからインストールするアプリケーションのリスト
       "1Password for Safari" = 1569813296;
