@@ -11,10 +11,14 @@ def mac_only:
 def drop_mac_only:
   if type == "array" then map(select((type == "string" and mac_only) | not)) else . end;
 
-# Mac の ~/ghq 配下を守る denyWrite のエントリを box のパスに写す。写す先が無いエントリは empty
+# Mac の ~/ghq 配下を守る denyWrite のエントリを box のパスに写す。写す先が無いエントリは empty。
+# repo 単位のエントリ（~/ghq/*/*/*/ 起点の .git/config・.git/hooks 等）は /workspace 直下の repo に加えて
+# checkout 自身にも写す（checkout が /workspace 直下以外にあっても Bash から書けないようにする）
 def box_deny_write:
   if startswith("~/ghq/github.com/it-all-playpark/dotfiles/") then
     $checkout + "/" + ltrimstr("~/ghq/github.com/it-all-playpark/dotfiles/")
+  elif startswith("~/ghq/*/*/*/") then
+    ("/workspace/" + ltrimstr("~/ghq/*/*/"), $checkout + "/" + ltrimstr("~/ghq/*/*/*/"))
   elif startswith("~/ghq/*/*/") then
     "/workspace/" + ltrimstr("~/ghq/*/*/")
   elif startswith("~/ghq/**") then

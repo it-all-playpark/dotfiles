@@ -24,7 +24,7 @@
 #  14. enabled_plugins                  - box 用の有効 / 無効が入り、他の plugin は入力と同じ
 #  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものと、
 #                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）が足される
-#  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config
+#  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config と <checkout>/.git/config
 #  17. edit_deny_mapped (checkout ごと)  - permissions.deny に、入力の ~/ghq 起点の Edit ルールと ~/ghq 起点の denyWrite を
 #                                         `//` 始まりの checkout パスと /workspace 配下（深さを問わない）に写した Edit ルールと、
 #                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）の Edit ルールが足される
@@ -214,6 +214,7 @@ for case_name in default other; do
     | $base
     + ($base | map(select(startswith("~/ghq/github.com/it-all-playpark/dotfiles/")) | $checkout + .[41:]))
     + ($base | map(select(startswith("~/ghq/*/*/")) | "/workspace" + .[9:]))
+    + ($base | map(select(startswith("~/ghq/*/*/*/")) | $checkout + .[11:]))
     + ($base | map(select(startswith("~/ghq/**")) | "/workspace" + .[5:]))
     + [$checkout + "/claude-code/*.md"]
     | unique' '
@@ -222,7 +223,7 @@ done
 
 check_default "deny_write_example" '
   $i.sandbox.filesystem.denyWrite | index("~/ghq/*/*/*/.git/config") != null' '
-  $o.sandbox.filesystem.denyWrite | index("/workspace/*/.git/config") != null'
+  $o.sandbox.filesystem.denyWrite | (index("/workspace/*/.git/config") != null and index($checkout + "/.git/config") != null)'
 
 # ---------------------------------------------------------------------------
 # Edit の deny を checkout パスと /workspace 配下に写す（denyWrite は Bash にしか効かず、acceptEdits の Edit / Write を止めない）。
