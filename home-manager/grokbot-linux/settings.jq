@@ -92,6 +92,8 @@ if ($checkout | startswith("/") | not) then error("checkout は絶対パスで�
 # /workspace 配下の repo の .git/hooks 等を承認なしで書けないようにする）
 | .permissions.deny = ($deny + box_edit_deny($deny; $deny_write) + ["Edit(/" + $checkout + "/claude-code/*.md)"] | dedup)
 | .permissions.defaultMode = "acceptEdits"
+# Workflow は許可が無いと承認ダイアログに script 全文が出て、巨大な script は承認できない（dev-flow が止まる）
+| .permissions.allow |= ((. // []) + ["Workflow"] | dedup)
 | .permissions.additionalDirectories |= (. + ["/workspace"] | dedup)
 
 | .enabledPlugins += {
