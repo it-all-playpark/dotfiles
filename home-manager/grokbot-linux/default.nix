@@ -64,6 +64,6 @@ in
     '';
   };
 
-  # 2 回目以降の `home-manager switch --flake .#grokbot-linux` 用
+  # 2 回目以降の `home-manager switch --flake github:it-all-playpark/dotfiles#grokbot-linux` 用
   programs.home-manager.enable = true;
 }
