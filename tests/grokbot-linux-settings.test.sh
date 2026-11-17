@@ -22,7 +22,8 @@
 #  12. default_mode_accept_edits        - permissions.defaultMode は acceptEdits
 #  13. additional_directories           - 入力から引き継ぐものに /workspace が足され、/home/box は入らない
 #  14. enabled_plugins                  - box 用の有効 / 無効が入り、他の plugin は入力と同じ
-#  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものが足される
+#  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものと、
+#                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）が足される
 #  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config
 #  17. edit_deny_mapped (checkout ごと)  - permissions.deny に、入力の ~/ghq 起点の Edit ルールと ~/ghq 起点の denyWrite を
 #                                         `//` 始まりの checkout パスと /workspace 配下（深さを問わない）に写した Edit ルールと、
@@ -214,6 +215,7 @@ for case_name in default other; do
     + ($base | map(select(startswith("~/ghq/github.com/it-all-playpark/dotfiles/")) | $checkout + .[41:]))
     + ($base | map(select(startswith("~/ghq/*/*/")) | "/workspace" + .[9:]))
     + ($base | map(select(startswith("~/ghq/**")) | "/workspace" + .[5:]))
+    + [$checkout + "/claude-code/*.md"]
     | unique' '
     $o.sandbox.filesystem.denyWrite | unique'
 done
