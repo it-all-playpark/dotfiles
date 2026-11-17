@@ -180,6 +180,14 @@ Grok Bot の box（使い捨ての隔離 Linux コンテナ。x86_64、ユーザ
    この repo は public です。`CLAUDE_CODE_OAUTH_TOKEN` と GitHub の token（`GH_TOKEN`）は repo にも生成物にも入れず、
    box 側の環境変数（コンテナ起動時に渡す）か、box 上のファイル（repo の外。例: `~/.config/gh/hosts.yml`）で渡します。
 
+   - **環境変数で渡した token は、sandbox 内の Bash から読めます。** sandbox は環境変数を隠さないので、agent が実行する
+     コマンドは `GH_TOKEN` 等をそのまま参照できます。token は読まれてよい権限に絞って渡します。
+   - **GitHub の token は、bot が作業する repo だけに絞った fine-grained token にします。** dotfiles（この repo）には
+     権限を与えません（push も merge もできない状態にします）。classic token や、組織・アカウント全体に効く token は使いません。
+   - **ファイルで渡すときの置き場所は、`sandbox.filesystem.denyRead` に入っている場所にします**（`~/.config/gh` 等。
+     一覧は `claude-code/settings.json`）。そこに置いたファイルは sandbox 内の Bash から読めません。
+   - **`CLAUDE_CODE_OAUTH_TOKEN` は repo にも flake にも書かず、box 側の環境で渡します。**
+
 戻すときは box を作り直します（既存ファイルの退避はしません。`~/.claude/` の同名の通常ファイルは置き換えます）。
 
 ## Agent Skills
