@@ -19,6 +19,7 @@ trap 'rm -rf "$TMPROOT"' EXIT
 
 PASS=0
 FAIL=0
+SKIP=0
 FAILURES=()
 
 pass() {
@@ -32,6 +33,15 @@ fail() {
   FAIL=$((FAIL + 1))
   FAILURES+=("$1: $2")
 }
+
+skip() {
+  echo "  SKIP: $1 ($2)"
+  SKIP=$((SKIP + 1))
+}
+
+# 継承 ACL（chmod +a）で書けない場所を作れるのは macOS だけ。Linux 等では 01〜05 を SKIP し、ACL を使わない 06 だけ実行する
+IS_DARWIN=0
+[ "$(uname -s)" = "Darwin" ] && IS_DARWIN=1
 
 # 利用者の global / system の git 設定（hooksPath 等）を持ち込まない
 export GIT_CONFIG_GLOBAL="$TMPROOT/gitconfig"
@@ -59,7 +69,9 @@ git -C "$REPO" switch -q main
 # この下に作るディレクトリには、さらにサブディレクトリを作れない
 LOCKED="$TMPROOT/locked"
 mkdir "$LOCKED"
-/bin/chmod +a "everyone deny add_subdirectory,directory_inherit,only_inherit" "$LOCKED"
+if [ "$IS_DARWIN" = 1 ]; then
+  /bin/chmod +a "everyone deny add_subdirectory,directory_inherit,only_inherit" "$LOCKED"
+fi
 
 UNWRITABLE='.claude/skills/demo/SKILL.md
 .githooks/pre-commit
@@ -97,47 +109,55 @@ S .husky/pre-push" ] && [ -z "$missing" ] && [ "$head" = "$branch" ]; then
 
 echo "=== wt-add tests ==="
 
-# ---------------------------------------------------------------------------
-# 1. 素の git worktree add は同じ条件で checkout に失敗する（helper が無いと作れない）
-# ---------------------------------------------------------------------------
-set +e
-plain_err="$(git -C "$REPO" worktree add -q --no-track -b plain "$LOCKED/wt-plain" 2>&1)"
-plain_rc=$?
-set -e
-if [ "$plain_rc" -ne 0 ] && [[ $plain_err == *"cannot create directory"* ]]; then
-  pass "01_plain_worktree_add_fails"
+if [ "$IS_DARWIN" = 1 ]; then
+  # ---------------------------------------------------------------------------
+  # 1. 素の git worktree add は同じ条件で checkout に失敗する（helper が無いと作れない）
+  # ---------------------------------------------------------------------------
+  set +e
+  plain_err="$(git -C "$REPO" worktree add -q --no-track -b plain "$LOCKED/wt-plain" 2>&1)"
+  plain_rc=$?
+  set -e
+  if [ "$plain_rc" -ne 0 ] && [[ $plain_err == *"cannot create directory"* ]]; then
+    pass "01_plain_worktree_add_fails"
+  else
+    fail "01_plain_worktree_add_fails" "rc=$plain_rc err=$plain_err"
+  fi
+
+  # ---------------------------------------------------------------------------
+  # 2. 新規 branch（<start> 省略 = repo の HEAD）: 書けないパスに skip-worktree を付けて作る
+  # ---------------------------------------------------------------------------
+  run_wt_add "$REPO" "$LOCKED/wt-new" feature/new
+  check_partial "02_new_branch_from_head" "$LOCKED/wt-new" feature/new README.md notes.txt
+  if [ -e "$LOCKED/wt-new/existing.txt" ]; then
+    fail "02_new_branch_starts_at_head" "main に無い existing.txt が取り出された"
+  fi
+
+  # ---------------------------------------------------------------------------
+  # 3. 新規 branch を <start> から作る
+  # ---------------------------------------------------------------------------
+  run_wt_add "$REPO" "$LOCKED/wt-start" feature/from-start existing
+  check_partial "03_new_branch_from_start" "$LOCKED/wt-start" feature/from-start README.md notes.txt existing.txt
+
+  # ---------------------------------------------------------------------------
+  # 4. 既存 branch を checkout する
+  # ---------------------------------------------------------------------------
+  run_wt_add "$REPO" "$LOCKED/wt-existing" existing
+  check_partial "04_existing_branch" "$LOCKED/wt-existing" existing README.md notes.txt existing.txt
+
+  # ---------------------------------------------------------------------------
+  # 5. <path> が相対なら呼び出し元の cwd から解決する（<repo> からではない）
+  # ---------------------------------------------------------------------------
+  cd "$LOCKED"
+  run_wt_add "$REPO" wt-rel feature/rel
+  cd "$TMPROOT"
+  check_partial "05_relative_path_from_cwd" "$LOCKED/wt-rel" feature/rel README.md notes.txt
 else
-  fail "01_plain_worktree_add_fails" "rc=$plain_rc err=$plain_err"
+  skip "01_plain_worktree_add_fails" "not Darwin"
+  skip "02_new_branch_from_head" "not Darwin"
+  skip "03_new_branch_from_start" "not Darwin"
+  skip "04_existing_branch" "not Darwin"
+  skip "05_relative_path_from_cwd" "not Darwin"
 fi
-
-# ---------------------------------------------------------------------------
-# 2. 新規 branch（<start> 省略 = repo の HEAD）: 書けないパスに skip-worktree を付けて作る
-# ---------------------------------------------------------------------------
-run_wt_add "$REPO" "$LOCKED/wt-new" feature/new
-check_partial "02_new_branch_from_head" "$LOCKED/wt-new" feature/new README.md notes.txt
-if [ -e "$LOCKED/wt-new/existing.txt" ]; then
-  fail "02_new_branch_starts_at_head" "main に無い existing.txt が取り出された"
-fi
-
-# ---------------------------------------------------------------------------
-# 3. 新規 branch を <start> から作る
-# ---------------------------------------------------------------------------
-run_wt_add "$REPO" "$LOCKED/wt-start" feature/from-start existing
-check_partial "03_new_branch_from_start" "$LOCKED/wt-start" feature/from-start README.md notes.txt existing.txt
-
-# ---------------------------------------------------------------------------
-# 4. 既存 branch を checkout する
-# ---------------------------------------------------------------------------
-run_wt_add "$REPO" "$LOCKED/wt-existing" existing
-check_partial "04_existing_branch" "$LOCKED/wt-existing" existing README.md notes.txt existing.txt
-
-# ---------------------------------------------------------------------------
-# 5. <path> が相対なら呼び出し元の cwd から解決する（<repo> からではない）
-# ---------------------------------------------------------------------------
-cd "$LOCKED"
-run_wt_add "$REPO" wt-rel feature/rel
-cd "$TMPROOT"
-check_partial "05_relative_path_from_cwd" "$LOCKED/wt-rel" feature/rel README.md notes.txt
 
 # ---------------------------------------------------------------------------
 # 6. 書けないパスが無ければ full checkout で作り、stdout には何も出さない
@@ -154,7 +174,7 @@ fi
 
 # --- Summary ---------------------------------------------------------------
 echo ""
-echo "Results: ${PASS} passed, ${FAIL} failed"
+echo "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
 if [[ $FAIL -gt 0 ]]; then
   echo "Failed tests:"
   for f in "${FAILURES[@]}"; do

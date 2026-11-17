@@ -34,6 +34,7 @@ trap cleanup EXIT
 
 PASS=0
 FAIL=0
+SKIP=0
 ERRORS=()
 
 pass() {
@@ -46,6 +47,11 @@ fail() {
   echo "        $2"
   FAIL=$((FAIL + 1))
   ERRORS+=("$1: $2")
+}
+
+skip() {
+  echo "  SKIP: $1 ($2)"
+  SKIP=$((SKIP + 1))
 }
 
 # ---------------------------------------------------------------------------
@@ -164,6 +170,91 @@ INACTIVE_ENV="$(jq -n '{
 
 echo "=== agent-vault-managed-env tests ==="
 echo ""
+echo "--- host-exec から外す env（settings.json の env で sandbox 内から書ける場所を指すもの） ---"
+
+# sandbox_writable_env <settings.json>: env のうち、値が sandbox.filesystem.allowWrite のいずれか（またはその配下）を
+# 指す変数名を JSON 配列（sort 済み）で出す。allowWrite の ** は任意の階層、* は 1 階層内の任意の文字列。
+# ~/ は展開せずに env と allowWrite の両方の表記のまま比べる
+sandbox_writable_env() {
+  # shellcheck disable=SC2016 # 意図的: jq の式（$v / $pat / $pats は jq の変数）
+  jq -c '.sandbox.filesystem.allowWrite as $pats
+    | [.env | to_entries[] | select((.value | type) == "string") | .value as $v
+      | select(any($pats[]; . as $pat | $v | test("^" + ($pat
+          | gsub("(?<c>[.+?^${}()|\\[\\]\\\\])"; "\\\(.c)")
+          | gsub("\\*\\*"; "\u0001") | gsub("\\*"; "[^/]*") | gsub("\u0001"; ".*")) + "(/.*)?$")))
+      | .key] | sort' "$1"
+}
+
+# not_nulled <names JSON> <HOST_EXEC_ENV JSON>: names のうち HOST_EXEC_ENV で null（取り除く）になっていないもの
+not_nulled() {
+  # shellcheck disable=SC2016 # 意図的: jq の式（$names / $spec / $s / $k は jq の変数）
+  jq -nc --argjson names "$1" --arg spec "$2" \
+    '($spec | fromjson) as $s | [$names[] as $k | select(($s | has($k) | not) or $s[$k] != null) | $k]'
+}
+
+# ---------------------------------------------------------------------------
+# sandbox_writable_env_is_enumerated: 列挙が allowWrite の配下・glob・~/ を拾い、隣の名前（/private/tmp/claudex）・
+# パスでない値・文字列でない値は拾わない
+# ---------------------------------------------------------------------------
+echo "- sandbox_writable_env_is_enumerated"
+cat >"${TMPROOT}/writable-settings.json" <<'EOF'
+{"env": {"UNDER_TMP": "/private/tmp/claude/x", "TMP_ROOT": "/private/tmp/claude", "UNDER_HOME": "~/.cache/gh/y",
+  "UNDER_GLOB": "~/.config/gcloud-a/b", "SIBLING": "/private/tmp/claudex", "OUTSIDE": "~/.cache/other",
+  "PLAIN": "1", "URL": "direct://", "NUM": 1},
+ "sandbox": {"filesystem": {"allowWrite": ["/private/tmp/claude", "~/.cache/gh", "~/.config/gcloud-*"]}}}
+EOF
+got="$(sandbox_writable_env "${TMPROOT}/writable-settings.json" 2>&1 || true)"
+if [ "${got}" = '["TMP_ROOT","UNDER_GLOB","UNDER_HOME","UNDER_TMP"]' ]; then
+  pass "sandbox_writable_env_is_enumerated"
+else
+  fail "sandbox_writable_env_is_enumerated" "got=${got}"
+fi
+
+# ---------------------------------------------------------------------------
+# 以降のケースは対象スクリプト（agent-vault-managed-env.sh）を走らせる。スクリプトは macOS 専用の
+# /usr/bin/stat -f・/bin/chmod +a（ACL）を使うので、Darwin 以外では上の純粋なケースだけ実行して SKIP で終える
+# ---------------------------------------------------------------------------
+if [ "$(uname -s)" != "Darwin" ]; then
+  for name in \
+    "active_vault_writes_env" \
+    "active_vault_matches_wrapper_env" \
+    "no_token_writes_env" \
+    "no_token_matches_wrapper_env" \
+    "no_ca_bundle_writes_env" \
+    "no_ca_bundle_matches_wrapper_env" \
+    "closed_port_writes_env" \
+    "closed_port_matches_wrapper_env" \
+    "vault_name_override" \
+    "host_exec_env_drops_sandbox_writable_env (active)" \
+    "host_exec_env_drops_sandbox_writable_env (closed_port)" \
+    "host_exec_env_drops_ca_bundle_env" \
+    "token_symlink_is_not_followed" \
+    "token_owned_by_other_user_is_not_read" \
+    "write_via_temp_file_with_mode_0640" \
+    "unchanged_content_is_not_rewritten" \
+    "changed_content_is_replaced" \
+    "tilde_entries_are_expanded_to_home" \
+    "invalid_settings_keep_previous_dropin" \
+    "settings_owned_by_other_user_is_not_read" \
+    "missing_settings_removes_dropin" \
+    "repo_settings_have_no_unexpanded_home" \
+    "launchd_plist_waits_for_nix_store"; do
+    skip "${name}" "not Darwin"
+  done
+  echo ""
+  echo "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
+  if [ "${FAIL}" -gt 0 ]; then
+    echo "Failed tests:"
+    for err in "${ERRORS[@]}"; do
+      echo "  - ${err}"
+    done
+    exit 1
+  fi
+  echo "PASS: agent-vault-managed-env (non-Darwin: macOS-only cases skipped)"
+  exit 0
+fi
+
+echo ""
 echo "--- 判定と出力（wrapper と同じ） ---"
 
 # check_case <name> <expected env JSON> [VAR=value...]: drop-in が妥当な JSON で env がちょうど期待どおり、
@@ -203,47 +294,6 @@ if [ "${RC}" -eq 0 ] &&
   pass "vault_name_override"
 else
   fail "vault_name_override" "rc=${RC} out=$(cat "${out}" 2>/dev/null || echo '<missing>') err=${ERR}"
-fi
-
-echo ""
-echo "--- host-exec から外す env（settings.json の env で sandbox 内から書ける場所を指すもの） ---"
-
-# sandbox_writable_env <settings.json>: env のうち、値が sandbox.filesystem.allowWrite のいずれか（またはその配下）を
-# 指す変数名を JSON 配列（sort 済み）で出す。allowWrite の ** は任意の階層、* は 1 階層内の任意の文字列。
-# ~/ は展開せずに env と allowWrite の両方の表記のまま比べる
-sandbox_writable_env() {
-  # shellcheck disable=SC2016 # 意図的: jq の式（$v / $pat / $pats は jq の変数）
-  jq -c '.sandbox.filesystem.allowWrite as $pats
-    | [.env | to_entries[] | select((.value | type) == "string") | .value as $v
-      | select(any($pats[]; . as $pat | $v | test("^" + ($pat
-          | gsub("(?<c>[.+?^${}()|\\[\\]\\\\])"; "\\\(.c)")
-          | gsub("\\*\\*"; "\u0001") | gsub("\\*"; "[^/]*") | gsub("\u0001"; ".*")) + "(/.*)?$")))
-      | .key] | sort' "$1"
-}
-
-# not_nulled <names JSON> <HOST_EXEC_ENV JSON>: names のうち HOST_EXEC_ENV で null（取り除く）になっていないもの
-not_nulled() {
-  # shellcheck disable=SC2016 # 意図的: jq の式（$names / $spec / $s / $k は jq の変数）
-  jq -nc --argjson names "$1" --arg spec "$2" \
-    '($spec | fromjson) as $s | [$names[] as $k | select(($s | has($k) | not) or $s[$k] != null) | $k]'
-}
-
-# ---------------------------------------------------------------------------
-# sandbox_writable_env_is_enumerated: 列挙が allowWrite の配下・glob・~/ を拾い、隣の名前（/private/tmp/claudex）・
-# パスでない値・文字列でない値は拾わない
-# ---------------------------------------------------------------------------
-echo "- sandbox_writable_env_is_enumerated"
-cat >"${TMPROOT}/writable-settings.json" <<'EOF'
-{"env": {"UNDER_TMP": "/private/tmp/claude/x", "TMP_ROOT": "/private/tmp/claude", "UNDER_HOME": "~/.cache/gh/y",
-  "UNDER_GLOB": "~/.config/gcloud-a/b", "SIBLING": "/private/tmp/claudex", "OUTSIDE": "~/.cache/other",
-  "PLAIN": "1", "URL": "direct://", "NUM": 1},
- "sandbox": {"filesystem": {"allowWrite": ["/private/tmp/claude", "~/.cache/gh", "~/.config/gcloud-*"]}}}
-EOF
-got="$(sandbox_writable_env "${TMPROOT}/writable-settings.json" 2>&1 || true)"
-if [ "${got}" = '["TMP_ROOT","UNDER_GLOB","UNDER_HOME","UNDER_TMP"]' ]; then
-  pass "sandbox_writable_env_is_enumerated"
-else
-  fail "sandbox_writable_env_is_enumerated" "got=${got}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -548,11 +598,11 @@ if command -v nix >/dev/null 2>&1 && nix store info >/dev/null 2>&1; then
     fail "launchd_plist_waits_for_nix_store" "plist=${plist} got=${got} err=$(tail -5 "${TMPROOT}/nix-build.err")"
   fi
 else
-  echo "  SKIP: launchd_plist_waits_for_nix_store (nix daemon unreachable)"
+  skip "launchd_plist_waits_for_nix_store" "nix daemon unreachable"
 fi
 
 echo ""
-echo "Results: ${PASS} passed, ${FAIL} failed"
+echo "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
 if [ "${FAIL}" -gt 0 ]; then
   echo "Failed tests:"
   for err in "${ERRORS[@]}"; do
