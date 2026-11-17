@@ -45,6 +45,7 @@
     "FORCE_AUTOUPDATE_PLUGINS": "1",
     "NEXT_DEV_POLL_INTERVAL_MS": "1000",
     "NODE_USE_ENV_PROXY": "1",
+    "NODE_USE_SYSTEM_CA": "0",
     "NPM_CONFIG_CACHE": "/private/tmp/claude/npm-cache",
     "PLAYWRIGHT_BROWSERS_PATH": "/private/tmp/claude/ms-playwright",
     "PNPM_HOME": "~/.local/state/pnpm-sandbox",
