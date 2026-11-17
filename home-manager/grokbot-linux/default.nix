@@ -10,6 +10,9 @@
 let
   # box 上の dotfiles の checkout パス。symlink 元と、Linux 版 settings の denyWrite はこの値から作る。
   # 別の場所に置くときは GROKBOT_DOTFILES_CHECKOUT を渡して --impure で switch する（README.md 参照）。
+  # このパスは文字列としてだけ使う（activation の symlink 元と denyWrite の値）。build の入力には checkout の
+  # ファイルを読まず、flake 自身のソース（下の ../../claude-code/settings.json と ./settings.jq）だけを読む。
+  # switch は checkout ではなく github:it-all-playpark/dotfiles の flake ref から流す（checkout は sandbox から書ける）。
   checkoutFromEnv = builtins.getEnv "GROKBOT_DOTFILES_CHECKOUT";
   dotfilesCheckout = if checkoutFromEnv != "" then checkoutFromEnv else "/workspace/dotfiles";
 
@@ -61,6 +64,6 @@ in
     '';
   };
 
-  # 2 回目以降の `home-manager switch --flake .#grokbot-linux` 用
+  # 2 回目以降の `home-manager switch --flake github:it-all-playpark/dotfiles#grokbot-linux` 用
   programs.home-manager.enable = true;
 }
