@@ -23,7 +23,9 @@ def box_config_inputs: ["home-manager/grokbot-linux", "claude-code/settings.json
 # repo 単位のエントリ（~/ghq/*/*/*/ 起点の .git/config・.git/hooks 等）は /workspace 直下の repo に加えて
 # checkout 自身にも写す（checkout が /workspace 直下以外にあっても Bash から書けないようにする）。
 # box の作業 repo は /workspace 直下（/workspace/<repo>）に置く前提: `/workspace/*/...` に写したエントリは深さ 1 の
-# repo だけを守り、それより深い場所（/workspace/<dir>/<repo> 等）に置いた repo は守らない
+# repo だけを守り、それより深い場所（/workspace/<dir>/<repo> 等）に置いた repo は守らない。
+# 深さを問わない `**` のエントリ（~/ghq/**/.githooks 等）は checkout 直下の具体パスに写す: Linux の sandbox（bubblewrap）は
+# denyWrite の glob を展開せず、文字どおりのパスだけを塞ぐ（#501。`/workspace/**/.githooks` は効かなかった）
 def box_deny_write:
   if startswith("~/ghq/github.com/it-all-playpark/dotfiles/") then
     checkout + "/" + ltrimstr("~/ghq/github.com/it-all-playpark/dotfiles/")
@@ -31,8 +33,8 @@ def box_deny_write:
     ("/workspace/" + ltrimstr("~/ghq/*/*/"), checkout + "/" + ltrimstr("~/ghq/*/*/*/"))
   elif startswith("~/ghq/*/*/") then
     "/workspace/" + ltrimstr("~/ghq/*/*/")
-  elif startswith("~/ghq/**") then
-    "/workspace/**" + ltrimstr("~/ghq/**")
+  elif startswith("~/ghq/**/") then
+    checkout + "/" + ltrimstr("~/ghq/**/")
   else
     empty
   end;
@@ -97,8 +99,11 @@ if ($checkout | startswith("/") | not) then error("checkout は絶対パスで�
 # activation が ~/.claude へ symlink する指示書（checkout の claude-code/*.md。CLAUDE / RULES / MCP_* / MODE_* 等）は
 # Bash（denyWrite）と Edit / Write（Edit の deny）の両方で塞ぐ。書き換えると以後の全 session と subagent が読むグローバル指示が変わる
 # box 構成の入力（box_config_inputs）も同じ 2 つで塞ぐ。Edit の deny は denyWrite を写すときと同じく、そのパスと配下（/**）
+# Linux の sandbox で効かない `**` 入りのエントリ（Mac 版から引き継いだ ~/ghq/**/...）は、具体パスに写したうえで残さない
 | .sandbox.filesystem.denyWrite |= (
-    . + map(box_deny_write) + [checkout + "/claude-code/*.md"] + (box_config_inputs | map(checkout + "/" + .)) | dedup
+    . + map(box_deny_write) + [checkout + "/claude-code/*.md"] + (box_config_inputs | map(checkout + "/" + .))
+    | map(select(contains("**") | not))
+    | dedup
   )
 
 # 入力の deny は残し、box のパスに写した Edit の deny を足す（acceptEdits の Edit / Write が checkout の hooks・bin や
