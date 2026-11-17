@@ -161,18 +161,24 @@ Grok Bot の box（使い捨ての隔離 Linux コンテナ。x86_64、ユーザ
 3. **switch する**
 
    ```bash
-   nix run home-manager -- switch --flake .#grokbot-linux
+   nix run home-manager -- switch --flake github:it-all-playpark/dotfiles#grokbot-linux
    ```
 
-   2 回目以降は `home-manager switch --flake .#grokbot-linux` で流せます（この構成が `home-manager` コマンドを入れます）。
+   2 回目以降は `home-manager switch --flake github:it-all-playpark/dotfiles#grokbot-linux` で流せます（この構成が `home-manager` コマンドを入れます）。
+   `--flake` には checkout の `.` ではなく GitHub の main の flake ref を渡します。checkout は sandbox から書けるので、
+   checkout の `.` から switch すると、sandbox 内から書き換えた nix（settings の生成・activation）が sandbox の外で
+   実行されてしまいます。GitHub の main から流せば、merge 済みの内容だけが switch に入ります。
+   Linux 版 settings と box 用モジュールは flake 自身のソースだけを入力にして build し、checkout のパスは
+   activation が張る symlink の元としてだけ使います。
    `claude-code/` の指示書・hooks・bin は checkout への symlink なので、checkout を更新すればそのまま反映されます。
-   `claude-code/settings.json` を変えたときは、Linux 版を作り直すためにもう一度 switch します。
+   `claude-code/settings.json` を変えたときは、main に merge したあと、Linux 版を作り直すためにもう一度 switch します
+   （flake ref が古い内容を使うときは `--refresh` を付けます）。
 
    checkout を `/workspace/dotfiles` 以外に置くときは、そのパスを環境変数 `GROKBOT_DOTFILES_CHECKOUT` で渡し、
    `--impure` を付けて switch します（symlink 元と、settings の `sandbox.filesystem.denyWrite` がそのパスになります）。
 
    ```bash
-   GROKBOT_DOTFILES_CHECKOUT=/workspace/other/dotfiles home-manager switch --flake .#grokbot-linux --impure
+   GROKBOT_DOTFILES_CHECKOUT=/workspace/other/dotfiles home-manager switch --flake github:it-all-playpark/dotfiles#grokbot-linux --impure
    ```
 
 4. **認証情報は repo に置かない**
