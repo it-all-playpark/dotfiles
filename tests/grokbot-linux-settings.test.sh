@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # 意図的: jq の式（$i / $o / $checkout などは jq の変数）をシングルクォートで渡す
 # tests/grokbot-linux-settings.test.sh
 # Grok Bot の box（Linux）用の Claude Code settings を作る変換定義
 # home-manager/grokbot-linux/settings.jq を、nix を使わずに repo の claude-code/settings.json へ当てて検証する
@@ -14,7 +15,7 @@
 #   5. env_inherits_input               - env も同じ規則
 #   6. hooks_inherit_input              - hook は command が macOS 専用のものだけ除き、残りは入力と同じ内容・順序
 #   7. no_empty_hook_groups             - hook が無くなった matcher グループとイベントは残らない
-#   8. deny_same_as_input               - permissions.deny は入力と同じ
+#   8. deny_keeps_input                 - permissions.deny は入力のルールを同じ順で先頭に残す
 #   9. other_keys_same_as_input         - box 用に変える値以外は入力と同じ
 #  10. sandbox_stays_on                 - sandbox.enabled / failIfUnavailable / network.strictAllowlist は true
 #  11. allowed_domains_add_stripe_vercel - allowedDomains は入力の全エントリ + stripe / vercel の 5 つ
@@ -23,6 +24,12 @@
 #  14. enabled_plugins                  - box 用の有効 / 無効が入り、他の plugin は入力と同じ
 #  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものが足される
 #  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config
+#  17. edit_deny_mapped (checkout ごと)  - permissions.deny に、入力の ~/ghq 起点の Edit ルールと ~/ghq 起点の denyWrite を
+#                                         `//` 始まりの checkout パスと /workspace 配下（深さを問わない）に写した Edit ルールが足される
+#  18. edit_deny_example                - checkout の claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
+#                                         Edit で塞がれる（具体例）
+#  19. no_single_slash_path_rules       - 生成物の Edit / Read / Write / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
+#                                         相対になる）のパスが無い
 
 set -euo pipefail
 
@@ -149,16 +156,15 @@ check_default "hooks_inherit_input" '
 check_default "no_empty_hook_groups" '[]' '
   [$o.hooks | to_entries[] | select((.value | length) == 0 or any(.value[]; (.hooks | length) == 0)) | .key]'
 
-check_default "deny_same_as_input" '$i.permissions.deny' '$o.permissions.deny'
+check_default "deny_keeps_input" '$i.permissions.deny' '
+  $o.permissions.deny[0:($i.permissions.deny | length)]'
 
 check_default "other_keys_same_as_input" '
   $i
-  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode)
-  | .permissions.deny as $deny
-  | walk(tmp)
-  | .permissions.deny = $deny' '
+  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode, .permissions.deny)
+  | walk(tmp)' '
   $o
-  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode)'
+  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode, .permissions.deny)'
 
 # ---------------------------------------------------------------------------
 # box 用に変える値
@@ -214,6 +220,42 @@ done
 check_default "deny_write_example" '
   $i.sandbox.filesystem.denyWrite | index("~/ghq/*/*/*/.git/config") != null' '
   $o.sandbox.filesystem.denyWrite | index("/workspace/*/.git/config") != null'
+
+# ---------------------------------------------------------------------------
+# Edit の deny を checkout パスと /workspace 配下に写す（denyWrite は Bash にしか効かず、acceptEdits の Edit / Write を止めない）。
+# 期待値は入力から作る: 入力の ~/ghq 起点の Edit ルールはそのパスを、~/ghq 起点の denyWrite はそのパスと配下（/**）を、
+# `//` 始まりの絶対パスに写す（checkout は //<checkout>、~/ghq/*/*/ と ~/ghq/** は //workspace/** に）
+# ---------------------------------------------------------------------------
+for case_name in default other; do
+  if [ "$case_name" = default ]; then
+    checkout="$DEFAULT_CHECKOUT"
+  else
+    checkout="$OTHER_CHECKOUT"
+  fi
+  check "edit_deny_mapped ($case_name checkout)" "$TMPROOT/$case_name.json" "$checkout" '
+    def to_box:
+      if startswith("~/ghq/github.com/it-all-playpark/dotfiles/") then "/" + $checkout + .[41:]
+      elif startswith("~/ghq/*/*/") then "//workspace/**" + .[9:]
+      elif startswith("~/ghq/**") then "//workspace" + .[5:]
+      else error("写す規則の無い ~/ghq パス: " + .) end;
+    ($i.permissions.deny | map(select(startswith("Edit(~/ghq")) | .[5:-1] | "Edit(" + to_box + ")"))
+    + ($i.sandbox.filesystem.denyWrite | map(select(startswith("~/ghq")) | to_box | ("Edit(" + . + ")", "Edit(" + . + "/**)")))
+    | unique' '
+    $o.permissions.deny[($i.permissions.deny | length):] | unique'
+done
+
+check_default "edit_deny_example" '[true, true, true, true]' '
+  $o.permissions.deny as $d
+  | [
+      ($d | index("Edit(//workspace/dotfiles/claude-code/hooks/**)") != null),
+      ($d | index("Edit(//workspace/dotfiles/claude-code/bin/**)") != null),
+      ($d | index("Edit(//workspace/**/*/.git/hooks/**)") != null),
+      ($d | index("Edit(//workspace/**/*/.claude/settings.json)") != null)
+    ]'
+
+check_default "no_single_slash_path_rules" '[]' '
+  [$o.permissions | (.allow, .deny, .ask) // [] | .[]
+   | select(test("^(Edit|Read|Write|NotebookEdit)\\(/[^/]"))]'
 
 summary
 echo "PASS: grokbot-linux-settings"

@@ -23,12 +23,36 @@ def box_deny_write:
     empty
   end;
 
+# Mac の ~/ghq 起点のパスを、box の Edit ルール用の絶対パスに写す。写す先が無いパスは empty。
+# 権限ルールでは `//path` がファイルシステムの絶対パスで、`/path` は settings ファイル起点の相対になるので、
+# 必ず `//` で始める（https://code.claude.com/docs/en/permissions の How path patterns match）。
+# /workspace 配下は repo の深さを問わないよう `**` に写す。Write / NotebookEdit も Edit(...) ルールで判定される
+def box_edit_path:
+  if startswith("~/ghq/github.com/it-all-playpark/dotfiles/") then
+    "/" + $checkout + "/" + ltrimstr("~/ghq/github.com/it-all-playpark/dotfiles/")
+  elif startswith("~/ghq/*/*/") then
+    "//workspace/**/" + ltrimstr("~/ghq/*/*/")
+  elif startswith("~/ghq/**") then
+    "//workspace/**" + ltrimstr("~/ghq/**")
+  else
+    empty
+  end;
+
+# box で足す Edit の deny: 入力の ~/ghq 起点の Edit ルールと、~/ghq 起点の denyWrite（Bash にしか効かない）を
+# Edit ルールでも塞ぐ。denyWrite のエントリはファイルかディレクトリか決めずに、そのパスと配下（/**）の両方を塞ぐ
+def box_edit_deny($deny; $deny_write):
+  ($deny | map(select(startswith("Edit(~/ghq")) | ltrimstr("Edit(") | rtrimstr(")") | box_edit_path | "Edit(" + . + ")"))
+  + ($deny_write | map(select(startswith("~/ghq")) | box_edit_path | ("Edit(" + . + ")", "Edit(" + . + "/**)")));
+
 # 重複を除く（並び順は保つ）
 def dedup:
   reduce .[] as $x ([]; if index($x) == null then . + [$x] else . end);
 
-.permissions.deny as $deny
+if ($checkout | startswith("/") | not) then error("checkout は絶対パスで渡す: \($checkout)") else . end
+
+| .permissions.deny as $deny
 | .sandbox.network.allowedDomains as $domains
+| .sandbox.filesystem.denyWrite as $deny_write
 
 # macOS 専用の値を除く
 | .sandbox |= walk(drop_mac_only)
@@ -58,7 +82,9 @@ def dedup:
   )
 | .sandbox.filesystem.denyWrite |= (. + map(box_deny_write) | dedup)
 
-| .permissions.deny = $deny
+# 入力の deny は残し、box のパスに写した Edit の deny を足す（acceptEdits の Edit / Write が checkout の hooks・bin や
+# /workspace 配下の repo の .git/hooks 等を承認なしで書けないようにする）
+| .permissions.deny = ($deny + box_edit_deny($deny; $deny_write) | dedup)
 | .permissions.defaultMode = "acceptEdits"
 | .permissions.additionalDirectories |= (. + ["/workspace"] | dedup)
 
