@@ -30,8 +30,9 @@
 #                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）の Edit ルールが足される
 #  18. edit_deny_example                - checkout の claude-code/*.md・claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
 #                                         Edit で塞がれる（具体例）
-#  19. no_single_slash_path_rules       - 生成物の Edit / Read / Write / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
+#  19. no_single_slash_path_rules      - 生成物の Edit / Read / Write / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
 #                                         相対になる）のパスが無い
+#  20. allow_adds_workflow              - permissions.allow は入力のエントリ + Workflow（承認ダイアログに巨大な script が出ないようにする）
 
 set -euo pipefail
 
@@ -163,10 +164,10 @@ check_default "deny_keeps_input" '$i.permissions.deny' '
 
 check_default "other_keys_same_as_input" '
   $i
-  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode, .permissions.deny)
+  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode, .permissions.deny, .permissions.allow)
   | walk(tmp)' '
   $o
-  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode, .permissions.deny)'
+  | del(.sandbox, .env, .hooks, .enabledPlugins, .permissions.additionalDirectories, .permissions.defaultMode, .permissions.deny, .permissions.allow)'
 
 # ---------------------------------------------------------------------------
 # box 用に変える値
@@ -180,6 +181,10 @@ check_default "allowed_domains_add_stripe_vercel" '
   $o.sandbox.network.allowedDomains'
 
 check_default "default_mode_accept_edits" '"acceptEdits"' '$o.permissions.defaultMode'
+
+check_default "allow_adds_workflow" '
+  $i.permissions.allow + (["Workflow"] - $i.permissions.allow)' '
+  $o.permissions.allow'
 
 check_default "additional_directories" '
   ($i.permissions.additionalDirectories | kept) + ["/workspace"] - ["/home/box"]' '
