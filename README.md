@@ -134,6 +134,54 @@ nix run .#update -- --full
 普段の更新は launchd agent `com.playpark.brew-upgrade` が毎日 04:00 に行います（ログ: `~/Library/Logs/brew-upgrade.log`）。
 sudo が必要な `.pkg` 系 cask は無人では更新せずログに `SKIPPED (.pkg, ...)` と残すので、`--full` で拾ってください。
 
+## Grok Bot の box（Linux）
+
+Grok Bot の box（使い捨ての隔離 Linux コンテナ。x86_64、ユーザー `box`、home `/home/box`、作業領域 `/workspace`）には、
+フル構成ではなく最小構成 `grokbot-linux`（`home-manager/grokbot-linux/`）を流します。switch 1 回で、`claude-code/` の
+指示書（`CLAUDE.md`・`RULES.md`・`README.md`）・`hooks/`・`bin/` の symlink、Linux 版の Claude Code settings
+（`claude-code/settings.json` から `home-manager/grokbot-linux/settings.jq` で生成）、パッケージ
+（`socat`・`tmux`・`postgresql_17`・`gh`）が揃います。Claude Code 本体はこの構成では入れません。
+
+1. **nix を入れる**（box には入っていないので、最初に 1 回。flakes を有効にする）
+
+   ```bash
+   sh <(curl -L https://nixos.org/nix/install) --no-daemon
+   . ~/.nix-profile/etc/profile.d/nix.sh
+   mkdir -p ~/.config/nix
+   echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+   ```
+
+2. **dotfiles を checkout する**（既定の場所は `/workspace/dotfiles`）
+
+   ```bash
+   git clone https://github.com/it-all-playpark/dotfiles.git /workspace/dotfiles
+   cd /workspace/dotfiles
+   ```
+
+3. **switch する**
+
+   ```bash
+   nix run home-manager -- switch --flake .#grokbot-linux
+   ```
+
+   2 回目以降は `home-manager switch --flake .#grokbot-linux` で流せます（この構成が `home-manager` コマンドを入れます）。
+   `claude-code/` の指示書・hooks・bin は checkout への symlink なので、checkout を更新すればそのまま反映されます。
+   `claude-code/settings.json` を変えたときは、Linux 版を作り直すためにもう一度 switch します。
+
+   checkout を `/workspace/dotfiles` 以外に置くときは、そのパスを環境変数 `GROKBOT_DOTFILES_CHECKOUT` で渡し、
+   `--impure` を付けて switch します（symlink 元と、settings の `sandbox.filesystem.denyWrite` がそのパスになります）。
+
+   ```bash
+   GROKBOT_DOTFILES_CHECKOUT=/workspace/other/dotfiles home-manager switch --flake .#grokbot-linux --impure
+   ```
+
+4. **認証情報は repo に置かない**
+
+   この repo は public です。`CLAUDE_CODE_OAUTH_TOKEN` と GitHub の token（`GH_TOKEN`）は repo にも生成物にも入れず、
+   box 側の環境変数（コンテナ起動時に渡す）か、box 上のファイル（repo の外。例: `~/.config/gh/hosts.yml`）で渡します。
+
+戻すときは box を作り直します（既存ファイルの退避はしません。`~/.claude/` の同名の通常ファイルは置き換えます）。
+
 ## Agent Skills
 
 本リポジトリは [Agent Skills](https://agentskills.io) をサポートしており、複数のAIエージェントツール間でスキルを共有できます。

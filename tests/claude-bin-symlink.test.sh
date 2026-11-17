@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # tests/claude-bin-symlink.test.sh
-# home-manager/home/default.nix の activation.setupClaudeCode 内、
-# `# bin-symlink: begin` / `: end` と `# private-config-symlink: begin` / `: end` で
-# 囲まれたブロックを抽出し、~/.claude/bin と、private repo（dotfiles-private）から張る
-# ~/.claude/account-map.json・~/.config/agent-vault-gh/<account>/ の symlink 管理ロジックを単体で検証する。
+# activation.setupClaudeCode の symlink 処理のうち、home-manager/lib/claude-code-symlinks.sh の
+# `# bin-symlink: begin` / `: end` と、home-manager/home/default.nix の
+# `# private-config-symlink: begin` / `: end` で囲まれたブロックを抽出し、~/.claude/bin と、
+# private repo（dotfiles-private）から張る ~/.claude/account-map.json・~/.config/agent-vault-gh/<account>/ の
+# symlink 管理ロジックを単体で検証する。
 #
 # 検証項目:
 #   1. marker_blocks_found               - 両マーカーブロックが見つかる
@@ -18,6 +19,9 @@
 #   7. links_private_config               - private repo の account-map.json と
 #                                           agent-vault-gh/<account>/hosts.yml が symlink される
 #   8. skips_private_config_when_absent   - private repo が無ければ何も張らない（エラーなし）
+#   9. box_excludes_bins                  - box 構成（home-manager/grokbot-linux/default.nix）の除外指定では
+#                                           docker / dotfiles-apply / dotfiles-sync が張られず、他の bin は張られる
+#  10. default_links_all_bins             - 除外を指定しない処理（既存構成）では上の 3 本も張られる
 
 set -euo pipefail
 
@@ -45,11 +49,12 @@ fail() {
 # ブロック抽出
 # ---------------------------------------------------------------------------
 DEFAULT_NIX="$REPO_ROOT/home-manager/home/default.nix"
-BIN_BLOCK="$(sed -n '/# bin-symlink: begin/,/# bin-symlink: end/p' "$DEFAULT_NIX")"
+SYMLINKS_SH="$REPO_ROOT/home-manager/lib/claude-code-symlinks.sh"
+BIN_BLOCK="$(sed -n '/# bin-symlink: begin/,/# bin-symlink: end/p' "$SYMLINKS_SH")"
 MAP_BLOCK="$(sed -n '/# private-config-symlink: begin/,/# private-config-symlink: end/p' "$DEFAULT_NIX")"
 
 if [ -z "$BIN_BLOCK" ] || [ -z "$MAP_BLOCK" ]; then
-  fail "marker_blocks_found" "$DEFAULT_NIX にマーカー # bin-symlink / # private-config-symlink の begin/end が揃っていない"
+  fail "marker_blocks_found" "$SYMLINKS_SH の # bin-symlink か $DEFAULT_NIX の # private-config-symlink の begin/end が揃っていない"
   echo ""
   echo "Results: ${PASS} passed, ${FAIL} failed"
   echo "Failed tests:"
@@ -71,7 +76,13 @@ run_block() {
   local claude_dir="$2"
   local root
   root="$(dirname "$(dirname "$dotfiles_claude")")"
-  DOTFILES_CLAUDE="$dotfiles_claude" CLAUDE_DIR="$claude_dir" \
+  # 3 つ目の引数があるときだけ bin の除外（CLAUDE_BIN_EXCLUDE）を渡す。無ければ既存構成と同じく未設定で走らせる
+  local exclude_env=()
+  if [ "$#" -ge 3 ]; then
+    exclude_env=("CLAUDE_BIN_EXCLUDE=$3")
+  fi
+  env -u CLAUDE_BIN_EXCLUDE ${exclude_env[@]+"${exclude_env[@]}"} \
+    DOTFILES_CLAUDE="$dotfiles_claude" CLAUDE_DIR="$claude_dir" \
     DOTFILES_PRIVATE="$root/dotfiles-private" VAULT_GH_DIR="$root/home/.config/agent-vault-gh" \
     bash -c 'set -eu; source "$1"' _ "$TMPROOT/block.sh"
 }
@@ -173,6 +184,59 @@ if [ "$s4_rc" -eq 0 ] && [ ! -e "$CLAUDE_DIR/account-map.json" ] && [ ! -L "$CLA
   pass "skips_private_config_when_absent"
 else
   fail "skips_private_config_when_absent" "private repo 不在時にエラー終了 (rc=$s4_rc) または symlink が作られた (out=$(cat "$TMPROOT/s4.out"))"
+fi
+
+# ---------------------------------------------------------------------------
+# シナリオ 9 & 10: box_excludes_bins / default_links_all_bins
+# ---------------------------------------------------------------------------
+# 除外する名前は box 構成が activation に渡す値をそのまま使う
+BOX_EXCLUDE="$(sed -n 's/^ *CLAUDE_BIN_EXCLUDE="\([^"]*\)"$/\1/p' "$REPO_ROOT/home-manager/grokbot-linux/default.nix")"
+
+make_bin_fixture() {
+  local bin_dir="$1"
+  local name
+  mkdir -p "$bin_dir"
+  for name in account-exec wt-add docker dotfiles-apply dotfiles-sync; do
+    printf '#!/bin/sh\n' >"$bin_dir/$name"
+  done
+}
+
+# 引数: <~/.claude/bin> <dotfiles の bin> <名前...>。全部が dotfiles の bin への symlink なら 0
+all_linked() {
+  local claude_bin="$1" dotfiles_bin="$2" name
+  shift 2
+  for name in "$@"; do
+    if [ ! -L "$claude_bin/$name" ] || [ "$(readlink "$claude_bin/$name")" != "$dotfiles_bin/$name" ]; then
+      return 1
+    fi
+  done
+}
+
+DOTFILES_CLAUDE="$TMPROOT/s5/dotfiles/claude-code"
+CLAUDE_DIR="$TMPROOT/s5/home/.claude"
+make_bin_fixture "$DOTFILES_CLAUDE/bin"
+mkdir -p "$CLAUDE_DIR"
+run_block "$DOTFILES_CLAUDE" "$CLAUDE_DIR" "$BOX_EXCLUDE" >"$TMPROOT/s5.out" 2>&1 || true
+
+if all_linked "$CLAUDE_DIR/bin" "$DOTFILES_CLAUDE/bin" account-exec wt-add &&
+  [ ! -e "$CLAUDE_DIR/bin/docker" ] && [ ! -L "$CLAUDE_DIR/bin/docker" ] &&
+  [ ! -e "$CLAUDE_DIR/bin/dotfiles-apply" ] && [ ! -L "$CLAUDE_DIR/bin/dotfiles-apply" ] &&
+  [ ! -e "$CLAUDE_DIR/bin/dotfiles-sync" ] && [ ! -L "$CLAUDE_DIR/bin/dotfiles-sync" ]; then
+  pass "box_excludes_bins"
+else
+  fail "box_excludes_bins" "box 構成の除外 (CLAUDE_BIN_EXCLUDE='$BOX_EXCLUDE') で bin の symlink が期待通りでない (out=$(cat "$TMPROOT/s5.out"); ls=$(ls -l "$CLAUDE_DIR/bin" 2>&1))"
+fi
+
+DOTFILES_CLAUDE="$TMPROOT/s6/dotfiles/claude-code"
+CLAUDE_DIR="$TMPROOT/s6/home/.claude"
+make_bin_fixture "$DOTFILES_CLAUDE/bin"
+mkdir -p "$CLAUDE_DIR"
+run_block "$DOTFILES_CLAUDE" "$CLAUDE_DIR" >"$TMPROOT/s6.out" 2>&1 || true
+
+if all_linked "$CLAUDE_DIR/bin" "$DOTFILES_CLAUDE/bin" account-exec wt-add docker dotfiles-apply dotfiles-sync; then
+  pass "default_links_all_bins"
+else
+  fail "default_links_all_bins" "除外を指定しない処理で bin が全部張られていない (out=$(cat "$TMPROOT/s6.out"); ls=$(ls -l "$CLAUDE_DIR/bin" 2>&1))"
 fi
 
 # ---------------------------------------------------------------------------

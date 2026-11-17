@@ -45,7 +45,8 @@ jobs:
             .#darwinConfigurations.MyMBP-naramotoyuuji.system \
             .#darwinConfigurations.MyMBP-yuji_naramoto.system \
             .#homeConfigurations.naramotoyuuji-darwin.activationPackage \
-            .#homeConfigurations.yuji_naramoto-darwin.activationPackage
+            .#homeConfigurations.yuji_naramoto-darwin.activationPackage \
+            .#homeConfigurations.grokbot-linux.activationPackage
 
       # パッチ版 Lima（lib/lima-sandbox）は cache.nixos.org に無く、tests/lima-sandbox.test.sh・tests/sandbox-docker.test.sh の
       # build に約 3 分かかる。

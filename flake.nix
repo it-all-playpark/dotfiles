@@ -94,9 +94,18 @@
 
           # 複数ユーザーの設定をマージ
           mergeConfigs = configs: username: configs // (mkHomeConfig username);
+
+          # Grok Bot の box（隔離 Linux コンテナ、ユーザー box）用の最小構成。
+          # フル構成（commonModules）は使わず、usernames にも足さない
+          boxConfigs = {
+            grokbot-linux = home-manager.lib.homeManagerConfiguration {
+              pkgs = nixpkgsFor."x86_64-linux";
+              modules = [ ./home-manager/grokbot-linux/default.nix ];
+            };
+          };
         in
-        # すべてのユーザー設定をマージして含める
-        nixpkgs.lib.foldl mergeConfigs { } usernames;
+        # すべてのユーザー設定を box 用の構成にマージして含める
+        nixpkgs.lib.foldl mergeConfigs boxConfigs usernames;
 
       # Darwinの構成を出力に追加（macOSのみ）
       # ユーザーごとにdarwin構成を生成

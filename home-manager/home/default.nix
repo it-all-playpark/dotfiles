@@ -172,15 +172,6 @@ in
       fi
       ln -sf "$DOTFILES_CLAUDE/settings.json" "$CLAUDE_DIR/settings.json"
 
-      # markdown files へのシンボリックリンク
-      for f in CLAUDE.md RULES.md FLAGS.md README.md; do
-        target="$CLAUDE_DIR/$f"
-        if [ -f "$target" ] && [ ! -L "$target" ]; then
-          rm "$target"
-        fi
-        [ -f "$DOTFILES_CLAUDE/$f" ] && ln -sf "$DOTFILES_CLAUDE/$f" "$target"
-      done
-
       # private-config-symlink: begin
       # 取引先の org・アカウント名を含む設定は private repo（it-all-playpark/dotfiles-private）の
       # checkout から張る（public 側には汎用名の *.example だけを置く）。checkout が無いマシンでは
@@ -206,92 +197,9 @@ in
       done
       # private-config-symlink: end
 
-      # MCP_*.md files
-      for f in "$DOTFILES_CLAUDE"/MCP_*.md; do
-        if [ -f "$f" ]; then
-          target="$CLAUDE_DIR/$(basename "$f")"
-          if [ -f "$target" ] && [ ! -L "$target" ]; then
-            rm "$target"
-          fi
-          ln -sf "$f" "$target"
-        fi
-      done
-
-      # MODE_*.md files
-      for f in "$DOTFILES_CLAUDE"/MODE_*.md; do
-        if [ -f "$f" ]; then
-          target="$CLAUDE_DIR/$(basename "$f")"
-          if [ -f "$target" ] && [ ! -L "$target" ]; then
-            rm "$target"
-          fi
-          ln -sf "$f" "$target"
-        fi
-      done
-
-      # hooks-symlink: begin
-      # hooks ディレクトリ内のスクリプトへのシンボリックリンク
-      if [ -d "$DOTFILES_CLAUDE/hooks" ]; then
-        mkdir -p "$CLAUDE_DIR/hooks"
-
-        # dotfiles 側で削除された hook の dangling symlink を掃除する
-        # (plugin へ移植した hook 等。dotfiles/claude-code/hooks を指すものだけ対象)
-        for t in "$CLAUDE_DIR"/hooks/*; do
-          if [ -L "$t" ] && [ ! -e "$t" ]; then
-            case "$(readlink "$t")" in
-              "$DOTFILES_CLAUDE"/hooks/*) rm -f "$t" ;;
-            esac
-          fi
-        done
-
-        for f in "$DOTFILES_CLAUDE"/hooks/*.py "$DOTFILES_CLAUDE"/hooks/*.sh; do
-          if [ -f "$f" ]; then
-            base="$(basename "$f")"
-            case "$base" in
-              *.test.sh) continue ;;
-            esac
-            target="$CLAUDE_DIR/hooks/$base"
-            if [ -f "$target" ] && [ ! -L "$target" ]; then
-              rm "$target"
-            fi
-            ln -sf "$f" "$target"
-          fi
-        done
-      fi
-      # hooks-symlink: end
-
-      # bin-symlink: begin
-      # gh / gcloud / tofu の cwd 連動アカウント shim (bin/account-exec と symlink の bin/gh, bin/gcloud, bin/tofu) を
-      # ~/.claude/bin/ へ symlink。bin/gh は repo 内で account-exec への symlink なので
-      # ~/.claude/bin/gh → claude-code/bin/gh → account-exec の 2 段になる (ln -sf は dereference しない)
-      if [ -d "$DOTFILES_CLAUDE/bin" ]; then
-        mkdir -p "$CLAUDE_DIR/bin"
-
-        # dotfiles 側で削除された shim の dangling symlink を掃除する
-        # (dotfiles/claude-code/bin を指すものだけ対象)
-        for t in "$CLAUDE_DIR"/bin/*; do
-          if [ -L "$t" ] && [ ! -e "$t" ]; then
-            case "$(readlink "$t")" in
-              "$DOTFILES_CLAUDE"/bin/*) rm -f "$t" ;;
-            esac
-          fi
-        done
-
-        for f in "$DOTFILES_CLAUDE"/bin/*; do
-          # repo 内 symlink (bin/gh) も対象にするため -f ではなく -e / -L で判定
-          if { [ -e "$f" ] || [ -L "$f" ]; } && [ ! -d "$f" ]; then
-            base="$(basename "$f")"
-            case "$base" in
-              *.test.sh | *.bats) continue ;;
-            esac
-            target="$CLAUDE_DIR/bin/$base"
-            if [ -e "$target" ] && [ ! -L "$target" ]; then
-              rm "$target"
-            fi
-            ln -sf "$f" "$target"
-          fi
-        done
-      fi
-      # bin-symlink: end
+      # 指示書（CLAUDE.md 等）・hooks/・bin/ の symlink。box 用の構成（home-manager/grokbot-linux）と
+      # 同じ処理を使う。bin の除外（CLAUDE_BIN_EXCLUDE）はこの構成では指定しない
+      . ${../lib/claude-code-symlinks.sh}
       )
     '';
 

@@ -46,6 +46,11 @@ hook が強制していることは書かない。強調（IMPORTANT / 絵文字
    `~/.claude/account-map.json` に、`agent-vault-gh/<account>/*` を `~/.config/agent-vault-gh/<account>/` に symlink
    （checkout が無ければ警告を出して飛ばす。下記「非公開の設定」）
 
+3〜6 の処理は `home-manager/lib/claude-code-symlinks.sh` にあり、Grok Bot の box 用の構成
+（`home-manager/grokbot-linux/default.nix`。手順はルートの `README.md`）も同じ処理を使う。box では `bin/` から
+`docker`・`dotfiles-apply`・`dotfiles-sync` を除き、`settings.json` は symlink せず、`home-manager/grokbot-linux/settings.jq` で
+Linux 版に変換したものを置く（`tests/grokbot-linux-settings.test.sh`）。
+
 `skills/` は貼らない。skill は playpark marketplace の plugin で読み込む（`~/.claude/skills` が repo を指すと
 組み込み保護が repo の `.git` まで及び、sandbox 内で commit できなくなる）。
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # tests/claude-hooks-symlink.test.sh
-# home-manager/home/default.nix の activation.setupClaudeCode 内、
+# home-manager/lib/claude-code-symlinks.sh（activation.setupClaudeCode が source する symlink 処理）の
 # `# hooks-symlink: begin` / `: end` マーカーで囲まれたブロックを抽出し、
 # ~/.claude/hooks の symlink 管理ロジック（新規作成 + dangling symlink 掃除）を
 # 単体で検証する。
@@ -41,11 +41,11 @@ fail() {
 # ---------------------------------------------------------------------------
 # ブロック抽出
 # ---------------------------------------------------------------------------
-DEFAULT_NIX="$REPO_ROOT/home-manager/home/default.nix"
-BLOCK="$(sed -n '/# hooks-symlink: begin/,/# hooks-symlink: end/p' "$DEFAULT_NIX")"
+SYMLINKS_SH="$REPO_ROOT/home-manager/lib/claude-code-symlinks.sh"
+BLOCK="$(sed -n '/# hooks-symlink: begin/,/# hooks-symlink: end/p' "$SYMLINKS_SH")"
 
 if [ -z "$BLOCK" ]; then
-  fail "marker_block_found" "$DEFAULT_NIX にマーカー # hooks-symlink: begin/end が見つからない"
+  fail "marker_block_found" "$SYMLINKS_SH にマーカー # hooks-symlink: begin/end が見つからない"
   echo ""
   echo "Results: ${PASS} passed, ${FAIL} failed"
   echo "Failed tests:"
