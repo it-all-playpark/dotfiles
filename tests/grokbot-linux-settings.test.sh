@@ -23,16 +23,19 @@
 #  13. additional_directories           - 入力から引き継ぐものに /workspace が足され、/home/box は入らない
 #  14. enabled_plugins                  - box 用の有効 / 無効が入り、他の plugin は入力と同じ
 #  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものと、
-#                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）が足される
+#                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）と box 構成の入力が足される
 #  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config と <checkout>/.git/config
 #  17. edit_deny_mapped (checkout ごと)  - permissions.deny に、入力の ~/ghq 起点の Edit ルールと ~/ghq 起点の denyWrite を
 #                                         `//` 始まりの checkout パスと /workspace 配下（深さを問わない）に写した Edit ルールと、
-#                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）の Edit ルールが足される
-#  18. edit_deny_example                - checkout の claude-code/*.md・claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
+#                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）と box 構成の入力の Edit ルールが足される
+#  18. edit_deny_example                - checkout の box 構成の入力・claude-code/*.md・claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
 #                                         Edit で塞がれる（具体例）
 #  19. no_single_slash_path_rules      - 生成物の Edit / Read / Write / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
 #                                         相対になる）のパスが無い
 #  20. allow_adds_workflow              - permissions.allow は入力のエントリ + Workflow（承認ダイアログに巨大な script が出ないようにする）
+#  21. deny_write_box_config_inputs     - box 構成の入力（checkout の home-manager/grokbot-linux・claude-code/settings.json・flake.nix）が
+#                                         denyWrite に入る（具体例。Edit の deny は 18 で確かめる）
+#  22. checkout_trailing_slash          - checkout を末尾 / 付きで渡しても、末尾 / 無しと同じ生成物になる（deny のパスに // が混じらない）
 
 set -euo pipefail
 
@@ -101,6 +104,8 @@ def flat_hooks: [to_entries[] | .key as $e | .value[] | del(.hooks) as $g | .hoo
 # box 用に変える sandbox のキーを除く（残りは入力から引き継ぐ）
 def without_box_sandbox_keys:
   del(.enabled, .failIfUnavailable, .network.strictAllowlist, .network.allowedDomains, .filesystem.denyWrite);
+# box 構成の入力になる checkout のファイル（checkout 起点の相対パス）
+def box_config_inputs: ["home-manager/grokbot-linux", "claude-code/settings.json", "flake.nix"];
 $src[0] as $i | $o[0] as $o |
 JQ
 
@@ -222,6 +227,7 @@ for case_name in default other; do
     + ($base | map(select(startswith("~/ghq/*/*/*/")) | $checkout + .[11:]))
     + ($base | map(select(startswith("~/ghq/**")) | "/workspace" + .[5:]))
     + [$checkout + "/claude-code/*.md"]
+    + (box_config_inputs | map($checkout + "/" + .))
     | unique' '
     $o.sandbox.filesystem.denyWrite | unique'
 done
@@ -229,6 +235,23 @@ done
 check_default "deny_write_example" '
   $i.sandbox.filesystem.denyWrite | index("~/ghq/*/*/*/.git/config") != null' '
   $o.sandbox.filesystem.denyWrite | (index("/workspace/*/.git/config") != null and index($checkout + "/.git/config") != null)'
+
+check_default "deny_write_box_config_inputs" '[true, true, true]' '
+  $o.sandbox.filesystem.denyWrite as $d
+  | [
+      ($d | index("/workspace/dotfiles/home-manager/grokbot-linux") != null),
+      ($d | index("/workspace/dotfiles/claude-code/settings.json") != null),
+      ($d | index("/workspace/dotfiles/flake.nix") != null)
+    ]'
+
+# checkout を末尾 / 付きで渡しても、末尾 / 無しと同じ生成物になる（deny のパスに `//` が混じらない）
+if ! generate "$OTHER_CHECKOUT/" >"$TMPROOT/other-slash.json" 2>"$TMPROOT/other-slash.err"; then
+  fail "checkout_trailing_slash" "変換に失敗した ($(cat "$TMPROOT/other-slash.err"))"
+elif cmp -s "$TMPROOT/other.json" "$TMPROOT/other-slash.json"; then
+  pass "checkout_trailing_slash"
+else
+  fail "checkout_trailing_slash" "末尾 / 無し（<）と末尾 / 付き（>）で生成物が違う: $(diff "$TMPROOT/other.json" "$TMPROOT/other-slash.json" | grep '^[<>]' | head -20 | tr '\n' ' ')"
+fi
 
 # ---------------------------------------------------------------------------
 # Edit の deny を checkout パスと /workspace 配下に写す（denyWrite は Bash にしか効かず、acceptEdits の Edit / Write を止めない）。
@@ -250,13 +273,17 @@ for case_name in default other; do
     ($i.permissions.deny | map(select(startswith("Edit(~/ghq")) | .[5:-1] | "Edit(" + to_box + ")"))
     + ($i.sandbox.filesystem.denyWrite | map(select(startswith("~/ghq")) | to_box | ("Edit(" + . + ")", "Edit(" + . + "/**)")))
     + ["Edit(/" + $checkout + "/claude-code/*.md)"]
+    + (box_config_inputs | map("/" + $checkout + "/" + . | ("Edit(" + . + ")", "Edit(" + . + "/**)")))
     | unique' '
     $o.permissions.deny[($i.permissions.deny | length):] | unique'
 done
 
-check_default "edit_deny_example" '[true, true, true, true, true]' '
+check_default "edit_deny_example" '[true, true, true, true, true, true, true, true]' '
   $o.permissions.deny as $d
   | [
+      ($d | index("Edit(//workspace/dotfiles/home-manager/grokbot-linux/**)") != null),
+      ($d | index("Edit(//workspace/dotfiles/claude-code/settings.json)") != null),
+      ($d | index("Edit(//workspace/dotfiles/flake.nix)") != null),
       ($d | index("Edit(//workspace/dotfiles/claude-code/*.md)") != null),
       ($d | index("Edit(//workspace/dotfiles/claude-code/hooks/**)") != null),
       ($d | index("Edit(//workspace/dotfiles/claude-code/bin/**)") != null),

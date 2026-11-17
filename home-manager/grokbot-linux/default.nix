@@ -41,7 +41,7 @@ in
     activation.setupClaudeCode = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       # `exit 0` の影響をこのブロック内に閉じ込めるためのサブシェル（tests/hm-activation-exit.test.sh）
       (
-      DOTFILES_CLAUDE="${dotfilesCheckout}/claude-code"
+      DOTFILES_CLAUDE=${lib.escapeShellArg dotfilesCheckout}/claude-code
       CLAUDE_DIR="${config.home.homeDirectory}/.claude"
       # box では使わない bin（Mac の docker 振り分けと、Mac 側の checkout を更新・反映するコマンド）
       CLAUDE_BIN_EXCLUDE="docker dotfiles-apply dotfiles-sync"
