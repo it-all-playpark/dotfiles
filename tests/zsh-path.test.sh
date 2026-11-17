@@ -17,6 +17,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ZSH_NIX="${REPO_ROOT}/home-manager/programs/zsh.nix"
 PASS=0
 FAIL=0
+SKIP=0
 ERRORS=()
 
 pass() {
@@ -29,6 +30,11 @@ fail() {
   echo "        $2"
   FAIL=$((FAIL + 1))
   ERRORS+=("$1: $2")
+}
+
+skip() {
+  echo "  SKIP: $1 ($2)"
+  SKIP=$((SKIP + 1))
 }
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/zsh-path-test.XXXXXX")"
@@ -91,7 +97,7 @@ MISE_SHIMS="${FAKE_HOME}/.local/share/mise/shims"
 echo "=== zsh.nix PATH tests ==="
 
 if [ -z "${ZSH_BIN}" ]; then
-  fail "zsh_available" "zsh が見つからない"
+  skip "zsh_available" "zsh not found"
 elif ! extract_nix_string envExtra "${WORK}/zshenv" || ! extract_nix_string initContent "${WORK}/zshrc"; then
   fail "extract_nix_strings" "${ZSH_NIX} から envExtra / initContent を取り出せない"
 else
@@ -196,7 +202,7 @@ else
 fi
 
 echo ""
-echo "Results: ${PASS} passed, ${FAIL} failed"
+echo "Results: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
 if [ "${FAIL}" -gt 0 ]; then
   echo "Failed tests:"
   for err in "${ERRORS[@]}"; do
