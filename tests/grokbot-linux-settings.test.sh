@@ -25,8 +25,9 @@
 #  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものが足される
 #  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config
 #  17. edit_deny_mapped (checkout ごと)  - permissions.deny に、入力の ~/ghq 起点の Edit ルールと ~/ghq 起点の denyWrite を
-#                                         `//` 始まりの checkout パスと /workspace 配下（深さを問わない）に写した Edit ルールが足される
-#  18. edit_deny_example                - checkout の claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
+#                                         `//` 始まりの checkout パスと /workspace 配下（深さを問わない）に写した Edit ルールと、
+#                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）の Edit ルールが足される
+#  18. edit_deny_example                - checkout の claude-code/*.md・claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
 #                                         Edit で塞がれる（具体例）
 #  19. no_single_slash_path_rules       - 生成物の Edit / Read / Write / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
 #                                         相対になる）のパスが無い
@@ -240,13 +241,15 @@ for case_name in default other; do
       else error("写す規則の無い ~/ghq パス: " + .) end;
     ($i.permissions.deny | map(select(startswith("Edit(~/ghq")) | .[5:-1] | "Edit(" + to_box + ")"))
     + ($i.sandbox.filesystem.denyWrite | map(select(startswith("~/ghq")) | to_box | ("Edit(" + . + ")", "Edit(" + . + "/**)")))
+    + ["Edit(/" + $checkout + "/claude-code/*.md)"]
     | unique' '
     $o.permissions.deny[($i.permissions.deny | length):] | unique'
 done
 
-check_default "edit_deny_example" '[true, true, true, true]' '
+check_default "edit_deny_example" '[true, true, true, true, true]' '
   $o.permissions.deny as $d
   | [
+      ($d | index("Edit(//workspace/dotfiles/claude-code/*.md)") != null),
       ($d | index("Edit(//workspace/dotfiles/claude-code/hooks/**)") != null),
       ($d | index("Edit(//workspace/dotfiles/claude-code/bin/**)") != null),
       ($d | index("Edit(//workspace/**/*/.git/hooks/**)") != null),

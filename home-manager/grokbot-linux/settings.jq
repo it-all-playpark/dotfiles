@@ -83,8 +83,10 @@ if ($checkout | startswith("/") | not) then error("checkout は絶対パスで�
 | .sandbox.filesystem.denyWrite |= (. + map(box_deny_write) | dedup)
 
 # 入力の deny は残し、box のパスに写した Edit の deny を足す（acceptEdits の Edit / Write が checkout の hooks・bin や
-# /workspace 配下の repo の .git/hooks 等を承認なしで書けないようにする）
-| .permissions.deny = ($deny + box_edit_deny($deny; $deny_write) | dedup)
+# /workspace 配下の repo の .git/hooks 等を承認なしで書けないようにする）。
+# activation が ~/.claude へ symlink する指示書（claude-code/*.md。CLAUDE / RULES / MCP_* / MODE_* 等）も塞ぐ。
+# 書き換えると以後の全 session と subagent が読むグローバル指示が変わる
+| .permissions.deny = ($deny + box_edit_deny($deny; $deny_write) + ["Edit(/" + $checkout + "/claude-code/*.md)"] | dedup)
 | .permissions.defaultMode = "acceptEdits"
 | .permissions.additionalDirectories |= (. + ["/workspace"] | dedup)
 
