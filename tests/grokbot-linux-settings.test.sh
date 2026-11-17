@@ -22,7 +22,7 @@
 #  12. default_mode_accept_edits        - permissions.defaultMode は acceptEdits
 #  13. additional_directories           - 入力から引き継ぐものに /workspace が足され、/home/box は入らない
 #  14. enabled_plugins                  - box 用の有効 / 無効が入り、他の plugin は入力と同じ
-#  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリを残し、checkout パスと /workspace 配下に写したものと、
+#  15. deny_write_mapped (checkout ごと) - denyWrite は入力のエントリ（`**` 入りを除く）を残し、checkout パスと /workspace 配下に写したものと、
 #                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）と box 構成の入力が足される
 #  16. deny_write_example               - ~/ghq/*/*/*/.git/config → /workspace/*/.git/config と <checkout>/.git/config
 #  17. edit_deny_mapped (checkout ごと)  - permissions.deny に、入力の ~/ghq 起点の Edit ルールと ~/ghq 起点の denyWrite を
@@ -36,6 +36,9 @@
 #  21. deny_write_box_config_inputs     - box 構成の入力（checkout の home-manager/grokbot-linux・claude-code/settings.json・flake.nix）が
 #                                         denyWrite に入る（具体例。Edit の deny は 18 で確かめる）
 #  22. checkout_trailing_slash          - checkout を末尾 / 付きで渡しても、末尾 / 無しと同じ生成物になる（deny のパスに // が混じらない）
+#  23. deny_write_no_double_star (checkout ごと)      - denyWrite に `**` 入りのエントリが残らない（Linux の sandbox は glob を展開しない）
+#  24. deny_write_double_star_targets (checkout ごと) - 入力の `**` のエントリ（~/ghq/**/.githooks 等）が守る対象は、
+#                                         checkout 直下の具体パス（<checkout>/.githooks 等）で denyWrite に入る
 
 set -euo pipefail
 
@@ -225,11 +228,22 @@ for case_name in default other; do
     + ($base | map(select(startswith("~/ghq/github.com/it-all-playpark/dotfiles/")) | $checkout + .[41:]))
     + ($base | map(select(startswith("~/ghq/*/*/")) | "/workspace" + .[9:]))
     + ($base | map(select(startswith("~/ghq/*/*/*/")) | $checkout + .[11:]))
-    + ($base | map(select(startswith("~/ghq/**")) | "/workspace" + .[5:]))
+    + ($base | map(select(startswith("~/ghq/**/")) | $checkout + .[8:]))
     + [$checkout + "/claude-code/*.md"]
     + (box_config_inputs | map($checkout + "/" + .))
+    | map(select(contains("**") | not))
     | unique' '
     $o.sandbox.filesystem.denyWrite | unique'
+
+  # Linux の sandbox は denyWrite の glob を展開しないので、`**` 入りのエントリは効かない（#501）
+  check "deny_write_no_double_star ($case_name checkout)" "$TMPROOT/$case_name.json" "$checkout" '[]' '
+    [$o.sandbox.filesystem.denyWrite[] | select(contains("**"))]'
+
+  # 入力の `**` のエントリが守る対象（.githooks 等）は、checkout 直下の具体パスで残る
+  check "deny_write_double_star_targets ($case_name checkout)" "$TMPROOT/$case_name.json" "$checkout" '
+    [$i.sandbox.filesystem.denyWrite[] | select(contains("**")) | $checkout + "/" + (split("/") | last)]' '
+    [$i.sandbox.filesystem.denyWrite[] | select(contains("**")) | $checkout + "/" + (split("/") | last)
+     | select(. as $p | $o.sandbox.filesystem.denyWrite | index($p) != null)]'
 done
 
 check_default "deny_write_example" '
