@@ -30,15 +30,19 @@
 #                                         ~/.claude へ symlink する指示書（checkout の claude-code/*.md）と box 構成の入力の Edit ルールが足される
 #  18. edit_deny_example                - checkout の box 構成の入力・claude-code/*.md・claude-code/hooks と /workspace 配下の .git/hooks・.claude/settings.json が
 #                                         Edit で塞がれる（具体例）
-#  19. no_single_slash_path_rules      - 生成物の Edit / Read / Write / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
+#  19. no_single_slash_path_rules      - 生成物の Edit / Read / Write / MultiEdit / NotebookEdit のルールに単一の / 始まり（settings ファイル起点の
 #                                         相対になる）のパスが無い
-#  20. allow_adds_workflow              - permissions.allow は入力のエントリ + Workflow（承認ダイアログに巨大な script が出ないようにする）
+#  20. allow_edit_tools_workspace_only  - permissions.allow は入力のエントリ + Workflow（承認ダイアログに巨大な script が出ないようにする）。
+#                                         素の Edit / Write / MultiEdit は /workspace 配下だけに当たる同じツールのルールに置き換わる
 #  21. deny_write_box_config_inputs     - box 構成の入力（checkout の home-manager/grokbot-linux・claude-code/settings.json・flake.nix）が
 #                                         denyWrite に入る（具体例。Edit の deny は 18 で確かめる）
 #  22. checkout_trailing_slash          - checkout を末尾 / 付きで渡しても、末尾 / 無しと同じ生成物になる（deny のパスに // が混じらない）
 #  23. deny_write_no_double_star (checkout ごと)      - denyWrite に `**` 入りのエントリが残らない（Linux の sandbox は glob を展開しない）
 #  24. deny_write_double_star_targets (checkout ごと) - 入力の `**` のエントリ（~/ghq/**/.githooks 等）が守る対象は、
 #                                         checkout 直下の具体パス（<checkout>/.githooks 等）で denyWrite に入る
+#  25. edit_deny_path_and_subtree (checkout ごと) - 生成物の denyWrite の /workspace 配下（checkout 自身を除く）の各エントリは、
+#                                         そのパスと配下（/**）の両方の Edit ルールで塞がれる
+#  26. edit_tool_rules_absolute         - box で足す Edit / Write / MultiEdit のルールのパスは `//` 始まりの絶対パス
 
 set -euo pipefail
 
@@ -190,8 +194,13 @@ check_default "allowed_domains_add_stripe_vercel" '
 
 check_default "default_mode_accept_edits" '"acceptEdits"' '$o.permissions.defaultMode'
 
-check_default "allow_adds_workflow" '
-  $i.permissions.allow + (["Workflow"] - $i.permissions.allow)' '
+# 素の Edit / Write / MultiEdit は /workspace 配下だけに当たる同じツールのルールに置き換わる（素のものは残らない）。
+# 権限ルールの絶対パスは `//` で始める: `//path` がファイルシステムの絶対パス、`/path` は project root 起点の相対、
+# `**` は深さを問わない一致（https://code.claude.com/docs/en/permissions の Read and Edit）
+check_default "allow_edit_tools_workspace_only" '
+  $i.permissions.allow
+  | map(if . == "Edit" or . == "Write" or . == "MultiEdit" then . + "(//workspace/**)" else . end)
+  | . + (["Workflow"] - .)' '
   $o.permissions.allow'
 
 check_default "additional_directories" '
@@ -290,6 +299,17 @@ for case_name in default other; do
     + (box_config_inputs | map("/" + $checkout + "/" + . | ("Edit(" + . + ")", "Edit(" + . + "/**)")))
     | unique' '
     $o.permissions.deny[($i.permissions.deny | length):] | unique'
+
+  # 生成物の denyWrite の /workspace 配下（checkout 自身を除く）の各エントリは、ファイルかディレクトリかを書き分けず、
+  # そのパスと配下（/**）の両方の Edit ルールで塞がれる
+  check "edit_deny_path_and_subtree ($case_name checkout)" "$TMPROOT/$case_name.json" "$checkout" '
+    [$o.sandbox.filesystem.denyWrite[]
+     | select(startswith("/workspace/") and (startswith($checkout + "/") | not))
+     | "//workspace/**" + .[10:] | ("Edit(" + . + ")", "Edit(" + . + "/**)")]' '
+    [$o.sandbox.filesystem.denyWrite[]
+     | select(startswith("/workspace/") and (startswith($checkout + "/") | not))
+     | "//workspace/**" + .[10:] | ("Edit(" + . + ")", "Edit(" + . + "/**)")
+     | select(. as $r | $o.permissions.deny | index($r) != null)]'
 done
 
 check_default "edit_deny_example" '[true, true, true, true, true, true, true, true]' '
@@ -307,7 +327,14 @@ check_default "edit_deny_example" '[true, true, true, true, true, true, true, tr
 
 check_default "no_single_slash_path_rules" '[]' '
   [$o.permissions | (.allow, .deny, .ask) // [] | .[]
-   | select(test("^(Edit|Read|Write|NotebookEdit)\\(/[^/]"))]'
+   | select(test("^(Edit|Read|Write|MultiEdit|NotebookEdit)\\(/[^/]"))]'
+
+# box で足す Edit / Write / MultiEdit のルール（入力に無いもの）のパスは、すべて `//` 始まりの絶対パス
+check_default "edit_tool_rules_absolute" '[]' '
+  [$o.permissions | (.allow, .deny, .ask) // [] | .[]
+   | select(test("^(Edit|Write|MultiEdit)\\("))
+   | select(. as $r | $i.permissions | [(.allow, .deny, .ask) // [] | .[]] | index($r) == null)
+   | select(test("^(Edit|Write|MultiEdit)\\(//[^/]") | not)]'
 
 summary
 echo "PASS: grokbot-linux-settings"
