@@ -41,7 +41,7 @@ def box_deny_write:
 
 # Mac の ~/ghq 起点のパスを、box の Edit ルール用の絶対パスに写す。写す先が無いパスは empty。
 # 権限ルールでは `//path` がファイルシステムの絶対パスで、`/path` は settings ファイル起点の相対になるので、
-# 必ず `//` で始める（https://code.claude.com/docs/en/permissions の How path patterns match）。
+# 必ず `//` で始める（https://code.claude.com/docs/en/permissions の Read and Edit）。
 # /workspace 配下は repo の深さを問わないよう `**` に写す。Write / NotebookEdit も Edit(...) ルールで判定される
 def box_edit_path:
   if startswith("~/ghq/github.com/it-all-playpark/dotfiles/") then
@@ -116,8 +116,15 @@ if ($checkout | startswith("/") | not) then error("checkout は絶対パスで�
     | dedup
   )
 | .permissions.defaultMode = "acceptEdits"
+# 素の Edit / Write / MultiEdit の許可は /workspace 配下だけに絞る（素のままだと、上の Edit の deny に無い場所は
+# どこでも承認なしで書ける）。/workspace の外への書き込みは禁止ではなく承認待ちになる
 # Workflow は許可が無いと承認ダイアログに script 全文が出て、巨大な script は承認できない（dev-flow が止まる）
-| .permissions.allow |= ((. // []) + ["Workflow"] | dedup)
+| .permissions.allow |= (
+    (. // [])
+    | map(if . == "Edit" or . == "Write" or . == "MultiEdit" then . + "(//workspace/**)" else . end)
+    | . + ["Workflow"]
+    | dedup
+  )
 | .permissions.additionalDirectories |= (. + ["/workspace"] | dedup)
 
 | .enabledPlugins += {
