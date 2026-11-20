@@ -257,10 +257,22 @@ EOF
 fixture repos_acme_app_pulls_6_reviews <<'EOF'
 [
   {"node_id": "PRR_4", "user": {"login": "dave", "type": "User"}, "state": "APPROVED", "body": "lgtm",
-   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "sha6", "author_association": "MEMBER"}
+   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "sha6", "author_association": "MEMBER"},
+  {"node_id": "PRR_6", "user": {"login": "mallory", "type": "User"}, "state": "CHANGES_REQUESTED", "body": "no",
+   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "sha6", "author_association": "NONE"}
 ]
 EOF
 echo '[]' | fixture repos_acme_app_pulls_7_reviews
+# PR 10: 今の head への APPROVED は書き込み権限のない人（CONTRIBUTOR / NONE）のものだけ
+pr_fixture 10 sha10 true clean false | jq '.requested_reviewers = []' | fixture repos_acme_app_pulls_10
+fixture repos_acme_app_pulls_10_reviews <<'EOF'
+[
+  {"node_id": "PRR_7", "user": {"login": "eve", "type": "User"}, "state": "APPROVED", "body": "",
+   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "sha10", "author_association": "CONTRIBUTOR"},
+  {"node_id": "PRR_8", "user": {"login": "frank", "type": "User"}, "state": "APPROVED", "body": "",
+   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "sha10", "author_association": "NONE"}
+]
+EOF
 # PR 8: head は sha8。APPROVED は古い commit に対するもの、check はキャンセルで、commit status は 2 ページ（2 ページ目に失敗）
 pr_fixture 8 sha8 true clean false | fixture repos_acme_app_pulls_8
 fixture repos_acme_app_pulls_8_reviews <<'EOF'
@@ -291,6 +303,8 @@ echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_sha
 # PR 66: API 応答の number がパス成分を含む。PR 67: changed_files より files が少ない（REST の打ち切り）
 pr_fixture '"../../x"' sha6 true clean false | fixture repos_acme_app_pulls_66
 pr_fixture 67 sha67 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
+# PR 68: API 応答の head.sha が URL の区切り文字を含む
+pr_fixture 68 'sha6/../../x?' true clean false | fixture repos_acme_app_pulls_68
 echo '{"files": [{"filename": "a", "additions": 1, "deletions": 0, "status": "added"}]}' |
   fixture repos_acme_app_compare_def456...sha67
 fixture repos_acme_app_issues_5_comments <<'EOF'
@@ -450,7 +464,9 @@ expect_log "statusCheckRollup: commit statuses を読む" "[api][-X][GET][--pagi
 cloud pr view 5 -R acme/app --json reviewDecision,latestReviews --jq '[.reviewDecision, (.latestReviews | map(.author.login + "=" + .state) | join(","))] | join(" ")'
 expect_out "pr view: reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED" "CHANGES_REQUESTED dave=APPROVED,bob=CHANGES_REQUESTED"
 cloud pr view 6 -R acme/app --json reviewDecision
-expect_json "pr view: APPROVED だけなら APPROVED" '{"reviewDecision": "APPROVED"}'
+expect_json "pr view: APPROVED だけなら APPROVED（書き込み権限のない人の CHANGES_REQUESTED は数えない）" '{"reviewDecision": "APPROVED"}'
+cloud pr view 10 -R acme/app --json reviewDecision
+expect_json "pr view: 書き込み権限のない人の APPROVED だけなら REVIEW_REQUIRED" '{"reviewDecision": "REVIEW_REQUIRED"}'
 cloud pr view 7 -R acme/app --json reviewDecision
 expect_json "pr view: review が無く依頼が残っていれば REVIEW_REQUIRED" '{"reviewDecision": "REVIEW_REQUIRED"}'
 cloud pr view 8 -R acme/app --json reviewDecision
@@ -458,7 +474,7 @@ expect_json "pr view: 今の head より古い commit への APPROVED だけな�
 
 cloud pr view 5 -R acme/app --json comments,commits,files
 expect_json "pr view: comments / commits / files" '{
-  "comments": [{"id": "IC_1", "author": {"login": "app/github-actions"}, "authorAssociation": "NONE", "body": "hello",
+  "comments": [{"id": "IC_1", "author": {"login": "github-actions[bot]"}, "authorAssociation": "NONE", "body": "hello",
     "createdAt": "2026-01-01T00:00:00Z", "includesCreatedEdit": false, "isMinimized": false, "minimizedReason": "",
     "reactionGroups": [], "url": "https://github.com/acme/app/pull/5#issuecomment-1", "viewerDidAuthor": false}],
   "commits": [{"authoredDate": "2026-01-01T00:00:00Z", "committedDate": "2026-01-01T00:00:01Z",
@@ -643,6 +659,8 @@ expect_refused() {
 }
 cloud pr view 66 -R acme/app --json comments
 expect_refused "API 応答の number が整数でなければ、そこから先の API を呼ばない" "/comments"
+cloud pr checks 68 -R acme/app
+expect_refused "pr checks: API 応答の head.sha が SHA の形でなければ check の API を呼ばない" "/commits/"
 cloud issue list -R acme/app --search x --limit "x[\$(touch ${WORK}/pwned)]" --json number
 expect_refused "issue list: 数でない --limit は API を呼ぶ前に拒否する" "search/issues"
 if [ -e "${WORK}/pwned" ]; then

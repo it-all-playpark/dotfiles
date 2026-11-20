@@ -17,10 +17,10 @@
 # --json の出力は GraphQL 版の gh と同じキー名・同じ値の型にする。REST から取れない値は次のとおり:
 #   - user の name、check の workflowName / event / workflow、autoMergeRequest の authorEmail / enabledAt は空
 #   - comments の isMinimized / viewerDidAuthor と issue の isPinned は false（REST に無い）
-#   - reviewDecision は reviews から組み立てる（branch protection は見ない）:
+#   - reviewDecision は reviews から組み立てる（branch protection は見ない）: 数えるのは
+#     author_association が OWNER / MEMBER / COLLABORATOR（書き込み権限のある人）の review だけで、
 #     reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED、無くて今の head の
-#     commit への APPROVED があれば APPROVED、古い commit への APPROVED だけか review 依頼が残っていれば
-#     REVIEW_REQUIRED、それ以外は ""
+#     commit への APPROVED があれば APPROVED、それ以外は REVIEW_REQUIRED
 #   - mergeStateStatus は REST の mergeable_state を大文字にしたもの（clean → CLEAN、dirty → DIRTY、
 #     blocked → BLOCKED、behind → BEHIND、unstable → UNSTABLE、has_hooks → HAS_HOOKS、unknown → UNKNOWN）
 #
@@ -427,7 +427,7 @@ def zero: "0001-01-01T00:00:00Z";
 def login: if .type == "Bot" then "app/" + (.login | sub("\\[bot\\]$"; "")) else .login end;
 def author: if . == null then null else {id: .node_id, is_bot: (.type == "Bot"), login: login, name: (.name // "")} end;
 def assignee: {id: .node_id, login: .login, name: (.name // ""), databaseId: .id};
-def actor: {login: (if . == null then "" else login end)};
+def actor: {login: (if . == null then "" else .login end)};
 def lbl: {id: .node_id, name: .name, description: (.description // ""), color: .color};
 def milestone: if . == null then null else {number: .number, title: .title, description: (.description // ""), dueOn: .due_on} end;
 def comment: {
@@ -483,12 +483,12 @@ def review: {
 };
 def latest($states): [$reviews[0][] | select(.state as $s | $states | index($s))]
   | group_by(.user.login) | map(max_by(.submitted_at)) | sort_by(.submitted_at);
-def decision: .head.sha as $head | latest(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]) as $l
+def decision: .head.sha as $head
+  | latest(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"])
+  | map(select(.author_association as $a | ["OWNER", "MEMBER", "COLLABORATOR"] | index($a))) as $l
   | if $l | any(.state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED"
     elif $l | any(.state == "APPROVED" and .commit_id == $head) then "APPROVED"
-    elif ($l | any(.state == "APPROVED"))
-      or ((.requested_reviewers // []) + (.requested_teams // []) | length) > 0 then "REVIEW_REQUIRED"
-    else "" end;
+    else "REVIEW_REQUIRED" end;
 def change: {added: "ADDED", removed: "DELETED", modified: "MODIFIED", renamed: "RENAMED",
   copied: "COPIED", changed: "CHANGED", unchanged: "UNCHANGED"}[.] // (. | up);
 $pr[0] | . as $p | choose({
@@ -583,8 +583,10 @@ has_field() { # $1 = csv, $2 = field
   return 1
 }
 
-# fetch_checks <sha> <dir> — check-runs と commit statuses を <dir> に書く
+# fetch_checks <sha> <dir> — check-runs と commit statuses を <dir> に書く。
+# 必須 check が未報告でも結果に出ないのは実体の gh（--required なし）と同じ。ゲートの根拠に使わない
 fetch_checks() {
+  [[ $1 =~ ^[A-Za-z0-9]+$ ]] || die "invalid head sha in the API response: '$1'"
   api_pages "repos/$REPO/commits/$1/check-runs" | jq -c '[.[].check_runs[]]' >"$2/checkruns.json"
   api_pages "repos/$REPO/commits/$1/status" | jq -c '[.[].statuses // [] | .[]]' >"$2/statuses.json"
 }
@@ -592,6 +594,7 @@ fetch_checks() {
 # pr_files <PR の REST 応答のファイル> <番号> — 変更ファイルの一覧を、PR の応答にある base と head の
 # commit SHA の比較（compare）から読む。可変の PR 番号ではなく SHA に固定するので、一覧は同じ応答の
 # headRefOid の commit のものになる（読む間に head が更新されても別の commit の一覧が混ざらない）。
+# リネーム元（previous_filename）を出さないのは実体の gh と同じ。ゲートの根拠に使わない。
 # compare の一覧は 300 件で打ち切られるので、PR の changed_files と件数が合わなければ一部だけを返さずに止める
 pr_files() {
   local list want base head
