@@ -4,7 +4,7 @@
 # （手順は cloud/README.md）。何度実行しても同じ結果になる。
 #
 #   1. bats と codex CLI を入れる（dev-flow が使う。jq は settings の生成に使う）
-#   2. claude-code/hooks/ の hook を $HOME/.claude/hooks/ に symlink する
+#   2. claude-code/hooks/ の hook を $HOME/.claude/hooks/ に、claude-code/bin/ のコマンドを $HOME/.claude/bin/ に symlink する
 #   3. cloud/settings.jq で claude-code/settings.json から $HOME/.claude/settings.json を作る
 #
 # クラウドのコンテナは root で動く前提（apt-get / npm install -g に sudo を付けない）。
@@ -33,6 +33,20 @@ for f in "$DOTFILES"/claude-code/hooks/*.py "$DOTFILES"/claude-code/hooks/*.sh; 
   esac
   ln -sfn "$f" "$CLAUDE_DIR/hooks/$base"
   hook_files+=("$base")
+done
+
+# bin（hook は $SCRIPT_DIR/../bin/jev-classify、statusLine は ~/.claude/bin/health-statusline を参照する。
+# Mac の home-manager/lib/claude-code-symlinks.sh と同じく *.test.sh / *.bats は張らない）
+mkdir -p "$CLAUDE_DIR/bin"
+for f in "$DOTFILES"/claude-code/bin/*; do
+  # repo 内 symlink（bin/gh）も対象にするため -f ではなく -e / -L で判定
+  if { [ -e "$f" ] || [ -L "$f" ]; } && [ ! -d "$f" ]; then
+    base="$(basename "$f")"
+    case "$base" in
+    *.test.sh | *.bats) continue ;;
+    esac
+    ln -sfn "$f" "$CLAUDE_DIR/bin/$base"
+  fi
 done
 
 # 3. settings

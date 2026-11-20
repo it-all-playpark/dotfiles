@@ -20,6 +20,8 @@
 #   9. no_empty_hook_groups         - hook が無くなった matcher グループとイベントは残らない
 #  10. session_start_added          - SessionStart に cloud/hooks/session-start.sh が足され、timeout は待ち時間の 30 秒より長い
 #  11. relative_dotfiles_rejected   - dotfiles を相対パスで渡すと失敗する
+#  12. session_start_path_not_expanded - checkout 先の名前に $( ) / ` / クォートがあっても SessionStart の command は
+#                                     それを評価せず、パス全体を 1 つの引数として渡す
 
 set -euo pipefail
 
@@ -146,7 +148,7 @@ fi
 hook_lines() {
   jq -r '.hooks | to_entries[] | .key as $k | .value[].hooks[] | [$k, .command] | @tsv' "$1"
 }
-SESSION_START_CMD="bash \"$DOTFILES/cloud/hooks/session-start.sh\""
+SESSION_START_CMD="bash '$DOTFILES/cloud/hooks/session-start.sh'"
 hook_lines "$INPUT" >"$TMPROOT/input-hooks.tsv"
 : >"$TMPROOT/expected-hooks.tsv"
 while IFS= read -r line; do
@@ -197,6 +199,20 @@ if generate "dotfiles" "$BASE_PATH" "$HOOK_FILES" >/dev/null 2>&1; then
   fail "relative_dotfiles_rejected" "相対パスの dotfiles で変換が成功した"
 else
   pass "relative_dotfiles_rejected"
+fi
+
+# --- 12. session_start_path_not_expanded ---
+# checkout 先の名前にコマンド置換・クォートが入っていても、SessionStart の command はそれを評価せず、
+# パス全体を 1 つの引数として bash に渡す
+EVIL_DIR="$TMPROOT/evil \$(touch $TMPROOT/pwned)\`touch $TMPROOT/pwned2\`'\""
+mkdir -p "$EVIL_DIR/cloud/hooks"
+printf '#!/bin/sh\necho reached\n' >"$EVIL_DIR/cloud/hooks/session-start.sh"
+evil_cmd="$(generate "$EVIL_DIR" "$BASE_PATH" "$HOOK_FILES" | jq -r '.hooks.SessionStart[-1].hooks[0].command')"
+evil_out="$(env -i PATH=/usr/bin:/bin sh -c "$evil_cmd" 2>&1 || true)"
+if [ "$evil_out" = "reached" ] && [ ! -e "$TMPROOT/pwned" ] && [ ! -e "$TMPROOT/pwned2" ]; then
+  pass "session_start_path_not_expanded"
+else
+  fail "session_start_path_not_expanded" "command=$evil_cmd out=$evil_out"
 fi
 
 summary

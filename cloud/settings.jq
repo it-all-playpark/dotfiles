@@ -49,7 +49,8 @@ if ($dotfiles | startswith("/") | not) then error("dotfiles は絶対パスで�
       hooks: [
         {
           type: "command",
-          command: "bash \"\(dotfiles)/cloud/hooks/session-start.sh\"",
+          # パスは @sh で 1 つのシェル引数として引用する（checkout 先の名前に $( や ` があっても展開させない）
+          command: "bash \("\(dotfiles)/cloud/hooks/session-start.sh" | @sh)",
           statusMessage: "dockerd を起動中...",
           timeout: 40
         }

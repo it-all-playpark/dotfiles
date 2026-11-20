@@ -12,7 +12,9 @@
 #   6. backs_up_existing_settings  - 既にあった settings は settings.json.bak に退避される
 #   7. hook_files_exist            - 生成した settings の全 hook の command が参照するファイルが、setup 後に存在する
 #                                    （参照先が無い hook は黙って外れる）
-#   8. rerun_same_result           - 再実行（PATH に settings が足す 2 つが入った状態）しても settings・.bak・hooks が変わらない
+#   8. bin_referenced_exists       - hook が呼ぶ ~/.claude/bin/jev-classify と statusLine の参照先が setup 後に存在し、
+#                                    *.bats は張られない
+#   9. rerun_same_result           - 再実行（PATH に settings が足す 2 つが入った状態）しても settings・.bak・hooks が変わらない
 
 set -euo pipefail
 
@@ -139,7 +141,7 @@ fi
 jq -r '.hooks[][].hooks[].command' "$SETTINGS" >"$TMPROOT/commands.txt"
 missing=""
 while IFS= read -r command; do
-  path="$(printf '%s\n' "$command" | sed -n 's|.*"\([^"]*\.[a-z]*\)".*|\1|p')"
+  path="$(printf '%s\n' "$command" | sed -n "s|.*[\"']\\([^\"']*\\.[a-z]*\\)[\"'].*|\\1|p")"
   path="${path/#\$HOME/$FAKE_HOME}"
   if [ -z "$path" ] || [ ! -f "$path" ]; then
     missing="$missing [$command]"
@@ -151,7 +153,20 @@ else
   fail "hook_files_exist" "参照先が無い hook:$missing"
 fi
 
-# --- 8. rerun_same_result ---
+# --- 8. bin_referenced_exists ---
+# hook が $SCRIPT_DIR/../bin/jev-classify（= ~/.claude/bin）で呼ぶ jev-classify と、statusLine の command の参照先が
+# setup 後の一時 HOME にある（無いと Jev 判定は `|| true` で黙って素通りし、statusLine は出ない）
+statusline="$(jq -r '.statusLine.command // ""' "$SETTINGS")"
+statusline="${statusline/#\~/$FAKE_HOME}"
+statusline="${statusline/#\$HOME/$FAKE_HOME}"
+if [ -x "$FAKE_HOME/.claude/hooks/../bin/jev-classify" ] && [ -n "$statusline" ] && [ -x "$statusline" ] &&
+  [ ! -e "$FAKE_HOME/.claude/bin/jev-classify.bats" ]; then
+  pass "bin_referenced_exists"
+else
+  fail "bin_referenced_exists" "statusLine=$statusline bin=$(ls "$FAKE_HOME/.claude/bin" 2>&1)"
+fi
+
+# --- 9. rerun_same_result ---
 # $HOME/.claude/hooks の中身を「名前 -> symlink 先」の行で出す
 hook_links() {
   for t in "$FAKE_HOME"/.claude/hooks/*; do
