@@ -701,6 +701,8 @@ edit_labels() { # $1 = 番号
     # process substitution は sandbox で /dev/fd が塞がれるので here-string で渡す
     names="$(labels_json "${OPT[remove_label]}" | jq -r '.[] | @uri')"
     while IFS= read -r name; do
+      # 名前が 0 件でも here-string は空行を 1 行渡す。空の名前で labels/ を叩くと全ラベル削除になりうる
+      [ -n "$name" ] || continue
       "$REAL" api -X DELETE "repos/$REPO/issues/$1/labels/$name" >/dev/null
     done <<<"$names"
   fi
@@ -755,7 +757,7 @@ pr_checks() {
     # 実体の gh は --json を付けると check の結果によらず exit 0
     exit 0
   fi
-  jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | join("\t")' "$T/checks.json"
+  jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | @tsv' "$T/checks.json"
   # --json なしは実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8、それ以外（キャンセルを含む）は 0
   if [ "$(jq '[.[] | select(.bucket == "fail")] | length' "$T/checks.json")" -gt 0 ]; then
     exit 1

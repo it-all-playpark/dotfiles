@@ -300,6 +300,15 @@ fixture repos_acme_app_commits_9999999999999999999999999999999999999999_check-ru
 ]}
 EOF
 echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_9999999999999999999999999999999999999999_status
+# PR 10: check 名にタブと改行（成功の行を偽造しようとする名前）
+pr_fixture 10 aaaa000000000000000000000000000000000000 true clean false | fixture repos_acme_app_pulls_10
+fixture repos_acme_app_commits_aaaa000000000000000000000000000000000000_check-runs <<'EOF'
+{"total_count": 1, "check_runs": [
+  {"name": "lint\tpass\t\t\t\nrequired", "status": "completed", "conclusion": "failure", "details_url": "https://ci/lint",
+   "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:30Z"}
+]}
+EOF
+echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_aaaa000000000000000000000000000000000000_status
 # PR 66: API 応答の number がパス成分を含む。PR 67: changed_files より files が少ない（REST の打ち切り）
 pr_fixture '"../../x"' 6666666666666666666666666666666666666666 true clean false | fixture repos_acme_app_pulls_66
 pr_fixture 67 6767676767676767676767676767676767676767 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
@@ -550,6 +559,9 @@ expect_rc "pr checks: 2 ページ目の commit status の失敗で exit 1" 1
 expect_out "pr checks: 2 ページ目の commit status も読む" "$(printf 'build\tcancel\t1m5s\thttps://ci/build\t\nci/a\tpass\t\t\t\nci/b\tfail\t\t\t')"
 cloud pr checks 9 -R acme/app
 expect_rc "pr checks: キャンセルだけなら実体の gh と同じく exit 0" 0
+cloud pr checks 10 -R acme/app
+expect_out "pr checks: check 名のタブ・改行はエスケープし、1 check = 1 行にする" \
+  "$(printf 'lint\\tpass\\t\\t\\t\\nrequired\tfail\t30s\thttps://ci/lint\t')"
 cloud pr checks 5 -R acme/app --json name,state,bucket,link
 if [ "${RC}" -eq 0 ] && [ "$(printf '%s' "${OUT}" | jq -S -c .)" = "$(jq -S -c . <<<'[
   {"name": "build", "state": "SUCCESS", "bucket": "pass", "link": "https://ci/build"},
@@ -676,6 +688,14 @@ for label in . ..; do
   expect_refused "pr edit --remove-label '${label}': どの API も呼ばずに拒否する" "repos/acme/app"
   cloud issue edit 12 -R acme/app --add-label b --remove-label "${label}"
   expect_refused "issue edit --remove-label '${label}': どの API も呼ばずに拒否する" "repos/acme/app"
+done
+for label in "" ","; do
+  cloud issue edit 12 -R acme/app --remove-label "${label}"
+  if grep -qF -- "[DELETE]" "${LOG}"; then
+    fail "issue edit --remove-label '${label}': 削除する名前が無ければ DELETE を呼ばない" "log: $(tr '\n' ' ' <"${LOG}")"
+  else
+    pass "issue edit --remove-label '${label}': 削除する名前が無ければ DELETE を呼ばない"
+  fi
 done
 cloud issue list -R acme/app --search x --limit "x[\$(touch ${WORK}/pwned)]" --json number
 expect_refused "issue list: 数でない --limit は API を呼ぶ前に拒否する" "search/issues"
