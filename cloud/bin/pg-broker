@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# pg-broker（クラウドセッション用）: 使い捨ての Postgres を docker のコンテナで起動する。
+#
+#   pg-broker create [--version 17]  -> stdout に {"id","database_url","expires_at"}
+#   pg-broker delete <id>            -> stdout に {"id","deleted":true}
+#
+# Mac 版（home-manager/home/file/pg-broker/pg_broker_client.py。sandbox-docker VM で起動する）と同じ引数と出力の形。
+# クラウドのコンテナでは dockerd がそのまま動く（cloud/hooks/session-start.sh が起動する）ので、素の docker を使う。
+# cloud/settings.jq が PATH で cloud/bin を先に置くので、クラウドではこちらが解決される。
+#
+# - image は postgres:<major>（--version は数字だけを受ける）
+# - コンテナには LABEL を付け、delete は LABEL 付きのコンテナしか触らない
+# - host 側は 127.0.0.1 の 5500〜5599 の空きポートに publish する
+# - コンテナ内の timeout が TTL_SECONDS 後に postgres を止め、--rm で消える
+#
+# 失敗したときは stderr に理由を出して 1 で終わる。
+set -euo pipefail
+
+DEFAULT_VERSION=17
+LABEL=pg-broker
+TTL_SECONDS=$((90 * 60))
+PORT_FIRST=5500
+PORT_LAST=5599
+ROLE=app
+DATABASE=app
+READY_TIMEOUT_SECONDS=60
+
+die() {
+  echo "pg-broker: $*" >&2
+  exit 1
+}
+
+usage() {
+  die "usage: pg-broker create [--version <major>] | pg-broker delete <id>"
+}
+
+# LABEL 付きのコンテナ（停止中を含む）の full id
+labeled_ids() {
+  docker ps -a --no-trunc --filter "label=$LABEL" --format '{{.ID}}'
+}
+
+# 127.0.0.1:port で何かが待ち受けているか
+port_listening() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+pick_port() {
+  local used port
+  # コンテナ（LABEL の有無を問わない）が host 側に publish している port
+  used="$(docker ps -a --format '{{.Ports}}')"
+  for port in $(seq "$PORT_FIRST" "$PORT_LAST"); do
+    case "$used" in
+    *":$port->"*) continue ;;
+    esac
+    port_listening "$port" && continue
+    echo "$port"
+    return 0
+  done
+  die "no free port in $PORT_FIRST-$PORT_LAST on 127.0.0.1"
+}
+
+iso_utc() {
+  date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ
+}
+
+create() {
+  local version="$DEFAULT_VERSION"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    --version)
+      [ $# -ge 2 ] || usage
+      version="$2"
+      shift 2
+      ;;
+    --version=*)
+      version="${1#--version=}"
+      shift
+      ;;
+    *) usage ;;
+    esac
+  done
+  [[ $version =~ ^[0-9]+$ ]] || die "unsupported version '$version' (major の数字で渡す)"
+
+  local port password started id waited
+  port="$(pick_port)"
+  password="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+  started="$(date +%s)"
+  # TTL を過ぎたら postgres を止める。PID 1 が終わると --rm でコンテナごと消える
+  id="$(docker run -d --rm --label "$LABEL" -p "127.0.0.1:$port:5432" \
+    -e "POSTGRES_USER=$ROLE" -e "POSTGRES_PASSWORD=$password" -e "POSTGRES_DB=$DATABASE" \
+    --entrypoint timeout "postgres:$version" \
+    -s INT -k 30 "$TTL_SECONDS" docker-entrypoint.sh postgres)" || die "docker run failed"
+  [[ $id =~ ^[0-9a-f]{64}$ ]] || die "docker run returned an unexpected id '$id'"
+
+  # 初期化中の一時サーバーはソケットでしか待ち受けないので、-h 127.0.0.1 で本番のサーバーを待つ
+  waited=0
+  until docker exec "$id" pg_isready -q -h 127.0.0.1 -U "$ROLE" -d "$DATABASE" >/dev/null 2>&1; do
+    if [ "$waited" -ge "$READY_TIMEOUT_SECONDS" ]; then
+      docker rm -f -v "$id" >/dev/null 2>&1 || true
+      die "postgres in ${id:0:12} was not ready on 127.0.0.1:$port within ${READY_TIMEOUT_SECONDS}s"
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+
+  printf '{"id": "%s", "database_url": "postgresql://%s:%s@127.0.0.1:%s/%s", "expires_at": "%s"}\n' \
+    "${id:0:12}" "$ROLE" "$password" "$port" "$DATABASE" "$(iso_utc $((started + TTL_SECONDS)))"
+}
+
+delete() {
+  [ $# -eq 1 ] || usage
+  local instance_id="$1" full match="" count=0
+  [[ $instance_id =~ ^[0-9a-f]{12,64}$ ]] || die "invalid instance id '$instance_id'"
+  for full in $(labeled_ids); do
+    case "$full" in
+    "$instance_id"*)
+      match="$full"
+      count=$((count + 1))
+      ;;
+    esac
+  done
+  [ "$count" -eq 1 ] || die "no pg-broker instance '$instance_id'"
+  # -v: postgres image が VOLUME で作る匿名 volume も消す
+  docker rm -f -v "$match" >/dev/null || die "docker rm failed"
+  printf '{"id": "%s", "deleted": true}\n' "$instance_id"
+}
+
+[ $# -ge 1 ] || usage
+command="$1"
+shift
+case "$command" in
+create) create "$@" ;;
+delete) delete "$@" ;;
+*) usage ;;
+esac
