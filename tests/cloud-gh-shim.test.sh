@@ -31,7 +31,12 @@ fail() {
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cloud-gh-shim-test.XXXXXX")"
 WORK="$(cd "${WORK}" && pwd -P)"
-trap 'rm -rf "${WORK}"' EXIT
+# 一時ディレクトリの外にある .devflow-tmp（dev-flow が本文を書く場所。.gitignore 済み）の本文ファイル
+REPO_ROOT_REAL="$(cd "${REPO_ROOT}" && pwd -P)"
+mkdir -p "${REPO_ROOT_REAL}/.devflow-tmp"
+DEVFLOW_TMP_BODY="$(mktemp "${REPO_ROOT_REAL}/.devflow-tmp/cloud-gh-shim-test.XXXXXX")"
+printf 'from devflow-tmp\n' >"${DEVFLOW_TMP_BODY}"
+trap 'rm -rf "${WORK}" "${DEVFLOW_TMP_BODY}"' EXIT
 
 FAKE="${WORK}/fake-gh"
 FIX="${WORK}/fixtures"
@@ -621,6 +626,12 @@ run_in "${WORK}" true issue create --repo acme/app --title T --body-file link-di
 expect_refused "--body-file: シンボリックリンクのディレクトリを通るパスを読まない" "body "
 run_in "${WORK}" true issue comment 12 --repo acme/app --body-file body.md
 expect_out "--body-file: 相対パスの通常のファイルは読む" "https://github.com/acme/app/issues/12#issuecomment-8"
+cloud pr comment 5 --repo acme/app --body-file "${REPO_ROOT_REAL}/tests/cloud-gh-shim.test.sh"
+expect_refused "--body-file: 一時ディレクトリと .devflow-tmp の外のファイルを読まない" "body "
+cloud pr comment 5 --repo acme/app --body-file "${WORK}/real-dir/../secret.txt"
+expect_refused "--body-file: .. を含むパスを読まない" "body "
+cloud pr comment 5 --repo acme/app --body-file "${DEVFLOW_TMP_BODY}"
+expect_out "--body-file: 一時ディレクトリの外でも .devflow-tmp 直下のファイルは読む" "https://github.com/acme/app/pull/5#issuecomment-9"
 cloud pr list --repo acme/app --limit 0x10 --json number
 expect_refused "pr list: 数でない --limit を拒否する" "repos/acme/app/pulls"
 cloud pr view 5 --repo 'acme/app?x=1' --json title
