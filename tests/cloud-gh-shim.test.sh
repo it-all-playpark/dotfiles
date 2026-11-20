@@ -261,7 +261,7 @@ fixture repos_acme_app_pulls_6_reviews <<'EOF'
 ]
 EOF
 echo '[]' | fixture repos_acme_app_pulls_7_reviews
-# PR 8: head は sha8。APPROVED は古い commit に対するもの、check はキャンセルで、commit status は 2 ページ
+# PR 8: head は sha8。APPROVED は古い commit に対するもの、check はキャンセルで、commit status は 2 ページ（2 ページ目に失敗）
 pr_fixture 8 sha8 true clean false | fixture repos_acme_app_pulls_8
 fixture repos_acme_app_pulls_8_reviews <<'EOF'
 [
@@ -279,10 +279,20 @@ fixture repos_acme_app_commits_sha8_status <<'EOF'
 {"state": "success", "statuses": [{"context": "ci/a", "state": "success", "created_at": "2026-01-01T00:02:00Z"}]}
 {"state": "failure", "statuses": [{"context": "ci/b", "state": "failure", "created_at": "2026-01-01T00:02:00Z"}]}
 EOF
+# PR 9: check はキャンセルだけ（失敗も保留も無い）
+pr_fixture 9 sha9 true clean false | fixture repos_acme_app_pulls_9
+fixture repos_acme_app_commits_sha9_check-runs <<'EOF'
+{"total_count": 1, "check_runs": [
+  {"name": "build", "status": "completed", "conclusion": "cancelled", "details_url": "https://ci/build",
+   "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"}
+]}
+EOF
+echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_sha9_status
 # PR 66: API 応答の number がパス成分を含む。PR 67: changed_files より files が少ない（REST の打ち切り）
 pr_fixture '"../../x"' sha6 true clean false | fixture repos_acme_app_pulls_66
-pr_fixture 67 sha6 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
-echo '[{"filename": "a", "additions": 1, "deletions": 0, "status": "added"}]' | fixture repos_acme_app_pulls_67_files
+pr_fixture 67 sha67 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
+echo '{"files": [{"filename": "a", "additions": 1, "deletions": 0, "status": "added"}]}' |
+  fixture repos_acme_app_compare_def456...sha67
 fixture repos_acme_app_issues_5_comments <<'EOF'
 [
   {"node_id": "IC_1", "user": {"login": "github-actions[bot]", "type": "Bot"}, "author_association": "NONE",
@@ -297,11 +307,12 @@ fixture repos_acme_app_pulls_5_commits <<'EOF'
     "committer": {"date": "2026-01-01T00:00:01Z"}}, "author": {"login": "alice", "node_id": "U_1"}}
 ]
 EOF
-fixture repos_acme_app_pulls_5_files <<'EOF'
-[
+# 変更ファイルは PR 番号ではなく base / head の SHA の比較（compare）から読む
+fixture repos_acme_app_compare_def456...abc123 <<'EOF'
+{"files": [
   {"filename": "src/a.ts", "additions": 3, "deletions": 0, "status": "added"},
   {"filename": "docs/b.md", "additions": 0, "deletions": 1, "status": "modified"}
-]
+]}
 EOF
 # branch → PR の解決と pr list（closed の 4 は merge 済み）
 fixture repos_acme_app_pulls <<'EOF'
@@ -456,6 +467,8 @@ expect_json "pr view: comments / commits / files" '{
   "files": [{"path": "src/a.ts", "additions": 3, "deletions": 0, "changeType": "ADDED"},
     {"path": "docs/b.md", "additions": 0, "deletions": 1, "changeType": "MODIFIED"}]
 }'
+expect_log "pr view --json files: PR 番号ではなく応答の base / head の SHA で変更ファイルを読む" \
+  "[api][-X][GET][repos/acme/app/compare/def456...abc123]"
 
 cloud pr view 5 -R acme/app --json headRefName -q .headRefName
 expect_out "pr view: -q は文字列を生で出す" "feat"
@@ -513,8 +526,10 @@ expect_rc "pr checks: 失敗が無く保留があれば exit 8" 8
 cloud pr checks 7 -R acme/app
 expect_rc "pr checks: 成功と skip だけなら exit 0" 0
 cloud pr checks 8 -R acme/app
-expect_rc "pr checks: 成功とキャンセルだけでも exit 1" 1
+expect_rc "pr checks: 2 ページ目の commit status の失敗で exit 1" 1
 expect_out "pr checks: 2 ページ目の commit status も読む" "$(printf 'build\tcancel\t1m5s\thttps://ci/build\t\nci/a\tpass\t\t\t\nci/b\tfail\t\t\t')"
+cloud pr checks 9 -R acme/app
+expect_rc "pr checks: キャンセルだけなら実体の gh と同じく exit 0" 0
 cloud pr checks 5 -R acme/app --json name,state,bucket,link
 if [ "${RC}" -eq 1 ] && [ "$(printf '%s' "${OUT}" | jq -S -c .)" = "$(jq -S -c . <<<'[
   {"name": "build", "state": "SUCCESS", "bucket": "pass", "link": "https://ci/build"},

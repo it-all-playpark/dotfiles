@@ -589,11 +589,17 @@ fetch_checks() {
   api_pages "repos/$REPO/commits/$1/status" | jq -c '[.[].statuses // [] | .[]]' >"$2/statuses.json"
 }
 
-# pr_files <PR の REST 応答のファイル> <番号> — 変更ファイルの一覧を全ページ読む。REST の一覧は
-# 3,000 件で打ち切られるので、PR の changed_files と件数が合わなければ一部だけを返さずに止める
+# pr_files <PR の REST 応答のファイル> <番号> — 変更ファイルの一覧を、PR の応答にある base と head の
+# commit SHA の比較（compare）から読む。可変の PR 番号ではなく SHA に固定するので、一覧は同じ応答の
+# headRefOid の commit のものになる（読む間に head が更新されても別の commit の一覧が混ざらない）。
+# compare の一覧は 300 件で打ち切られるので、PR の changed_files と件数が合わなければ一部だけを返さずに止める
 pr_files() {
-  local list want
-  list="$(api_list "repos/$REPO/pulls/$2/files")"
+  local list want base head
+  base="$(jq -r '.base.sha // empty' "$1")"
+  head="$(jq -r '.head.sha // empty' "$1")"
+  [[ $base =~ ^[A-Za-z0-9]+$ ]] || die "invalid base sha in the API response: '$base'"
+  [[ $head =~ ^[A-Za-z0-9]+$ ]] || die "invalid head sha in the API response: '$head'"
+  list="$("$REAL" api -X GET "repos/$REPO/compare/$base...$head" | jq -c '.files // []')"
   want="$(jq -r '.changed_files // empty' "$1")"
   if [ "$(printf '%s' "$list" | jq 'length')" != "$want" ]; then
     die "the file list of pull request #$2 is incomplete (REST returned $(printf '%s' "$list" | jq 'length') of ${want:-unknown} files)"
@@ -737,9 +743,8 @@ pr_checks() {
   else
     jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | join("\t")' "$T/checks.json"
   fi
-  # 実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8。
-  # キャンセルも成功ではないので失敗として 1 にする（exit code を検証の根拠にする呼び出しが通さないように）
-  if [ "$(jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length' "$T/checks.json")" -gt 0 ]; then
+  # 実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8、それ以外（キャンセルを含む）は 0
+  if [ "$(jq '[.[] | select(.bucket == "fail")] | length' "$T/checks.json")" -gt 0 ]; then
     exit 1
   fi
   if [ "$(jq '[.[] | select(.bucket == "pending")] | length' "$T/checks.json")" -gt 0 ]; then
