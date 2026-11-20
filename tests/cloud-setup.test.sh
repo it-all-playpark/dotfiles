@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 # tests/cloud-setup.test.sh
-# cloud/setup.sh を、偽の npm / apt-get と一時 HOME で実行して検証する（何も install しない）。
+# cloud/setup.sh を、偽の apt-get と一時 HOME で実行して検証する（何も install しない）。
 #
 # 検証項目:
 #   1. setup_succeeds              - setup が exit 0 で終わる
 #   2. installs_bats               - apt-get install に bats を渡す
-#   3. installs_pinned_codex       - npm install -g に版を固定した @openai/codex を渡す
-#   4. links_hooks                 - claude-code/hooks/ の *.sh / *.py が $HOME/.claude/hooks/ に symlink され、*.test.sh は張られない
-#   5. writes_settings             - $HOME/.claude/settings.json は cloud/settings.jq の出力（sandbox が無く、
+#   3. links_hooks                 - claude-code/hooks/ の *.sh / *.py が $HOME/.claude/hooks/ に symlink され、*.test.sh は張られない
+#   4. writes_settings             - $HOME/.claude/settings.json は cloud/settings.jq の出力（sandbox が無く、
 #                                    SessionStart にこの checkout の cloud/hooks/session-start.sh が入る）
-#   6. backs_up_existing_settings  - 既にあった settings は settings.json.bak に退避される
-#   7. hook_files_exist            - 生成した settings の全 hook の command が参照するファイルが、setup 後に存在する
+#   5. backs_up_existing_settings  - 既にあった settings は settings.json.bak に退避される
+#   6. hook_files_exist            - 生成した settings の全 hook の command が参照するファイルが、setup 後に存在する
 #                                    （参照先が無い hook は黙って外れる）
-#   8. bin_referenced_exists       - hook が呼ぶ ~/.claude/bin/jev-classify と statusLine の参照先が setup 後に存在し、
+#   7. bin_referenced_exists       - hook が呼ぶ ~/.claude/bin/jev-classify と statusLine の参照先が setup 後に存在し、
 #                                    *.bats は張られない
-#   9. rerun_same_result           - 再実行（PATH に settings が足す 2 つが入った状態）しても settings・.bak・hooks が変わらない
+#   8. rerun_same_result          - 再実行（PATH に settings が足す 2 つが入った状態）しても settings・.bak・hooks が変わらない
 
 set -euo pipefail
 
@@ -57,12 +56,10 @@ FAKEBIN="$TMPROOT/fakebin"
 LOG="$TMPROOT/calls.log"
 mkdir -p "$FAKE_HOME/.claude" "$FAKEBIN"
 
-# 偽の apt-get / npm は argv を 1 行で記録するだけ
-for tool in apt-get npm; do
-  # shellcheck disable=SC2016 # 意図的なリテラル: $* / $FAKE_CALLS_LOG は偽コマンドの実行時に展開させる
-  printf '#!/bin/sh\necho "%s $*" >>"$FAKE_CALLS_LOG"\n' "$tool" >"$FAKEBIN/$tool"
-  chmod +x "$FAKEBIN/$tool"
-done
+# 偽の apt-get は argv を 1 行で記録するだけ
+# shellcheck disable=SC2016 # 意図的なリテラル: $* / $FAKE_CALLS_LOG は偽コマンドの実行時に展開させる
+printf '#!/bin/sh\necho "apt-get $*" >>"$FAKE_CALLS_LOG"\n' >"$FAKEBIN/apt-get"
+chmod +x "$FAKEBIN/apt-get"
 # jq は実体を使う（setup が apt-get で入れる想定のもの）
 ln -s "$(command -v jq)" "$FAKEBIN/jq"
 
@@ -89,14 +86,7 @@ else
   fail "installs_bats" "calls: $(cat "$LOG")"
 fi
 
-# --- 3. installs_pinned_codex ---
-if grep -Eq '^npm install -g @openai/codex@[0-9]+\.[0-9]+\.[0-9]+$' "$LOG"; then
-  pass "installs_pinned_codex"
-else
-  fail "installs_pinned_codex" "calls: $(cat "$LOG")"
-fi
-
-# --- 4. links_hooks ---
+# --- 3. links_hooks ---
 bad=""
 count=0
 for f in "$HOOKS_DIR"/*.sh "$HOOKS_DIR"/*.py; do
@@ -118,7 +108,7 @@ else
   fail "links_hooks" "期待どおりでない hook:$bad"
 fi
 
-# --- 5. writes_settings ---
+# --- 4. writes_settings ---
 SESSION_START="$REPO_ROOT/cloud/hooks/session-start.sh"
 if jq -e --arg f "$SESSION_START" '
   (has("sandbox") | not)
@@ -129,14 +119,14 @@ else
   fail "writes_settings" "settings.json が cloud/settings.jq の出力になっていない"
 fi
 
-# --- 6. backs_up_existing_settings ---
+# --- 5. backs_up_existing_settings ---
 if [ "$(cat "$SETTINGS.bak" 2>/dev/null)" = '{"existing":true}' ]; then
   pass "backs_up_existing_settings"
 else
   fail "backs_up_existing_settings" "settings.json.bak が元の内容でない"
 fi
 
-# --- 7. hook_files_exist ---
+# --- 6. hook_files_exist ---
 # command の中のスクリプトのパス（$HOME 起点か絶対パス）を取り出し、$HOME を一時 HOME に読み替えて存在を確かめる
 jq -r '.hooks[][].hooks[].command' "$SETTINGS" >"$TMPROOT/commands.txt"
 missing=""
@@ -153,7 +143,7 @@ else
   fail "hook_files_exist" "参照先が無い hook:$missing"
 fi
 
-# --- 8. bin_referenced_exists ---
+# --- 7. bin_referenced_exists ---
 # hook が $SCRIPT_DIR/../bin/jev-classify（= ~/.claude/bin）で呼ぶ jev-classify と、statusLine の command の参照先が
 # setup 後の一時 HOME にある（無いと Jev 判定は `|| true` で黙って素通りし、statusLine は出ない）
 statusline="$(jq -r '.statusLine.command // ""' "$SETTINGS")"
@@ -166,7 +156,7 @@ else
   fail "bin_referenced_exists" "statusLine=$statusline bin=$(ls "$FAKE_HOME/.claude/bin" 2>&1)"
 fi
 
-# --- 9. rerun_same_result ---
+# --- 8. rerun_same_result ---
 # $HOME/.claude/hooks の中身を「名前 -> symlink 先」の行で出す
 hook_links() {
   for t in "$FAKE_HOME"/.claude/hooks/*; do

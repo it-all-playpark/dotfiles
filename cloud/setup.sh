@@ -3,16 +3,13 @@
 # Claude Code のクラウドセッション用の setup。クラウド環境の setup スクリプトから、dotfiles を clone したあとに呼ぶ
 # （手順は cloud/README.md）。何度実行しても同じ結果になる。
 #
-#   1. bats と codex CLI を入れる（dev-flow が使う。jq は settings の生成に使う）
+#   1. bats を入れる（dev-flow が使う。jq は settings の生成に使う）。codex CLI は入れない（cloud/README.md の鍵の方針）
 #   2. claude-code/hooks/ の hook を $HOME/.claude/hooks/ に、claude-code/bin/ のコマンドを $HOME/.claude/bin/ に symlink する
 #   3. cloud/settings.jq で claude-code/settings.json から $HOME/.claude/settings.json を作る
 #
-# クラウドのコンテナは root で動く前提（apt-get / npm install -g に sudo を付けない）。
+# クラウドのコンテナは root で動く前提（apt-get に sudo を付けない）。
 
 set -euo pipefail
-
-# codex CLI（@openai/codex）の版。上げるときはここを書き換える
-CODEX_VERSION="0.171.0"
 
 DOTFILES="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLAUDE_DIR="$HOME/.claude"
@@ -20,7 +17,6 @@ CLAUDE_DIR="$HOME/.claude"
 # 1. tools
 apt-get update
 apt-get install -y --no-install-recommends bats jq
-npm install -g "@openai/codex@$CODEX_VERSION"
 
 # 2. hooks（Mac の home-manager/lib/claude-code-symlinks.sh と同じく *.py / *.sh を張り、*.test.sh は張らない）
 mkdir -p "$CLAUDE_DIR/hooks"
