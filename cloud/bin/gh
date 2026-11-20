@@ -266,29 +266,10 @@ api_send() {
 }
 
 BODY=""
-# --body-file の本文を読む。読むのは dev-flow 系が本文を書く場所 — 一時ディレクトリ（$TMPDIR・/tmp）の下か、
-# .devflow-tmp ディレクトリの直下 — のファイルだけ。`..` を含むパスと、どの成分もシンボリックリンクなパスは
-# 読まずに止める（認証情報などのファイルを本文として GitHub に送らない）
+# --body-file の本文を読む。実体の gh と同じく、渡されたパスをそのまま読む
+# （どのファイルを本文にするかは呼び出し側の責任。パスの制限は実体に無いので掛けない）
 read_body() {
-  local f="${OPT[body_file]}" rest c p="" t ok=""
-  [[ $f == /* ]] || f="$(pwd -P)/$f"
-  rest="${f#/}"
-  while [ -n "$rest" ]; do
-    c="${rest%%/*}"
-    if [ "$c" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
-    [ -n "$c" ] || continue
-    [ "$c" != ".." ] || die "--body-file has a .. component: ${OPT[body_file]}"
-    p="$p/$c"
-    [ ! -L "$p" ] || die "--body-file goes through a symbolic link: $p"
-  done
-  [ "$(basename -- "$(dirname -- "$p")")" != ".devflow-tmp" ] || ok=1
-  for t in "${TMPDIR:-/tmp}" /tmp; do
-    t="$(cd -- "$t" 2>/dev/null && pwd -P)" || continue
-    [[ $p != "${t%/}"/* ]] || ok=1
-  done
-  [ -n "$ok" ] || die "--body-file is outside the temp directory and .devflow-tmp: ${OPT[body_file]}"
-  [ -f "$f" ] || die "--body-file is not a regular file: ${OPT[body_file]}"
-  BODY="$(cat -- "$f")"
+  BODY="$(cat -- "${OPT[body_file]}")" || die "could not read --body-file: ${OPT[body_file]}"
 }
 
 csv_json() { # csv → JSON 配列
