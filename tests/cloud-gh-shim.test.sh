@@ -200,17 +200,17 @@ pr_fixture() { # <番号> <head sha> <mergeable> <mergeable_state> <draft>
     user: {login: "alice", node_id: "U_1", id: 1, type: "User"},
     head: {ref: "feat", sha: $sha, repo: {node_id: "R_1", name: "app", full_name: "acme/app"},
       user: {login: "acme", node_id: "O_1"}},
-    base: {ref: "main", sha: "def456", repo: {full_name: "acme/app"}},
+    base: {ref: "main", sha: "def4560000000000000000000000000000000000", repo: {full_name: "acme/app"}},
     labels: [{node_id: "L_1", name: "bug", description: null, color: "ff0000"}],
     assignees: [{login: "bob", node_id: "U_2", id: 2, type: "User"}],
     requested_reviewers: [{login: "carol"}], requested_teams: [], milestone: null, auto_merge: null
   }'
 }
-pr_fixture 5 abc123 false dirty true | fixture repos_acme_app_pulls_5
-pr_fixture 6 sha6 true clean false | fixture repos_acme_app_pulls_6
-pr_fixture 7 sha7 null unknown false | fixture repos_acme_app_pulls_7
+pr_fixture 5 abc1230000000000000000000000000000000000 false dirty true | fixture repos_acme_app_pulls_5
+pr_fixture 6 6666666666666666666666666666666666666666 true clean false | fixture repos_acme_app_pulls_6
+pr_fixture 7 7777777777777777777777777777777777777777 null unknown false | fixture repos_acme_app_pulls_7
 
-fixture repos_acme_app_commits_abc123_check-runs <<'EOF'
+fixture repos_acme_app_commits_abc1230000000000000000000000000000000000_check-runs <<'EOF'
 {"total_count": 2, "check_runs": [
   {"name": "build", "status": "completed", "conclusion": "success", "details_url": "https://ci/build",
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"},
@@ -218,13 +218,13 @@ fixture repos_acme_app_commits_abc123_check-runs <<'EOF'
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:30Z"}
 ]}
 EOF
-fixture repos_acme_app_commits_abc123_status <<'EOF'
+fixture repos_acme_app_commits_abc1230000000000000000000000000000000000_status <<'EOF'
 {"state": "success", "statuses": [
   {"context": "deploy/preview", "state": "success", "description": "Ready", "target_url": "https://preview",
    "created_at": "2026-01-01T00:02:00Z"}
 ]}
 EOF
-fixture repos_acme_app_commits_sha6_check-runs <<'EOF'
+fixture repos_acme_app_commits_6666666666666666666666666666666666666666_check-runs <<'EOF'
 {"total_count": 2, "check_runs": [
   {"name": "build", "status": "completed", "conclusion": "success", "details_url": "https://ci/build",
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"},
@@ -232,8 +232,8 @@ fixture repos_acme_app_commits_sha6_check-runs <<'EOF'
    "started_at": "2026-01-01T00:00:00Z", "completed_at": null}
 ]}
 EOF
-echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_sha6_status
-fixture repos_acme_app_commits_sha7_check-runs <<'EOF'
+echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_6666666666666666666666666666666666666666_status
+fixture repos_acme_app_commits_7777777777777777777777777777777777777777_check-runs <<'EOF'
 {"total_count": 2, "check_runs": [
   {"name": "build", "status": "completed", "conclusion": "success", "details_url": "https://ci/build",
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"},
@@ -241,72 +241,76 @@ fixture repos_acme_app_commits_sha7_check-runs <<'EOF'
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:00:00Z"}
 ]}
 EOF
-echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_sha7_status
+echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_7777777777777777777777777777777777777777_status
 
 # PR 5: bob は APPROVED のあと CHANGES_REQUESTED、dave は APPROVED。PR 6: dave の APPROVED だけ。PR 7: review なし
 fixture repos_acme_app_pulls_5_reviews <<'EOF'
 [
   {"node_id": "PRR_1", "user": {"login": "bob", "type": "User"}, "state": "APPROVED", "body": "",
-   "submitted_at": "2026-01-01T01:00:00Z", "commit_id": "abc123", "author_association": "MEMBER"},
+   "submitted_at": "2026-01-01T01:00:00Z", "commit_id": "abc1230000000000000000000000000000000000", "author_association": "MEMBER"},
   {"node_id": "PRR_2", "user": {"login": "dave", "type": "User"}, "state": "APPROVED", "body": "lgtm",
-   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "abc123", "author_association": "MEMBER"},
+   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "abc1230000000000000000000000000000000000", "author_association": "MEMBER"},
   {"node_id": "PRR_3", "user": {"login": "bob", "type": "User"}, "state": "CHANGES_REQUESTED", "body": "fix",
-   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "abc123", "author_association": "MEMBER"}
+   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "abc1230000000000000000000000000000000000", "author_association": "MEMBER"}
 ]
 EOF
 fixture repos_acme_app_pulls_6_reviews <<'EOF'
 [
   {"node_id": "PRR_4", "user": {"login": "dave", "type": "User"}, "state": "APPROVED", "body": "lgtm",
-   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "sha6", "author_association": "MEMBER"},
+   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "6666666666666666666666666666666666666666", "author_association": "MEMBER"},
   {"node_id": "PRR_6", "user": {"login": "mallory", "type": "User"}, "state": "CHANGES_REQUESTED", "body": "no",
-   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "sha6", "author_association": "NONE"}
+   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "6666666666666666666666666666666666666666", "author_association": "NONE"}
 ]
 EOF
 echo '[]' | fixture repos_acme_app_pulls_7_reviews
 # PR 10: 今の head への APPROVED は書き込み権限のない人（CONTRIBUTOR / NONE）のものだけ
-pr_fixture 10 sha10 true clean false | jq '.requested_reviewers = []' | fixture repos_acme_app_pulls_10
+pr_fixture 10 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true clean false | jq '.requested_reviewers = []' | fixture repos_acme_app_pulls_10
 fixture repos_acme_app_pulls_10_reviews <<'EOF'
 [
   {"node_id": "PRR_7", "user": {"login": "eve", "type": "User"}, "state": "APPROVED", "body": "",
-   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "sha10", "author_association": "CONTRIBUTOR"},
+   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "author_association": "CONTRIBUTOR"},
   {"node_id": "PRR_8", "user": {"login": "frank", "type": "User"}, "state": "APPROVED", "body": "",
-   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "sha10", "author_association": "NONE"}
+   "submitted_at": "2026-01-01T03:00:00Z", "commit_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "author_association": "NONE"}
 ]
 EOF
-# PR 8: head は sha8。APPROVED は古い commit に対するもの、check はキャンセルで、commit status は 2 ページ（2 ページ目に失敗）
-pr_fixture 8 sha8 true clean false | fixture repos_acme_app_pulls_8
+# PR 8: head は 8888888888888888888888888888888888888888。APPROVED は古い commit に対するもの、check はキャンセルで、commit status は 2 ページ（2 ページ目に失敗）
+pr_fixture 8 8888888888888888888888888888888888888888 true clean false | fixture repos_acme_app_pulls_8
 fixture repos_acme_app_pulls_8_reviews <<'EOF'
 [
   {"node_id": "PRR_5", "user": {"login": "dave", "type": "User"}, "state": "APPROVED", "body": "lgtm",
    "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "old8", "author_association": "MEMBER"}
 ]
 EOF
-fixture repos_acme_app_commits_sha8_check-runs <<'EOF'
+fixture repos_acme_app_commits_8888888888888888888888888888888888888888_check-runs <<'EOF'
 {"total_count": 1, "check_runs": [
   {"name": "build", "status": "completed", "conclusion": "cancelled", "details_url": "https://ci/build",
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"}
 ]}
 EOF
-fixture repos_acme_app_commits_sha8_status <<'EOF'
+fixture repos_acme_app_commits_8888888888888888888888888888888888888888_status <<'EOF'
 {"state": "success", "statuses": [{"context": "ci/a", "state": "success", "created_at": "2026-01-01T00:02:00Z"}]}
 {"state": "failure", "statuses": [{"context": "ci/b", "state": "failure", "created_at": "2026-01-01T00:02:00Z"}]}
 EOF
 # PR 9: check はキャンセルだけ（失敗も保留も無い）
-pr_fixture 9 sha9 true clean false | fixture repos_acme_app_pulls_9
-fixture repos_acme_app_commits_sha9_check-runs <<'EOF'
+pr_fixture 9 9999999999999999999999999999999999999999 true clean false | fixture repos_acme_app_pulls_9
+fixture repos_acme_app_commits_9999999999999999999999999999999999999999_check-runs <<'EOF'
 {"total_count": 1, "check_runs": [
   {"name": "build", "status": "completed", "conclusion": "cancelled", "details_url": "https://ci/build",
    "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"}
 ]}
 EOF
-echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_sha9_status
+echo '{"state": "pending", "statuses": []}' | fixture repos_acme_app_commits_9999999999999999999999999999999999999999_status
 # PR 66: API 応答の number がパス成分を含む。PR 67: changed_files より files が少ない（REST の打ち切り）
-pr_fixture '"../../x"' sha6 true clean false | fixture repos_acme_app_pulls_66
-pr_fixture 67 sha67 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
+pr_fixture '"../../x"' 6666666666666666666666666666666666666666 true clean false | fixture repos_acme_app_pulls_66
+pr_fixture 67 6767676767676767676767676767676767676767 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
 # PR 68: API 応答の head.sha が URL の区切り文字を含む
-pr_fixture 68 'sha6/../../x?' true clean false | fixture repos_acme_app_pulls_68
+pr_fixture 68 '6666666666666666666666666666666666666666/../../x?' true clean false | fixture repos_acme_app_pulls_68
+# PR 69: head.sha がブランチ名の形。PR 70: base.sha が短縮 SHA の形（どちらも 40 桁の 16 進ではない）
+pr_fixture 69 feature true clean false | fixture repos_acme_app_pulls_69
+pr_fixture 70 6666666666666666666666666666666666666666 true clean false | jq '.base.sha = "def4560"' |
+  fixture repos_acme_app_pulls_70
 echo '{"files": [{"filename": "a", "additions": 1, "deletions": 0, "status": "added"}]}' |
-  fixture repos_acme_app_compare_def456...sha67
+  fixture repos_acme_app_compare_def4560000000000000000000000000000000000...6767676767676767676767676767676767676767
 fixture repos_acme_app_issues_5_comments <<'EOF'
 [
   {"node_id": "IC_1", "user": {"login": "github-actions[bot]", "type": "Bot"}, "author_association": "NONE",
@@ -316,13 +320,13 @@ fixture repos_acme_app_issues_5_comments <<'EOF'
 EOF
 fixture repos_acme_app_pulls_5_commits <<'EOF'
 [
-  {"sha": "abc123", "commit": {"message": "feat: add x\n\ndetails",
+  {"sha": "abc1230000000000000000000000000000000000", "commit": {"message": "feat: add x\n\ndetails",
     "author": {"name": "Alice", "email": "alice@example.com", "date": "2026-01-01T00:00:00Z"},
     "committer": {"date": "2026-01-01T00:00:01Z"}}, "author": {"login": "alice", "node_id": "U_1"}}
 ]
 EOF
 # 変更ファイルは PR 番号ではなく base / head の SHA の比較（compare）から読む
-fixture repos_acme_app_compare_def456...abc123 <<'EOF'
+fixture repos_acme_app_compare_def4560000000000000000000000000000000000...abc1230000000000000000000000000000000000 <<'EOF'
 {"files": [
   {"filename": "src/a.ts", "additions": 3, "deletions": 0, "status": "added"},
   {"filename": "docs/b.md", "additions": 0, "deletions": 1, "status": "modified"}
@@ -333,10 +337,10 @@ fixture repos_acme_app_pulls <<'EOF'
 [
   {"number": 4, "state": "closed", "title": "Old", "draft": false, "merged_at": "2025-12-01T00:00:00Z",
    "html_url": "https://github.com/acme/app/pull/4", "user": {"login": "bob", "type": "User"},
-   "head": {"ref": "feat", "sha": "old"}, "base": {"ref": "main", "sha": "def456"}, "labels": []},
+   "head": {"ref": "feat", "sha": "old"}, "base": {"ref": "main", "sha": "def4560000000000000000000000000000000000"}, "labels": []},
   {"number": 5, "state": "open", "title": "Add x", "draft": true, "merged_at": null,
    "html_url": "https://github.com/acme/app/pull/5", "user": {"login": "alice", "type": "User"},
-   "head": {"ref": "feat", "sha": "abc123"}, "base": {"ref": "main", "sha": "def456"},
+   "head": {"ref": "feat", "sha": "abc1230000000000000000000000000000000000"}, "base": {"ref": "main", "sha": "def4560000000000000000000000000000000000"},
    "labels": [{"node_id": "L_1", "name": "bug", "description": null, "color": "ff0000"}]}
 ]
 EOF
@@ -431,7 +435,7 @@ expect_json "pr view: PR 本体の field" '{
   "headRepository": {"id": "R_1", "name": "app", "nameWithOwner": "acme/app"},
   "headRepositoryOwner": {"id": "O_1", "name": "", "login": "acme"},
   "number": 5, "title": "Add x", "state": "OPEN", "isDraft": true, "url": "https://github.com/acme/app/pull/5",
-  "body": "Body\ntext", "headRefName": "feat", "headRefOid": "abc123", "baseRefName": "main", "baseRefOid": "def456",
+  "body": "Body\ntext", "headRefName": "feat", "headRefOid": "abc1230000000000000000000000000000000000", "baseRefName": "main", "baseRefOid": "def4560000000000000000000000000000000000",
   "mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY", "additions": 3, "deletions": 1, "changedFiles": 2,
   "isCrossRepository": false, "closed": false, "mergedAt": null,
   "author": {"id": "U_1", "is_bot": false, "login": "alice", "name": ""},
@@ -447,7 +451,7 @@ expect_json "pr view: mergeable null → UNKNOWN" '{"mergeable": "UNKNOWN", "mer
 
 cloud pr view 5 -R acme/app --json headRefOid,statusCheckRollup
 expect_json "pr view: statusCheckRollup は check-runs と commit statuses から組み立てる" '{
-  "headRefOid": "abc123",
+  "headRefOid": "abc1230000000000000000000000000000000000",
   "statusCheckRollup": [
     {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS", "workflowName": "",
      "detailsUrl": "https://ci/build", "startedAt": "2026-01-01T00:00:00Z", "completedAt": "2026-01-01T00:01:05Z"},
@@ -458,8 +462,8 @@ expect_json "pr view: statusCheckRollup は check-runs と commit statuses か�
   ]
 }'
 expect_log "statusCheckRollup: check-runs を読む" \
-  "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/check-runs][-f][per_page=100]"
-expect_log "statusCheckRollup: commit statuses を読む" "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/status][-f][per_page=100]"
+  "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc1230000000000000000000000000000000000/check-runs][-f][per_page=100]"
+expect_log "statusCheckRollup: commit statuses を読む" "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc1230000000000000000000000000000000000/status][-f][per_page=100]"
 
 cloud pr view 5 -R acme/app --json reviewDecision,latestReviews --jq '[.reviewDecision, (.latestReviews | map(.author.login + "=" + .state) | join(","))] | join(" ")'
 expect_out "pr view: reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED" "CHANGES_REQUESTED dave=APPROVED,bob=CHANGES_REQUESTED"
@@ -479,12 +483,12 @@ expect_json "pr view: comments / commits / files" '{
     "reactionGroups": [], "url": "https://github.com/acme/app/pull/5#issuecomment-1", "viewerDidAuthor": false}],
   "commits": [{"authoredDate": "2026-01-01T00:00:00Z", "committedDate": "2026-01-01T00:00:01Z",
     "authors": [{"email": "alice@example.com", "id": "U_1", "login": "alice", "name": "Alice"}],
-    "messageHeadline": "feat: add x", "messageBody": "details", "oid": "abc123"}],
+    "messageHeadline": "feat: add x", "messageBody": "details", "oid": "abc1230000000000000000000000000000000000"}],
   "files": [{"path": "src/a.ts", "additions": 3, "deletions": 0, "changeType": "ADDED"},
     {"path": "docs/b.md", "additions": 0, "deletions": 1, "changeType": "MODIFIED"}]
 }'
 expect_log "pr view --json files: PR 番号ではなく応答の base / head の SHA で変更ファイルを読む" \
-  "[api][-X][GET][repos/acme/app/compare/def456...abc123]"
+  "[api][-X][GET][repos/acme/app/compare/def4560000000000000000000000000000000000...abc1230000000000000000000000000000000000]"
 
 cloud pr view 5 -R acme/app --json headRefName -q .headRefName
 expect_out "pr view: -q は文字列を生で出す" "feat"
@@ -535,8 +539,8 @@ expect_rc "pr checks: 失敗があれば exit 1" 1
 expect_out "pr checks: check-runs と commit statuses を 1 行ずつ出す" \
   "$(printf 'build\tpass\t1m5s\thttps://ci/build\t\ndeploy/preview\tpass\t\thttps://preview\tReady\nlint\tfail\t30s\thttps://ci/lint\t')"
 expect_log "pr checks: head sha の check-runs を読む" \
-  "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/check-runs][-f][per_page=100]"
-expect_log "pr checks: head sha の commit statuses を読む" "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/status][-f][per_page=100]"
+  "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc1230000000000000000000000000000000000/check-runs][-f][per_page=100]"
+expect_log "pr checks: head sha の commit statuses を読む" "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc1230000000000000000000000000000000000/status][-f][per_page=100]"
 cloud pr checks 6 -R acme/app
 expect_rc "pr checks: 失敗が無く保留があれば exit 8" 8
 cloud pr checks 7 -R acme/app
@@ -547,16 +551,16 @@ expect_out "pr checks: 2 ページ目の commit status も読む" "$(printf 'bui
 cloud pr checks 9 -R acme/app
 expect_rc "pr checks: キャンセルだけなら実体の gh と同じく exit 0" 0
 cloud pr checks 5 -R acme/app --json name,state,bucket,link
-if [ "${RC}" -eq 1 ] && [ "$(printf '%s' "${OUT}" | jq -S -c .)" = "$(jq -S -c . <<<'[
+if [ "${RC}" -eq 0 ] && [ "$(printf '%s' "${OUT}" | jq -S -c .)" = "$(jq -S -c . <<<'[
   {"name": "build", "state": "SUCCESS", "bucket": "pass", "link": "https://ci/build"},
   {"name": "deploy/preview", "state": "SUCCESS", "bucket": "pass", "link": "https://preview"},
   {"name": "lint", "state": "FAILURE", "bucket": "fail", "link": "https://ci/lint"}]')" ]; then
-  pass "pr checks --json: 結果を出したうえで exit 1"
+  pass "pr checks --json: 失敗があっても実体の gh と同じく結果を出して exit 0"
 else
   fail "pr checks --json" "exit ${RC} / got: ${OUT} / stderr: ${ERR}"
 fi
 cloud pr checks 6 -R acme/app --json name,state,bucket --jq '.[] | select(.bucket == "pending") | .name + " " + .state'
-expect_rc "pr checks --json: 保留があれば exit 8" 8
+expect_rc "pr checks --json: 保留があっても実体の gh と同じく exit 0" 0
 expect_out "pr checks --json --jq: 実行中の check は pending" "e2e IN_PROGRESS"
 
 echo "--- AC-4: PR の書き込み系 ---"
@@ -661,6 +665,18 @@ cloud pr view 66 -R acme/app --json comments
 expect_refused "API 応答の number が整数でなければ、そこから先の API を呼ばない" "/comments"
 cloud pr checks 68 -R acme/app
 expect_refused "pr checks: API 応答の head.sha が SHA の形でなければ check の API を呼ばない" "/commits/"
+cloud pr checks 69 -R acme/app
+expect_refused "pr checks: head.sha がブランチ名の形なら check の API を呼ばない" "/commits/"
+cloud pr view 69 -R acme/app --json files
+expect_refused "pr view --json files: head.sha がブランチ名の形なら compare を呼ばない" "/compare/"
+cloud pr view 70 -R acme/app --json files
+expect_refused "pr view --json files: base.sha が 40 桁の 16 進でなければ compare を呼ばない" "/compare/"
+for label in . ..; do
+  cloud pr edit 5 -R acme/app --title "New" --remove-label "a,${label}"
+  expect_refused "pr edit --remove-label '${label}': どの API も呼ばずに拒否する" "repos/acme/app"
+  cloud issue edit 12 -R acme/app --add-label b --remove-label "${label}"
+  expect_refused "issue edit --remove-label '${label}': どの API も呼ばずに拒否する" "repos/acme/app"
+done
 cloud issue list -R acme/app --search x --limit "x[\$(touch ${WORK}/pwned)]" --json number
 expect_refused "issue list: 数でない --limit は API を呼ぶ前に拒否する" "search/issues"
 if [ -e "${WORK}/pwned" ]; then

@@ -586,7 +586,7 @@ has_field() { # $1 = csv, $2 = field
 # fetch_checks <sha> <dir> — check-runs と commit statuses を <dir> に書く。
 # 必須 check が未報告でも結果に出ないのは実体の gh（--required なし）と同じ。ゲートの根拠に使わない
 fetch_checks() {
-  [[ $1 =~ ^[A-Za-z0-9]+$ ]] || die "invalid head sha in the API response: '$1'"
+  [[ $1 =~ ^[0-9a-f]{40}$ ]] || die "invalid head sha in the API response: '$1'"
   api_pages "repos/$REPO/commits/$1/check-runs" | jq -c '[.[].check_runs[]]' >"$2/checkruns.json"
   api_pages "repos/$REPO/commits/$1/status" | jq -c '[.[].statuses // [] | .[]]' >"$2/statuses.json"
 }
@@ -600,8 +600,8 @@ pr_files() {
   local list want base head
   base="$(jq -r '.base.sha // empty' "$1")"
   head="$(jq -r '.head.sha // empty' "$1")"
-  [[ $base =~ ^[A-Za-z0-9]+$ ]] || die "invalid base sha in the API response: '$base'"
-  [[ $head =~ ^[A-Za-z0-9]+$ ]] || die "invalid head sha in the API response: '$head'"
+  [[ $base =~ ^[0-9a-f]{40}$ ]] || die "invalid base sha in the API response: '$base'"
+  [[ $head =~ ^[0-9a-f]{40}$ ]] || die "invalid head sha in the API response: '$head'"
   list="$("$REAL" api -X GET "repos/$REPO/compare/$base...$head" | jq -c '.files // []')"
   want="$(jq -r '.changed_files // empty' "$1")"
   if [ "$(printf '%s' "$list" | jq 'length')" != "$want" ]; then
@@ -682,6 +682,15 @@ labels_json() { # csv → JSON 配列
   jq -c -n --arg v "$1" '$v | split(",") | map(select(. != ""))'
 }
 
+# --remove-label の名前を、どの API も呼ぶ前に確かめる。@uri は . を変換しないので、. / .. は
+# DELETE の URL でドットセグメントになり、正規化されると全ラベル削除の issues/{n}/labels に届く
+check_remove_labels() {
+  [ -n "${OPT[remove_label]+x}" ] || return 0
+  if labels_json "${OPT[remove_label]}" | jq -e 'any(.[]; . == "." or . == "..")' >/dev/null; then
+    die "invalid label name for --remove-label: '.' and '..' are not label names"
+  fi
+}
+
 # --add-label / --remove-label（PR と issue で同じ REST）
 edit_labels() { # $1 = 番号
   local name names
@@ -743,10 +752,11 @@ pr_checks() {
   if [ -n "${OPT[json]+x}" ]; then
     jq -c --arg fields "${OPT[json]}" "$JQ_DEFS"' map(choose(.))' "$T/checks.json" >"$T/out.json"
     emit_json "$T/out.json"
-  else
-    jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | join("\t")' "$T/checks.json"
+    # 実体の gh は --json を付けると check の結果によらず exit 0
+    exit 0
   fi
-  # 実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8、それ以外（キャンセルを含む）は 0
+  jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | join("\t")' "$T/checks.json"
+  # --json なしは実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8、それ以外（キャンセルを含む）は 0
   if [ "$(jq '[.[] | select(.bucket == "fail")] | length' "$T/checks.json")" -gt 0 ]; then
     exit 1
   fi
@@ -826,6 +836,7 @@ pr_create() {
 
 pr_edit() {
   parse_flags "pr edit" "title,t= body,b= body-file,F= add-label+ remove-label+" "$@"
+  check_remove_labels
   resolve_repo
   resolve_pr "${POS[0]:-}"
   read_body
@@ -979,6 +990,7 @@ issue_comment() {
 
 issue_edit() {
   parse_flags "issue edit" "title,t= body,b= body-file,F= add-label+ remove-label+ add-assignee+ remove-assignee+ milestone,m=" "$@"
+  check_remove_labels
   resolve_repo
   resolve_issue "${POS[0]:-}"
   read_body
