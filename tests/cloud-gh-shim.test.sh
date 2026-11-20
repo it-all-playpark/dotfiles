@@ -341,8 +341,12 @@ fixture repos_acme_app_issues <<'EOF'
   {"number": 11, "state": "open", "title": "Idea", "body": null, "closed_at": null}
 ]
 EOF
-echo '{"items": [{"number": 11, "state": "open", "title": "Idea", "body": null, "closed_at": null}]}' |
-  fixture search_issues
+# search は 2 ページ（100 件 + 50 件。先頭は issue 11）。偽の gh は --slurp で 2 ページの配列にする
+{
+  jq -c -n '{total_count: 150, items: ([{number: 11, state: "open", title: "Idea", body: null, closed_at: null}]
+    + [range(1000; 1099) | {number: ., state: "open", title: "t", body: null, closed_at: null}])}'
+  jq -c -n '{total_count: 150, items: [range(1099; 1149) | {number: ., state: "open", title: "t", body: null, closed_at: null}]}'
+} | fixture search_issues
 echo '[{"number": 3, "title": "v1"}, {"number": 4, "title": "v2"}]' | fixture repos_acme_app_milestones
 echo '{"number": 9, "html_url": "https://github.com/acme/app/pull/9"}' | fixture POST_repos_acme_app_pulls
 echo '{"html_url": "https://github.com/acme/app/issues/20"}' | fixture POST_repos_acme_app_issues
@@ -497,10 +501,16 @@ expect_only_log "issue list: GET issues（state / labels）" \
   "[api][-X][GET][--paginate][--slurp][repos/acme/app/issues][-f][per_page=100][-f][state=all][-f][labels=self-improve]"
 cloud issue list --repo acme/app --state all --limit 1 --json number
 expect_json "issue list --limit" '[{"number": 12}]'
-cloud issue list --repo acme/app --label self-improve --state open --search "in:title Idea" --json number
+cloud issue list --repo acme/app --label self-improve --state open --search "in:title Idea" --limit 1 --json number
 expect_json "issue list --search: REST の search を使う" '[{"number": 11}]'
-expect_only_log "issue list --search: GET search/issues" \
-  '[api][-X][GET][search/issues][-f][q=repo:acme/app is:issue is:open label:"self-improve" in:title Idea][-f][per_page=30]'
+expect_only_log "issue list --search: GET search/issues を全ページ読む" \
+  '[api][-X][GET][--paginate][--slurp][search/issues][-f][per_page=100][-f][q=repo:acme/app is:issue is:open label:"self-improve" in:title Idea]'
+cloud issue list --repo acme/app --search "in:title Idea" --limit 1000 --json number
+if [ "${RC}" -eq 0 ] && [ "$(printf '%s' "${OUT}" | jq 'length')" = 150 ]; then
+  pass "issue list --search: 101 件目以降（2 ページ目）も返す"
+else
+  fail "issue list --search: 101 件目以降（2 ページ目）も返す" "exit ${RC} / out: ${OUT:0:200} / stderr: ${ERR}"
+fi
 
 echo "--- AC-5: 表に無い形は exit 2、pr / issue 以外は素通し ---"
 cloud pr ready 5
@@ -590,6 +600,27 @@ if [ -e "${WORK}/pwned" ]; then
 else
   pass "issue list: --limit の値を算術式で評価しない"
 fi
+# shellcheck disable=SC2016 # jq のプログラム（$ENV は jq の変数）
+SHIM_TEST_SECRET=s3cr3t cloud pr view 5 --repo acme/app --json title --jq '[env.SHIM_TEST_SECRET, $ENV.SHIM_TEST_SECRET]'
+expect_out "--jq: プログラムから環境変数（GH_TOKEN 等）を読ませない" '[null,null]'
+printf '{"k": "leaked"}\n' >"${WORK}/data.json"
+cloud pr view 5 --repo acme/app --json title --jq "import \"${WORK}/data\" as \$d; \$d"
+if [ "${RC}" -ne 0 ] && [ -z "${OUT}" ]; then
+  pass "--jq: import で手元の JSON ファイルを読ませない"
+else
+  fail "--jq: import で手元の JSON ファイルを読ませない" "exit ${RC} / out: ${OUT}"
+fi
+printf 'secret\n' >"${WORK}/secret.txt"
+ln -s "${WORK}/secret.txt" "${WORK}/link.md"
+cloud pr comment 5 --repo acme/app --body-file "${WORK}/link.md"
+expect_refused "--body-file: シンボリックリンクのファイルを読まない" "body "
+mkdir -p "${WORK}/real-dir"
+printf 'secret\n' >"${WORK}/real-dir/body.md"
+ln -s "${WORK}/real-dir" "${WORK}/link-dir"
+run_in "${WORK}" true issue create --repo acme/app --title T --body-file link-dir/body.md
+expect_refused "--body-file: シンボリックリンクのディレクトリを通るパスを読まない" "body "
+run_in "${WORK}" true issue comment 12 --repo acme/app --body-file body.md
+expect_out "--body-file: 相対パスの通常のファイルは読む" "https://github.com/acme/app/issues/12#issuecomment-8"
 cloud pr list --repo acme/app --limit 0x10 --json number
 expect_refused "pr list: 数でない --limit を拒否する" "repos/acme/app/pulls"
 cloud pr view 5 --repo 'acme/app?x=1' --json title

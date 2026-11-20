@@ -266,18 +266,35 @@ api_send() {
 }
 
 BODY=""
-read_body() { # --body-file の本文を読む
-  BODY="$(cat -- "${OPT[body_file]}")"
+# --body-file の本文を読む。パスのどの成分もシンボリックリンクなら読まずに止める（checkout に commit された
+# リンクを辿って、リンク先の認証情報などを本文として GitHub に送らない）
+read_body() {
+  local f="${OPT[body_file]}" rest c p=""
+  [[ $f == /* ]] || f="$(pwd -P)/$f"
+  rest="${f#/}"
+  while [ -n "$rest" ]; do
+    c="${rest%%/*}"
+    if [ "$c" = "$rest" ]; then rest=""; else rest="${rest#*/}"; fi
+    [ -n "$c" ] || continue
+    p="$p/$c"
+    [ ! -L "$p" ] || die "--body-file goes through a symbolic link: $p"
+  done
+  [ -f "$f" ] || die "--body-file is not a regular file: ${OPT[body_file]}"
+  BODY="$(cat -- "$f")"
 }
 
 csv_json() { # csv → JSON 配列
   jq -c -n --arg v "$1" '$v | split(",") | map(select(. != ""))'
 }
 
-# --json の結果を出す。--jq があれば実体の gh と同じく文字列を生で出す
+# --json の結果を出す。--jq があれば実体の gh と同じく文字列を生で出す。
+# --jq のプログラムは空の環境で実行し（env / $ENV で GH_TOKEN などを読ませない）、先頭に def を置く
+# （import / include はプログラムの先頭にしか書けないので、module として手元の JSON ファイルを読ませない）
 emit_json() { # $1 = JSON を持つファイル
   if [ -n "${OPT[jq]+x}" ]; then
-    jq -r -c "${OPT[jq]}" "$1"
+    local jq_bin
+    jq_bin="$(command -v jq)" || die "jq not found"
+    env -i "$jq_bin" -r -c "def __gh_shim_jq: .; ${OPT[jq]}" "$1"
   else
     jq -c . "$1"
   fi
@@ -579,12 +596,12 @@ issue_list() {
   esac
   resolve_repo
   if [ -n "${OPT[search]+x}" ]; then
-    # 検索語は REST の search API に渡す（1 ページ = 最大 100 件）
+    # 検索語は REST の search API に渡し、全ページを読む（1 ページは最大 100 件）
     q="repo:$REPO is:issue"
     [ "$state" = all ] || q="$q is:$state"
     q="$q$(csv_json "${OPT[label]:-}" | jq -r 'map(" label:\"" + . + "\"") | join("")')"
     q="$q ${OPT[search]}"
-    "$REAL" api -X GET search/issues -f "q=$q" -f "per_page=$((limit < 100 ? limit : 100))" | jq -c '.items'
+    api_pages search/issues -f "q=$q" | jq -c '[.[].items[]]'
   else
     query+=(-f "state=$state")
     [ -z "${OPT[label]:-}" ] || query+=(-f "labels=${OPT[label]}")
