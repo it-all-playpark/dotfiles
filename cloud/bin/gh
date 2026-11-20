@@ -1,0 +1,966 @@
+#!/usr/bin/env bash
+# cloud/bin/gh: Claude Code のクラウドセッション用の gh shim
+#
+# クラウドセッション（Claude Code on the web / projects）の egress proxy は GitHub GraphQL
+# （https://api.github.com/graphql）を 403 で拒否するので、GraphQL を使う `gh pr` / `gh issue` は
+# すべて失敗する。この shim はクラウド（CLAUDE_CODE_REMOTE=true）でだけ `gh pr` / `gh issue` を
+# REST（実体の `gh api repos/...` と `/pulls/{n}/ccr/...`）に変換して実行する。
+#
+#   - CLAUDE_CODE_REMOTE が true でなければ、何も変換せず実体の gh に引数をそのまま渡す
+#   - pr / issue 以外のサブコマンド（api / run / auth など）は実体に素通しする
+#   - 変換できない形（未対応のサブコマンド・フラグ・--json の field）は GraphQL に流さず、
+#     未対応の要素名を stderr に 1 行出して exit 2 で止まる
+#
+# 実体の gh は、PATH から自分の dir を除いて解決する。repo は -R / --repo、無ければ GH_REPO、
+# それも無ければカレントの git remote origin から決める。
+#
+# --json の出力は GraphQL 版の gh と同じキー名・同じ値の型にする。REST から取れない値は次のとおり:
+#   - user の name、check の workflowName / event / workflow、autoMergeRequest の authorEmail / enabledAt は空
+#   - comments の isMinimized / viewerDidAuthor と issue の isPinned は false（REST に無い）
+#   - reviewDecision は reviews から組み立てる（branch protection は見ない）:
+#     reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED、無くて APPROVED が
+#     あれば APPROVED、どちらも無くて review 依頼が残っていれば REVIEW_REQUIRED、それ以外は ""
+#   - mergeStateStatus は REST の mergeable_state を大文字にしたもの（clean → CLEAN、dirty → DIRTY、
+#     blocked → BLOCKED、behind → BEHIND、unstable → UNSTABLE、has_hooks → HAS_HOOKS、unknown → UNKNOWN）
+#
+# Requires: jq, git（repo・branch を引数で渡さないとき）
+set -euo pipefail
+
+# ---- 実体の gh を解決する ----------------------------------------------------
+
+self="$0"
+if resolved="$(readlink -f "$0" 2>/dev/null)" && [ -n "$resolved" ]; then
+  self="$resolved"
+fi
+self_dir="$(cd "$(dirname "$self")" && pwd -P)"
+invoked_dir="$(cd "$(dirname "$0")" && pwd -P)"
+
+lookup_path=""
+p_rest="$PATH:"
+while [ -n "$p_rest" ]; do
+  p="${p_rest%%:*}"
+  p_rest="${p_rest#*:}"
+  [ -z "$p" ] && continue
+  p_phys="$(cd "$p" 2>/dev/null && pwd -P)" || p_phys="$p"
+  if [ "$p_phys" = "$self_dir" ] || [ "$p_phys" = "$invoked_dir" ]; then
+    continue
+  fi
+  lookup_path="${lookup_path:+$lookup_path:}$p"
+done
+
+REAL=""
+if [ -n "$lookup_path" ]; then
+  REAL="$(PATH="$lookup_path" command -v gh 2>/dev/null || true)"
+fi
+if [ -z "$REAL" ]; then
+  echo "gh shim (cloud): real 'gh' not found in PATH (shim dir excluded: $self_dir)" >&2
+  exit 127
+fi
+if [ "$REAL" -ef "$self" ]; then
+  echo "gh shim (cloud): resolved 'gh' is the shim itself ($REAL); refusing to recurse" >&2
+  exit 127
+fi
+
+ORIG_ARGS=("$@")
+passthrough() {
+  exec "$REAL" "${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}"
+}
+
+if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+  passthrough
+fi
+
+# ---- pr / issue だけを変換の対象にする ---------------------------------------
+
+# コマンド名より前に置けるのは -R / --repo だけ。それ以外のフラグが先に来たら実体に任せる
+PRE_REPO=""
+CMD=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+  -R | --repo)
+    [ $# -ge 2 ] || passthrough
+    PRE_REPO="$2"
+    shift 2
+    ;;
+  --repo=*)
+    PRE_REPO="${1#--repo=}"
+    shift
+    ;;
+  -*) passthrough ;;
+  *)
+    CMD="$1"
+    shift
+    break
+    ;;
+  esac
+done
+
+case "$CMD" in
+pr | issue) ;;
+*) passthrough ;;
+esac
+
+SUB=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+  -R | --repo)
+    [ $# -ge 2 ] || passthrough
+    PRE_REPO="$2"
+    shift 2
+    ;;
+  --repo=*)
+    PRE_REPO="${1#--repo=}"
+    shift
+    ;;
+  -*) passthrough ;;
+  *)
+    SUB="$1"
+    shift
+    break
+    ;;
+  esac
+done
+[ -n "$SUB" ] || passthrough
+
+# ---- 共通の道具 --------------------------------------------------------------
+
+unsupported() { # $1 = 種類（subcommand / flag / --json field …）, $2 = 要素名
+  echo "gh shim (cloud): unsupported $1: $2" >&2
+  exit 2
+}
+
+die() {
+  echo "gh shim (cloud): $*" >&2
+  exit 1
+}
+
+# shim が --json で返せる field。実体の gh が受け付ける field から、REST で組み立てられないもの
+# （projectCards / projectItems / closingIssuesReferences / closedByPullRequestsReferences /
+#  reactionGroups / id / fullDatabaseId）を除いた全部
+PR_FIELDS="additions assignees author autoMergeRequest baseRefName baseRefOid body changedFiles closed closedAt comments commits createdAt deletions files headRefName headRefOid headRepository headRepositoryOwner isCrossRepository isDraft labels latestReviews maintainerCanModify mergeCommit mergeStateStatus mergeable mergedAt mergedBy milestone number potentialMergeCommit reviewDecision reviewRequests reviews state statusCheckRollup title updatedAt url"
+ISSUE_FIELDS="assignees author blockedBy blocking body closed closedAt comments createdAt isPinned issueType labels milestone number parent state stateReason subIssues subIssuesSummary title updatedAt url"
+CHECK_FIELDS="bucket completedAt description event link name startedAt state workflow"
+
+fields_for() { # $1 = "pr view" など
+  case "$1" in
+  "pr view" | "pr list") printf '%s' "$PR_FIELDS" ;;
+  "issue view" | "issue list") printf '%s' "$ISSUE_FIELDS" ;;
+  "pr checks") printf '%s' "$CHECK_FIELDS" ;;
+  esac
+}
+
+# 実体の gh と同じく、field を付けない --json は使える field の一覧を出して終わる
+print_fields() {
+  local f
+  {
+    # shellcheck disable=SC2016 # バッククォートは実体の gh の文言そのまま（展開しない）
+    echo 'Specify one or more comma-separated fields for `--json`:'
+    for f in $(fields_for "$1"); do
+      echo "  $f"
+    done
+  } >&2
+  exit 1
+}
+
+validate_fields() { # $1 = context, $2 = csv
+  local known f
+  known=" $(fields_for "$1") "
+  local IFS=,
+  for f in $2; do
+    case "$known" in
+    *" $f "*) ;;
+    *) unsupported "--json field" "$f" ;;
+    esac
+  done
+}
+
+# parse_flags <context> <spec> <args...>
+# spec は空白区切りの "<long>[,<short>]<kind>"。kind は = （値を取る）/ + （値を取り、繰り返しは , で連結）/
+# ! （値を取らない）。-R / --repo はどの context でも受ける。結果は OPT[<long の - を _ にした名前>] と POS に入る。
+# spec に無いフラグは未対応として exit 2
+declare -A OPT=()
+POS=()
+parse_flags() {
+  local ctx="$1" spec="$2 repo,R="
+  shift 2
+  local a name val hasval ent kind names long short key
+  while [ $# -gt 0 ]; do
+    a="$1"
+    shift
+    case "$a" in
+    --help | -h) passthrough ;;
+    --)
+      POS+=("$@")
+      break
+      ;;
+    --*=*)
+      name="${a%%=*}"
+      val="${a#*=}"
+      hasval=1
+      ;;
+    -?*)
+      name="$a"
+      val=""
+      hasval=0
+      ;;
+    *)
+      POS+=("$a")
+      continue
+      ;;
+    esac
+    key=""
+    kind=""
+    for ent in $spec; do
+      kind="${ent: -1}"
+      names="${ent%?}"
+      long="${names%%,*}"
+      short=""
+      [ "$names" != "$long" ] && short="${names#*,}"
+      if [ "$name" = "--$long" ] || { [ -n "$short" ] && [ "$name" = "-$short" ]; }; then
+        key="${long//-/_}"
+        break
+      fi
+    done
+    [ -n "$key" ] || unsupported "flag" "$ctx $name"
+    if [ "$kind" = "!" ]; then
+      OPT[$key]=1
+      continue
+    fi
+    if [ "$hasval" = 0 ]; then
+      if [ $# -eq 0 ]; then
+        [ "$key" = json ] && print_fields "$ctx"
+        die "flag needs an argument: $name"
+      fi
+      val="$1"
+      shift
+    fi
+    if [ "$kind" = "+" ] && [ -n "${OPT[$key]+x}" ]; then
+      OPT[$key]+=",$val"
+    else
+      OPT[$key]="$val"
+    fi
+  done
+}
+
+# owner/repo・HOST/owner/repo・URL（https / ssh / クラウドの git proxy）から末尾の owner/repo を取る
+normalize_repo() {
+  local s="${1%/}"
+  s="${s%.git}"
+  s="${s//://}"
+  local name="${s##*/}" rest="${s%/*}"
+  local owner="${rest##*/}"
+  if [ "$rest" = "$s" ] || [ -z "$owner" ] || [ -z "$name" ]; then
+    return 1
+  fi
+  printf '%s/%s' "$owner" "$name"
+}
+
+REPO=""
+resolve_repo() {
+  local src="${OPT[repo]:-${PRE_REPO:-${GH_REPO:-}}}"
+  if [ -z "$src" ]; then
+    src="$(git remote get-url origin 2>/dev/null)" ||
+      die "could not determine the repository (no -R / --repo and no git remote 'origin')"
+  fi
+  REPO="$(normalize_repo "$src")" || die "could not parse owner/repo from '$src'"
+}
+
+T=""
+make_tmp() {
+  T="$(mktemp -d "${TMPDIR:-/tmp}/gh-shim.XXXXXX")"
+  trap 'rm -rf "$T"' EXIT
+}
+
+# api_pages <path> [-f k=v ...] — GET を全ページ読み、ページの配列を出す
+api_pages() {
+  local path="$1"
+  shift
+  "$REAL" api -X GET --paginate --slurp "$path" -f per_page=100 "$@"
+}
+
+# api_list <path> [-f k=v ...] — 配列を返す GET を全ページ読み、1 本の配列にする
+api_list() {
+  api_pages "$@" | jq -c 'add // []'
+}
+
+# api_send <method> <path> <json> — JSON を body にして送り、応答を出す
+api_send() {
+  printf '%s' "$3" | "$REAL" api -X "$1" "$2" --input -
+}
+
+# --body / --body-file（- は stdin）から本文を読む。どちらも無ければ HAS_BODY=0
+BODY=""
+HAS_BODY=0
+read_body() {
+  if [ -n "${OPT[body_file]+x}" ]; then
+    if [ "${OPT[body_file]}" = "-" ]; then
+      BODY="$(cat)"
+    else
+      BODY="$(cat "${OPT[body_file]}")"
+    fi
+    HAS_BODY=1
+  elif [ -n "${OPT[body]+x}" ]; then
+    BODY="${OPT[body]}"
+    HAS_BODY=1
+  fi
+}
+
+# PR を指す引数（番号 / URL / branch / 無し = カレントの branch）から番号を決める
+PR=""
+resolve_pr() {
+  local arg="${1:-}" head
+  case "$arg" in
+  *[!0-9]* | "") ;;
+  *)
+    PR="$arg"
+    return 0
+    ;;
+  esac
+  case "$arg" in
+  http*://*/pull/*)
+    PR="${arg##*/pull/}"
+    PR="${PR%%[!0-9]*}"
+    REPO="$(normalize_repo "${arg%%/pull/*}")" || die "could not parse owner/repo from '$arg'"
+    return 0
+    ;;
+  esac
+  if [ -z "$arg" ]; then
+    arg="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || die "could not determine the current branch"
+  fi
+  case "$arg" in
+  *:*) head="$arg" ;;
+  *) head="${REPO%%/*}:$arg" ;;
+  esac
+  # open の PR を優先し、無ければ最も新しいもの
+  PR="$("$REAL" api -X GET "repos/$REPO/pulls" -f "head=$head" -f state=all -f per_page=100 |
+    jq -r '(map(select(.state == "open")) + .)[0].number // empty')"
+  [ -n "$PR" ] || die "no pull requests found for branch \"$arg\""
+}
+
+ISSUE=""
+resolve_issue() {
+  local arg="${1:-}"
+  case "$arg" in
+  http*://*/issues/*)
+    ISSUE="${arg##*/issues/}"
+    ISSUE="${ISSUE%%[!0-9]*}"
+    REPO="$(normalize_repo "${arg%%/issues/*}")" || die "could not parse owner/repo from '$arg'"
+    return 0
+    ;;
+  "" | *[!0-9]*) die "issue number required (got '${arg}')" ;;
+  esac
+  ISSUE="$arg"
+}
+
+# milestone の名前から番号を引く
+milestone_number() {
+  local num
+  num="$(api_list "repos/$REPO/milestones" -f state=all |
+    jq -r --arg t "$1" '[.[] | select((.title | ascii_downcase) == ($t | ascii_downcase))][0].number // empty')"
+  [ -n "$num" ] || die "milestone not found: $1"
+  printf '%s' "$num"
+}
+
+# --json の結果を出す。--jq があれば実体の gh と同じく文字列を生で出す
+emit_json() { # $1 = JSON を持つファイル
+  if [ -n "${OPT[jq]+x}" ]; then
+    jq -r -c "${OPT[jq]}" "$1"
+  else
+    jq -c . "$1"
+  fi
+}
+
+# ---- REST → GraphQL 版の形 ---------------------------------------------------
+
+# shellcheck disable=SC2016 # jq のプログラム（$ は jq の変数）
+JQ_DEFS='
+def up: (. // "") | ascii_upcase;
+def zero: "0001-01-01T00:00:00Z";
+def login: if .type == "Bot" then "app/" + (.login | sub("\\[bot\\]$"; "")) else .login end;
+def author: if . == null then null else {id: .node_id, is_bot: (.type == "Bot"), login: login, name: (.name // "")} end;
+def assignee: {id: .node_id, login: .login, name: (.name // ""), databaseId: .id};
+def actor: {login: (if . == null then "" else login end)};
+def lbl: {id: .node_id, name: .name, description: (.description // ""), color: .color};
+def milestone: if . == null then null else {number: .number, title: .title, description: (.description // ""), dueOn: .due_on} end;
+def comment: {
+  id: .node_id, author: (.user | actor), authorAssociation: .author_association, body: (.body // ""),
+  createdAt: .created_at, includesCreatedEdit: (.created_at != .updated_at), isMinimized: false,
+  minimizedReason: "", reactionGroups: [], url: .html_url, viewerDidAuthor: false
+};
+def linked: {
+  id: .node_id, number: .number, title: .title, url: .html_url, state: (.state | up),
+  repository: {nameWithOwner: ((.repository_url // "") | sub("^.*/repos/"; ""))}
+};
+def choose($all): reduce ($fields | split(",") | unique | .[]) as $f ({};
+  if $all | has($f) then .[$f] = $all[$f] else error("field not built: " + $f) end);
+'
+
+# shellcheck disable=SC2016
+JQ_CHECKS='
+def rollup: [
+  ($checkruns[0][] | {
+    __typename: "CheckRun", completedAt: (.completed_at // zero), conclusion: (.conclusion | up),
+    detailsUrl: (.details_url // ""), name: .name, startedAt: (.started_at // zero),
+    status: (.status | up), workflowName: ""
+  }),
+  ($statuses[0][] | {
+    __typename: "StatusContext", context: .context, startedAt: .created_at,
+    state: (.state | up), targetUrl: (.target_url // "")
+  })
+];
+def bucket: if . == "SUCCESS" then "pass"
+  elif . == "SKIPPED" or . == "NEUTRAL" then "skipping"
+  elif . == "ERROR" or . == "FAILURE" or . == "TIMED_OUT" or . == "ACTION_REQUIRED" then "fail"
+  elif . == "CANCELLED" then "cancel"
+  else "pending" end;
+def checks: [
+  ($checkruns[0][] | (if .status == "completed" then (.conclusion | up) else (.status | up) end) as $s | {
+    bucket: ($s | bucket), completedAt: (.completed_at // zero), description: "", event: "",
+    link: (.details_url // ""), name: .name, startedAt: (.started_at // zero), state: $s, workflow: ""
+  }),
+  ($statuses[0][] | (.state | up) as $s | {
+    bucket: ($s | bucket), completedAt: zero, description: (.description // ""), event: "",
+    link: (.target_url // ""), name: .context, startedAt: .created_at, state: $s, workflow: ""
+  })
+] | sort_by(.name);
+'
+
+# shellcheck disable=SC2016
+JQ_PR='
+def review: {
+  id: .node_id, author: (.user | actor), authorAssociation: .author_association, body: (.body // ""),
+  submittedAt: .submitted_at, includesCreatedEdit: false, reactionGroups: [], state: .state,
+  commit: {oid: .commit_id}
+};
+def latest($states): [$reviews[0][] | select(.state as $s | $states | index($s))]
+  | group_by(.user.login) | map(max_by(.submitted_at)) | sort_by(.submitted_at);
+def decision: (latest(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]) | map(.state)) as $s
+  | if $s | index("CHANGES_REQUESTED") then "CHANGES_REQUESTED"
+    elif $s | index("APPROVED") then "APPROVED"
+    elif ((.requested_reviewers // []) + (.requested_teams // []) | length) > 0 then "REVIEW_REQUIRED"
+    else "" end;
+def change: {added: "ADDED", removed: "DELETED", modified: "MODIFIED", renamed: "RENAMED",
+  copied: "COPIED", changed: "CHANGED", unchanged: "UNCHANGED"}[.] // (. | up);
+$pr[0] | . as $p | choose({
+  additions: (.additions // 0),
+  assignees: [(.assignees // [])[] | assignee],
+  author: (.user | author),
+  autoMergeRequest: (.auto_merge | if . == null then null else {
+    authorEmail: null, commitBody: .commit_message, commitHeadline: .commit_title,
+    mergeMethod: (.merge_method | up), enabledAt: null, enabledBy: (.enabled_by | author)
+  } end),
+  baseRefName: .base.ref,
+  baseRefOid: .base.sha,
+  body: (.body // ""),
+  changedFiles: (.changed_files // 0),
+  closed: (.state == "closed"),
+  closedAt: .closed_at,
+  comments: [$comments[0][] | comment],
+  commits: [$commits[0][] | {
+    authoredDate: .commit.author.date,
+    authors: [{email: .commit.author.email, id: (.author.node_id // ""), login: (.author.login // ""), name: .commit.author.name}],
+    committedDate: .commit.committer.date,
+    messageBody: (.commit.message | split("\n") | .[1:] | join("\n") | ltrimstr("\n")),
+    messageHeadline: (.commit.message | split("\n")[0]),
+    oid: .sha
+  }],
+  createdAt: .created_at,
+  deletions: (.deletions // 0),
+  files: [$files[0][] | {path: .filename, additions: .additions, deletions: .deletions, changeType: (.status | change)}],
+  headRefName: .head.ref,
+  headRefOid: .head.sha,
+  headRepository: (.head.repo | if . == null then null else {id: .node_id, name: .name} end),
+  headRepositoryOwner: (.head.user | if . == null then null else {id: .node_id, login: .login} end),
+  isCrossRepository: (.head.repo.full_name != .base.repo.full_name),
+  isDraft: (.draft // false),
+  labels: [(.labels // [])[] | lbl],
+  latestReviews: [latest(["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"])[] | review],
+  maintainerCanModify: (.maintainer_can_modify // false),
+  mergeCommit: (if .merged_at != null and .merge_commit_sha != null then {oid: .merge_commit_sha} else null end),
+  mergeStateStatus: ((.mergeable_state // "unknown") | up),
+  mergeable: (if .mergeable == true then "MERGEABLE" elif .mergeable == false then "CONFLICTING" else "UNKNOWN" end),
+  mergedAt: .merged_at,
+  mergedBy: (.merged_by | author),
+  milestone: (.milestone | milestone),
+  number: .number,
+  potentialMergeCommit: (if .merged_at == null and .merge_commit_sha != null then {oid: .merge_commit_sha} else null end),
+  reviewDecision: decision,
+  reviewRequests: [
+    ((.requested_reviewers // [])[] | {__typename: "User", login: .login}),
+    ((.requested_teams // [])[] | {__typename: "Team", name: .name, slug: .slug})
+  ],
+  reviews: [$reviews[0] | sort_by(.submitted_at)[] | review],
+  state: (if .merged_at != null then "MERGED" else (.state | up) end),
+  statusCheckRollup: rollup,
+  title: .title,
+  updatedAt: .updated_at,
+  url: .html_url
+})
+'
+
+# shellcheck disable=SC2016
+JQ_ISSUE='
+$issue[0] | choose({
+  assignees: [(.assignees // [])[] | assignee],
+  author: (.user | author),
+  blockedBy: [$blockedby[0][] | linked],
+  blocking: [$blocking[0][] | linked],
+  body: (.body // ""),
+  closed: (.state == "closed"),
+  closedAt: .closed_at,
+  comments: [$comments[0][] | comment],
+  createdAt: .created_at,
+  isPinned: false,
+  issueType: (.type | if . == null then null else {id: .node_id, name: .name, description: (.description // ""), color: (.color // "")} end),
+  labels: [(.labels // [])[] | lbl],
+  milestone: (.milestone | milestone),
+  number: .number,
+  parent: ($parent[0] | if . == null then null else linked end),
+  state: (.state | up),
+  stateReason: (.state_reason | up),
+  subIssues: [$subissues[0][] | linked],
+  subIssuesSummary: (.sub_issues_summary // {} | {total: (.total // 0), completed: (.completed // 0), percentCompleted: (.percent_completed // 0)}),
+  title: .title,
+  updatedAt: .updated_at,
+  url: .html_url
+})
+'
+
+has_field() { # $1 = csv, $2 = field
+  case ",$1," in
+  *",$2,"*) return 0 ;;
+  esac
+  return 1
+}
+
+# fetch_checks <sha> <dir> — check-runs と commit statuses を <dir> に書く
+fetch_checks() {
+  api_pages "repos/$REPO/commits/$1/check-runs" | jq -c '[.[].check_runs[]]' >"$2/checkruns.json"
+  "$REAL" api -X GET "repos/$REPO/commits/$1/status" -f per_page=100 | jq -c '.statuses // []' >"$2/statuses.json"
+}
+
+# pr_json <PR の REST 応答のファイル> <csv fields> — GraphQL 版と同じ形の JSON を 1 行で出す
+pr_json() {
+  local prf="$1" fields="$2" n d f
+  n="$(jq -r .number "$prf")"
+  d="$T/pr-$n"
+  mkdir -p "$d"
+  for f in comments commits files reviews checkruns statuses; do
+    echo '[]' >"$d/$f.json"
+  done
+  if has_field "$fields" comments; then
+    api_list "repos/$REPO/issues/$n/comments" >"$d/comments.json"
+  fi
+  if has_field "$fields" commits; then
+    api_list "repos/$REPO/pulls/$n/commits" >"$d/commits.json"
+  fi
+  if has_field "$fields" files; then
+    api_list "repos/$REPO/pulls/$n/files" >"$d/files.json"
+  fi
+  if has_field "$fields" reviews || has_field "$fields" latestReviews || has_field "$fields" reviewDecision; then
+    api_list "repos/$REPO/pulls/$n/reviews" >"$d/reviews.json"
+  fi
+  if has_field "$fields" statusCheckRollup; then
+    fetch_checks "$(jq -r .head.sha "$prf")" "$d"
+  fi
+  jq -c -n --arg fields "$fields" --slurpfile pr "$prf" --slurpfile comments "$d/comments.json" \
+    --slurpfile commits "$d/commits.json" --slurpfile files "$d/files.json" \
+    --slurpfile reviews "$d/reviews.json" --slurpfile checkruns "$d/checkruns.json" \
+    --slurpfile statuses "$d/statuses.json" "$JQ_DEFS $JQ_CHECKS $JQ_PR"
+}
+
+# issue_json <issue の REST 応答のファイル> <csv fields>
+issue_json() {
+  local isf="$1" fields="$2" n d f
+  n="$(jq -r .number "$isf")"
+  d="$T/issue-$n"
+  mkdir -p "$d"
+  for f in comments subissues blockedby blocking; do
+    echo '[]' >"$d/$f.json"
+  done
+  echo 'null' >"$d/parent.json"
+  if has_field "$fields" comments; then
+    api_list "repos/$REPO/issues/$n/comments" >"$d/comments.json"
+  fi
+  if has_field "$fields" subIssues; then
+    api_list "repos/$REPO/issues/$n/sub_issues" >"$d/subissues.json"
+  fi
+  if has_field "$fields" blockedBy; then
+    api_list "repos/$REPO/issues/$n/dependencies/blocked_by" >"$d/blockedby.json"
+  fi
+  if has_field "$fields" blocking; then
+    api_list "repos/$REPO/issues/$n/dependencies/blocking" >"$d/blocking.json"
+  fi
+  # 親が無い issue では 404 になるので、失敗は「親なし」として扱う
+  if has_field "$fields" parent; then
+    "$REAL" api -X GET "repos/$REPO/issues/$n/parent" >"$d/parent.json" 2>/dev/null || echo 'null' >"$d/parent.json"
+  fi
+  jq -c -n --arg fields "$fields" --slurpfile issue "$isf" --slurpfile comments "$d/comments.json" \
+    --slurpfile subissues "$d/subissues.json" --slurpfile blockedby "$d/blockedby.json" \
+    --slurpfile blocking "$d/blocking.json" --slurpfile parent "$d/parent.json" "$JQ_DEFS $JQ_ISSUE"
+}
+
+require_json() { # $1 = context
+  [ -n "${OPT[json]+x}" ] || unsupported "form" "$1 without --json"
+  validate_fields "$1" "${OPT[json]}"
+}
+
+labels_json() { # csv → JSON 配列
+  jq -c -n --arg v "$1" '$v | split(",") | map(select(. != ""))'
+}
+
+# --add-label / --remove-label（PR と issue で同じ REST）
+edit_labels() { # $1 = 番号
+  local name names
+  if [ -n "${OPT[add_label]+x}" ]; then
+    api_send POST "repos/$REPO/issues/$1/labels" "$(jq -c -n --argjson l "$(labels_json "${OPT[add_label]}")" '{labels: $l}')" >/dev/null
+  fi
+  if [ -n "${OPT[remove_label]+x}" ]; then
+    # process substitution は sandbox で /dev/fd が塞がれるので here-string で渡す
+    names="$(labels_json "${OPT[remove_label]}" | jq -r '.[] | @uri')"
+    while IFS= read -r name; do
+      "$REAL" api -X DELETE "repos/$REPO/issues/$1/labels/$name" >/dev/null
+    done <<<"$names"
+  fi
+}
+
+# ---- gh pr -------------------------------------------------------------------
+
+pr_view() {
+  parse_flags "pr view" "json= jq,q=" "$@"
+  require_json "pr view"
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  make_tmp
+  "$REAL" api -X GET "repos/$REPO/pulls/$PR" >"$T/pr.json"
+  pr_json "$T/pr.json" "${OPT[json]}" >"$T/out.json"
+  emit_json "$T/out.json"
+}
+
+# Go の time.Duration と同じ書式（1h2m3s / 45s）
+# shellcheck disable=SC2016
+JQ_ELAPSED='
+def elapsed: if .startedAt == zero or .completedAt == zero then ""
+  else ((.completedAt | fromdateiso8601) - (.startedAt | fromdateiso8601)) as $s
+  | if $s <= 0 then ""
+    else (($s / 3600) | floor) as $h | ((($s % 3600) / 60) | floor) as $m | ($s % 60) as $sec
+    | (if $h > 0 then "\($h)h" else "" end) + (if $h > 0 or $m > 0 then "\($m)m" else "" end) + "\($sec)s"
+    end
+  end;
+'
+
+pr_checks() {
+  parse_flags "pr checks" "json= jq,q=" "$@"
+  if [ -n "${OPT[json]+x}" ]; then
+    validate_fields "pr checks" "${OPT[json]}"
+  elif [ -n "${OPT[jq]+x}" ]; then
+    unsupported "form" "pr checks --jq without --json"
+  fi
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  make_tmp
+  "$REAL" api -X GET "repos/$REPO/pulls/$PR" >"$T/pr.json"
+  fetch_checks "$(jq -r .head.sha "$T/pr.json")" "$T"
+  jq -c -n --slurpfile checkruns "$T/checkruns.json" --slurpfile statuses "$T/statuses.json" \
+    "$JQ_DEFS $JQ_CHECKS checks" >"$T/checks.json"
+  if [ "$(jq 'length' "$T/checks.json")" -eq 0 ]; then
+    echo "no checks reported on the '$(jq -r .head.ref "$T/pr.json")' branch" >&2
+    exit 1
+  fi
+  if [ -n "${OPT[json]+x}" ]; then
+    jq -c --arg fields "${OPT[json]}" "$JQ_DEFS"' map(choose(.))' "$T/checks.json" >"$T/out.json"
+    emit_json "$T/out.json"
+  else
+    jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | join("\t")' "$T/checks.json"
+  fi
+  # 実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8
+  if [ "$(jq '[.[] | select(.bucket == "fail")] | length' "$T/checks.json")" -gt 0 ]; then
+    exit 1
+  fi
+  if [ "$(jq '[.[] | select(.bucket == "pending")] | length' "$T/checks.json")" -gt 0 ]; then
+    exit 8
+  fi
+}
+
+pr_list() {
+  parse_flags "pr list" "json= jq,q= state,s= head,H= base,B= limit,L= label,l+ author,A=" "$@"
+  require_json "pr list"
+  resolve_repo
+  make_tmp
+  local state="${OPT[state]:-open}" limit="${OPT[limit]:-30}" query=() head f need_detail=0 i n
+  case "$state" in
+  open | closed | all) query+=(-f "state=$state") ;;
+  merged) query+=(-f state=closed) ;;
+  *) die "invalid --state: $state" ;;
+  esac
+  if [ -n "${OPT[head]+x}" ]; then
+    head="${OPT[head]}"
+    case "$head" in
+    *:*) ;;
+    *) head="${REPO%%/*}:$head" ;;
+    esac
+    query+=(-f "head=$head")
+  fi
+  if [ -n "${OPT[base]+x}" ]; then
+    query+=(-f "base=${OPT[base]}")
+  fi
+  api_list "repos/$REPO/pulls" "${query[@]}" |
+    jq -c --arg state "$state" --arg author "${OPT[author]:-}" --argjson limit "$limit" \
+      --argjson labels "$(labels_json "${OPT[label]:-}")" '
+      map(select(($state != "merged" or .merged_at != null)
+        and ($author == "" or .user.login == $author)
+        and ([.labels[].name] as $have | all($labels[]; . as $l | $have | index($l)))))
+      | .[:$limit]' >"$T/list.json"
+  # 一覧の応答に無い値を求められたら PR ごとに詳細を読む
+  for f in additions deletions changedFiles mergeable mergeStateStatus maintainerCanModify mergedBy; do
+    if has_field "${OPT[json]}" "$f"; then
+      need_detail=1
+    fi
+  done
+  : >"$T/items.jsonl"
+  n="$(jq 'length' "$T/list.json")"
+  for ((i = 0; i < n; i++)); do
+    if [ "$need_detail" = 1 ]; then
+      "$REAL" api -X GET "repos/$REPO/pulls/$(jq -r ".[$i].number" "$T/list.json")" >"$T/item.json"
+    else
+      jq -c ".[$i]" "$T/list.json" >"$T/item.json"
+    fi
+    pr_json "$T/item.json" "${OPT[json]}" >>"$T/items.jsonl"
+  done
+  jq -c -s . "$T/items.jsonl" >"$T/out.json"
+  emit_json "$T/out.json"
+}
+
+pr_create() {
+  parse_flags "pr create" "title,t= body,b= body-file,F= base,B= head,H= draft,d!" "$@"
+  [ -n "${OPT[title]+x}" ] || unsupported "form" "pr create without --title"
+  resolve_repo
+  read_body
+  local head="${OPT[head]:-}" base="${OPT[base]:-}"
+  if [ -z "$head" ]; then
+    head="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || die "could not determine the current branch (pass --head)"
+  fi
+  if [ -z "$base" ]; then
+    base="$("$REAL" api -X GET "repos/$REPO" | jq -r .default_branch)"
+  fi
+  api_send POST "repos/$REPO/pulls" "$(jq -c -n --arg title "${OPT[title]}" --arg body "$BODY" \
+    --arg head "$head" --arg base "$base" --argjson draft "$([ -n "${OPT[draft]+x}" ] && echo true || echo false)" \
+    '{title: $title, body: $body, head: $head, base: $base, draft: $draft}')" | jq -r .html_url
+}
+
+pr_edit() {
+  parse_flags "pr edit" "title,t= body,b= body-file,F= add-label+ remove-label+" "$@"
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  read_body
+  if [ -n "${OPT[title]+x}" ] || [ "$HAS_BODY" = 1 ]; then
+    api_send PATCH "repos/$REPO/pulls/$PR" "$(jq -c -n --arg title "${OPT[title]-}" --arg body "$BODY" \
+      --argjson has_title "$([ -n "${OPT[title]+x}" ] && echo true || echo false)" --argjson has_body "$HAS_BODY" \
+      '(if $has_title then {title: $title} else {} end) + (if $has_body == 1 then {body: $body} else {} end)')" >/dev/null
+  fi
+  edit_labels "$PR"
+  echo "https://github.com/$REPO/pull/$PR"
+}
+
+post_comment() { # $1 = context, $2 = 番号
+  [ "$HAS_BODY" = 1 ] || unsupported "form" "$1 without --body / --body-file"
+  api_send POST "repos/$REPO/issues/$2/comments" "$(jq -c -n --arg body "$BODY" '{body: $body}')" | jq -r .html_url
+}
+
+pr_comment() {
+  parse_flags "pr comment" "body,b= body-file,F=" "$@"
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  read_body
+  post_comment "pr comment" "$PR"
+}
+
+pr_ready() {
+  parse_flags "pr ready" "undo!" "$@"
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  if [ -n "${OPT[undo]+x}" ]; then
+    "$REAL" api -X POST "repos/$REPO/pulls/$PR/ccr/convert_to_draft" >/dev/null
+  else
+    "$REAL" api -X POST "repos/$REPO/pulls/$PR/ccr/ready_for_review" >/dev/null
+  fi
+}
+
+pr_diff() {
+  parse_flags "pr diff" "name-only! patch!" "$@"
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  if [ -n "${OPT[name_only]+x}" ]; then
+    api_list "repos/$REPO/pulls/$PR/files" | jq -r '.[].filename'
+  elif [ -n "${OPT[patch]+x}" ]; then
+    "$REAL" api -X GET -H "Accept: application/vnd.github.v3.patch" "repos/$REPO/pulls/$PR"
+  else
+    "$REAL" api -X GET -H "Accept: application/vnd.github.v3.diff" "repos/$REPO/pulls/$PR"
+  fi
+}
+
+pr_review() {
+  parse_flags "pr review" "comment,c! body,b= body-file,F=" "$@"
+  [ -n "${OPT[comment]+x}" ] || unsupported "form" "pr review without --comment"
+  resolve_repo
+  resolve_pr "${POS[0]:-}"
+  read_body
+  [ "$HAS_BODY" = 1 ] || unsupported "form" "pr review --comment without --body / --body-file"
+  api_send POST "repos/$REPO/pulls/$PR/reviews" "$(jq -c -n --arg body "$BODY" '{event: "COMMENT", body: $body}')" >/dev/null
+}
+
+# ---- gh issue ----------------------------------------------------------------
+
+issue_view() {
+  parse_flags "issue view" "json= jq,q=" "$@"
+  require_json "issue view"
+  resolve_repo
+  resolve_issue "${POS[0]:-}"
+  make_tmp
+  "$REAL" api -X GET "repos/$REPO/issues/$ISSUE" >"$T/issue.json"
+  issue_json "$T/issue.json" "${OPT[json]}" >"$T/out.json"
+  emit_json "$T/out.json"
+}
+
+issue_list() {
+  parse_flags "issue list" "json= jq,q= state,s= limit,L= label,l+ assignee,a= author,A= milestone,m= search,S=" "$@"
+  require_json "issue list"
+  resolve_repo
+  make_tmp
+  local state="${OPT[state]:-open}" limit="${OPT[limit]:-30}" query=() q i n
+  case "$state" in
+  open | closed | all) ;;
+  *) die "invalid --state: $state" ;;
+  esac
+  if [ -n "${OPT[search]+x}" ]; then
+    # 検索語は REST の search API に渡す（1 ページ = 最大 100 件）
+    q="repo:$REPO is:issue"
+    [ "$state" = all ] || q="$q is:$state"
+    q="$q$(labels_json "${OPT[label]:-}" | jq -r 'map(" label:\"" + . + "\"") | join("")')"
+    [ -z "${OPT[assignee]:-}" ] || q="$q assignee:${OPT[assignee]}"
+    [ -z "${OPT[author]:-}" ] || q="$q author:${OPT[author]}"
+    [ -z "${OPT[milestone]:-}" ] || q="$q milestone:\"${OPT[milestone]}\""
+    q="$q ${OPT[search]}"
+    "$REAL" api -X GET search/issues -f "q=$q" -f "per_page=$((limit < 100 ? limit : 100))" |
+      jq -c --argjson limit "$limit" '.items[:$limit]' >"$T/list.json"
+  else
+    query+=(-f "state=$state")
+    [ -z "${OPT[label]:-}" ] || query+=(-f "labels=${OPT[label]}")
+    [ -z "${OPT[assignee]:-}" ] || query+=(-f "assignee=${OPT[assignee]}")
+    [ -z "${OPT[author]:-}" ] || query+=(-f "creator=${OPT[author]}")
+    [ -z "${OPT[milestone]:-}" ] || query+=(-f "milestone=$(milestone_number "${OPT[milestone]}")")
+    # REST の issues は PR も返すので除く
+    api_list "repos/$REPO/issues" "${query[@]}" |
+      jq -c --argjson limit "$limit" 'map(select(has("pull_request") | not)) | .[:$limit]' >"$T/list.json"
+  fi
+  : >"$T/items.jsonl"
+  n="$(jq 'length' "$T/list.json")"
+  for ((i = 0; i < n; i++)); do
+    jq -c ".[$i]" "$T/list.json" >"$T/item.json"
+    issue_json "$T/item.json" "${OPT[json]}" >>"$T/items.jsonl"
+  done
+  jq -c -s . "$T/items.jsonl" >"$T/out.json"
+  emit_json "$T/out.json"
+}
+
+# @me は REST では使えないので、ログイン中の user に置き換える
+assignees_json() { # csv → JSON 配列
+  local me=""
+  case ",$1," in
+  *",@me,"*) me="$("$REAL" api -X GET user | jq -r .login)" ;;
+  esac
+  labels_json "$1" | jq -c --arg me "$me" 'map(if . == "@me" then $me else . end)'
+}
+
+issue_create() {
+  parse_flags "issue create" "title,t= body,b= body-file,F= label,l+ assignee,a+ milestone,m=" "$@"
+  [ -n "${OPT[title]+x}" ] || unsupported "form" "issue create without --title"
+  resolve_repo
+  read_body
+  local milestone=null
+  if [ -n "${OPT[milestone]+x}" ]; then
+    milestone="$(milestone_number "${OPT[milestone]}")"
+  fi
+  api_send POST "repos/$REPO/issues" "$(jq -c -n --arg title "${OPT[title]}" --arg body "$BODY" \
+    --argjson labels "$(labels_json "${OPT[label]:-}")" --argjson assignees "$(assignees_json "${OPT[assignee]:-}")" \
+    --argjson milestone "$milestone" '
+    {title: $title, body: $body}
+    + (if ($labels | length) > 0 then {labels: $labels} else {} end)
+    + (if ($assignees | length) > 0 then {assignees: $assignees} else {} end)
+    + (if $milestone != null then {milestone: $milestone} else {} end)')" | jq -r .html_url
+}
+
+issue_comment() {
+  parse_flags "issue comment" "body,b= body-file,F=" "$@"
+  resolve_repo
+  resolve_issue "${POS[0]:-}"
+  read_body
+  post_comment "issue comment" "$ISSUE"
+}
+
+issue_edit() {
+  parse_flags "issue edit" "title,t= body,b= body-file,F= add-label+ remove-label+ add-assignee+ remove-assignee+ milestone,m=" "$@"
+  resolve_repo
+  resolve_issue "${POS[0]:-}"
+  read_body
+  local milestone=null
+  if [ -n "${OPT[milestone]+x}" ]; then
+    milestone="$(milestone_number "${OPT[milestone]}")"
+  fi
+  if [ -n "${OPT[title]+x}" ] || [ "$HAS_BODY" = 1 ] || [ "$milestone" != null ]; then
+    api_send PATCH "repos/$REPO/issues/$ISSUE" "$(jq -c -n --arg title "${OPT[title]-}" --arg body "$BODY" \
+      --argjson has_title "$([ -n "${OPT[title]+x}" ] && echo true || echo false)" --argjson has_body "$HAS_BODY" \
+      --argjson milestone "$milestone" '
+      (if $has_title then {title: $title} else {} end)
+      + (if $has_body == 1 then {body: $body} else {} end)
+      + (if $milestone != null then {milestone: $milestone} else {} end)')" >/dev/null
+  fi
+  edit_labels "$ISSUE"
+  if [ -n "${OPT[add_assignee]+x}" ]; then
+    api_send POST "repos/$REPO/issues/$ISSUE/assignees" \
+      "$(jq -c -n --argjson a "$(assignees_json "${OPT[add_assignee]}")" '{assignees: $a}')" >/dev/null
+  fi
+  if [ -n "${OPT[remove_assignee]+x}" ]; then
+    api_send DELETE "repos/$REPO/issues/$ISSUE/assignees" \
+      "$(jq -c -n --argjson a "$(assignees_json "${OPT[remove_assignee]}")" '{assignees: $a}')" >/dev/null
+  fi
+  echo "https://github.com/$REPO/issues/$ISSUE"
+}
+
+issue_close() {
+  parse_flags "issue close" "comment,c= reason,r=" "$@"
+  resolve_repo
+  resolve_issue "${POS[0]:-}"
+  local reason=""
+  case "${OPT[reason]-}" in
+  "") ;;
+  completed) reason=completed ;;
+  "not planned") reason=not_planned ;;
+  duplicate) reason=duplicate ;;
+  *) die "invalid --reason: ${OPT[reason]}" ;;
+  esac
+  if [ -n "${OPT[comment]+x}" ]; then
+    api_send POST "repos/$REPO/issues/$ISSUE/comments" "$(jq -c -n --arg body "${OPT[comment]}" '{body: $body}')" >/dev/null
+  fi
+  api_send PATCH "repos/$REPO/issues/$ISSUE" "$(jq -c -n --arg reason "$reason" \
+    '{state: "closed"} + (if $reason != "" then {state_reason: $reason} else {} end)')" >/dev/null
+}
+
+case "$CMD $SUB" in
+"pr view") pr_view "$@" ;;
+"pr checks") pr_checks "$@" ;;
+"pr list") pr_list "$@" ;;
+"pr create") pr_create "$@" ;;
+"pr edit") pr_edit "$@" ;;
+"pr comment") pr_comment "$@" ;;
+"pr ready") pr_ready "$@" ;;
+"pr diff") pr_diff "$@" ;;
+"pr review") pr_review "$@" ;;
+"issue view") issue_view "$@" ;;
+"issue list") issue_list "$@" ;;
+"issue create") issue_create "$@" ;;
+"issue comment") issue_comment "$@" ;;
+"issue edit") issue_edit "$@" ;;
+"issue close") issue_close "$@" ;;
+*) unsupported "subcommand" "$CMD $SUB" ;;
+esac
