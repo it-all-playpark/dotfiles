@@ -18,8 +18,9 @@
 #   - user の name、check の workflowName / event / workflow、autoMergeRequest の authorEmail / enabledAt は空
 #   - comments の isMinimized / viewerDidAuthor と issue の isPinned は false（REST に無い）
 #   - reviewDecision は reviews から組み立てる（branch protection は見ない）:
-#     reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED、無くて APPROVED が
-#     あれば APPROVED、どちらも無くて review 依頼が残っていれば REVIEW_REQUIRED、それ以外は ""
+#     reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED、無くて今の head の
+#     commit への APPROVED があれば APPROVED、古い commit への APPROVED だけか review 依頼が残っていれば
+#     REVIEW_REQUIRED、それ以外は ""
 #   - mergeStateStatus は REST の mergeable_state を大文字にしたもの（clean → CLEAN、dirty → DIRTY、
 #     blocked → BLOCKED、behind → BEHIND、unstable → UNSTABLE、has_hooks → HAS_HOOKS、unknown → UNKNOWN）
 #
@@ -242,27 +243,71 @@ parse_flags() {
   done
 }
 
-# owner/repo・HOST/owner/repo・URL（https / ssh / クラウドの git proxy）から末尾の owner/repo を取る
+# owner/repo・HOST/owner/repo・URL（https / ssh / クラウドの git proxy）から owner/repo を取る。
+# owner と repo は GitHub の名前の文字だけを許す（API のパスに入るので / ? # % などを通さない）。
+# $2 が 1 なら、引数で渡された参照（-R / GH_REPO / PR・issue の URL）として形を [HOST/]owner/repo か
+# URL の owner/repo に限り、ホストを接続先（GH_HOST、無ければ github.com）と照合する。git remote origin は
+# クラウドの git proxy（http://…@127.0.0.1:…/git/owner/repo）を指すので、ホストを照合しない
 normalize_repo() {
-  local s="${1%/}"
+  local s="${1%/}" strict="${2:-0}" host="" path is_url=0
   s="${s%.git}"
-  s="${s//://}"
-  local name="${s##*/}" rest="${s%/*}"
-  local owner="${rest##*/}"
-  if [ "$rest" = "$s" ] || [ -z "$owner" ] || [ -z "$name" ]; then
+  case "$s" in
+  *://*)
+    is_url=1
+    path="${s#*://}"
+    host="${path%%/*}"
+    path="${path#"$host"}"
+    host="${host##*@}"
+    host="${host%%:*}"
+    ;;
+  *@*:*)
+    is_url=1
+    host="${s#*@}"
+    host="${host%%:*}"
+    path="${s#*:}"
+    ;;
+  *) path="$s" ;;
+  esac
+  path="${path#/}"
+  local name="${path##*/}" rest="${path%/*}"
+  [ "$rest" != "$path" ] || return 1
+  local owner="${rest##*/}" prefix=""
+  [ "$owner" = "$rest" ] || prefix="${rest%/*}"
+  if ! [[ $owner =~ ^[A-Za-z0-9][A-Za-z0-9-]*$ ]] || ! [[ $name =~ ^[A-Za-z0-9._-]+$ ]] ||
+    [ "$name" = . ] || [ "$name" = .. ]; then
     return 1
+  fi
+  if [ "$strict" = 1 ]; then
+    if [ "$is_url" = 0 ] && [ -n "$prefix" ]; then
+      host="$prefix"
+      prefix=""
+    fi
+    [ -z "$prefix" ] || return 1
+    case "$host" in */*) return 1 ;; esac
+    if [ -n "$host" ] && [ "${host,,}" != "$(printf '%s' "${GH_HOST:-github.com}" | tr '[:upper:]' '[:lower:]')" ]; then
+      return 1
+    fi
   fi
   printf '%s/%s' "$owner" "$name"
 }
 
 REPO=""
 resolve_repo() {
-  local src="${OPT[repo]:-${PRE_REPO:-${GH_REPO:-}}}"
+  local src="${OPT[repo]:-${PRE_REPO:-${GH_REPO:-}}}" strict=1
   if [ -z "$src" ]; then
     src="$(git remote get-url origin 2>/dev/null)" ||
       die "could not determine the repository (no -R / --repo and no git remote 'origin')"
+    strict=0
   fi
-  REPO="$(normalize_repo "$src")" || die "could not parse owner/repo from '$src'"
+  REPO="$(normalize_repo "$src" "$strict")" || die "could not parse owner/repo from '$src'"
+}
+
+# 正の十進整数（API のパスや jq の算術に入れる値）でなければ止める
+check_num() { # $1 = 値, $2 = 何の値か
+  case "$1" in
+  "" | 0* | *[!0-9]*) die "invalid $2: '$1'" ;;
+  esac
+  [ "${#1}" -le 9 ] || die "invalid $2: '$1'"
 }
 
 T=""
@@ -320,7 +365,8 @@ resolve_pr() {
   http*://*/pull/*)
     PR="${arg##*/pull/}"
     PR="${PR%%[!0-9]*}"
-    REPO="$(normalize_repo "${arg%%/pull/*}")" || die "could not parse owner/repo from '$arg'"
+    check_num "$PR" "pull request number"
+    REPO="$(normalize_repo "${arg%%/pull/*}" 1)" || die "could not parse owner/repo from '$arg'"
     return 0
     ;;
   esac
@@ -335,6 +381,7 @@ resolve_pr() {
   PR="$("$REAL" api -X GET "repos/$REPO/pulls" -f "head=$head" -f state=all -f per_page=100 |
     jq -r '(map(select(.state == "open")) + .)[0].number // empty')"
   [ -n "$PR" ] || die "no pull requests found for branch \"$arg\""
+  check_num "$PR" "pull request number in the API response"
 }
 
 ISSUE=""
@@ -344,7 +391,8 @@ resolve_issue() {
   http*://*/issues/*)
     ISSUE="${arg##*/issues/}"
     ISSUE="${ISSUE%%[!0-9]*}"
-    REPO="$(normalize_repo "${arg%%/issues/*}")" || die "could not parse owner/repo from '$arg'"
+    check_num "$ISSUE" "issue number"
+    REPO="$(normalize_repo "${arg%%/issues/*}" 1)" || die "could not parse owner/repo from '$arg'"
     return 0
     ;;
   "" | *[!0-9]*) die "issue number required (got '${arg}')" ;;
@@ -391,6 +439,7 @@ def linked: {
   id: .node_id, number: .number, title: .title, url: .html_url, state: (.state | up),
   repository: {nameWithOwner: ((.repository_url // "") | sub("^.*/repos/"; ""))}
 };
+def linkedconn($a): {nodes: [$a[] | linked], totalCount: ($a | length)};
 def choose($all): reduce ($fields | split(",") | unique | .[]) as $f ({};
   if $all | has($f) then .[$f] = $all[$f] else error("field not built: " + $f) end);
 '
@@ -434,10 +483,11 @@ def review: {
 };
 def latest($states): [$reviews[0][] | select(.state as $s | $states | index($s))]
   | group_by(.user.login) | map(max_by(.submitted_at)) | sort_by(.submitted_at);
-def decision: (latest(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]) | map(.state)) as $s
-  | if $s | index("CHANGES_REQUESTED") then "CHANGES_REQUESTED"
-    elif $s | index("APPROVED") then "APPROVED"
-    elif ((.requested_reviewers // []) + (.requested_teams // []) | length) > 0 then "REVIEW_REQUIRED"
+def decision: .head.sha as $head | latest(["APPROVED", "CHANGES_REQUESTED", "DISMISSED"]) as $l
+  | if $l | any(.state == "CHANGES_REQUESTED") then "CHANGES_REQUESTED"
+    elif $l | any(.state == "APPROVED" and .commit_id == $head) then "APPROVED"
+    elif ($l | any(.state == "APPROVED"))
+      or ((.requested_reviewers // []) + (.requested_teams // []) | length) > 0 then "REVIEW_REQUIRED"
     else "" end;
 def change: {added: "ADDED", removed: "DELETED", modified: "MODIFIED", renamed: "RENAMED",
   copied: "COPIED", changed: "CHANGED", unchanged: "UNCHANGED"}[.] // (. | up);
@@ -469,8 +519,8 @@ $pr[0] | . as $p | choose({
   files: [$files[0][] | {path: .filename, additions: .additions, deletions: .deletions, changeType: (.status | change)}],
   headRefName: .head.ref,
   headRefOid: .head.sha,
-  headRepository: (.head.repo | if . == null then null else {id: .node_id, name: .name} end),
-  headRepositoryOwner: (.head.user | if . == null then null else {id: .node_id, login: .login} end),
+  headRepository: (.head.repo | if . == null then null else {id: .node_id, name: .name, nameWithOwner: .full_name} end),
+  headRepositoryOwner: (.head.user | if . == null then null else {id: .node_id, name: "", login: .login} end),
   isCrossRepository: (.head.repo.full_name != .base.repo.full_name),
   isDraft: (.draft // false),
   labels: [(.labels // [])[] | lbl],
@@ -503,8 +553,8 @@ JQ_ISSUE='
 $issue[0] | choose({
   assignees: [(.assignees // [])[] | assignee],
   author: (.user | author),
-  blockedBy: [$blockedby[0][] | linked],
-  blocking: [$blocking[0][] | linked],
+  blockedBy: linkedconn($blockedby[0]),
+  blocking: linkedconn($blocking[0]),
   body: (.body // ""),
   closed: (.state == "closed"),
   closedAt: .closed_at,
@@ -518,7 +568,7 @@ $issue[0] | choose({
   parent: ($parent[0] | if . == null then null else linked end),
   state: (.state | up),
   stateReason: (.state_reason | up),
-  subIssues: [$subissues[0][] | linked],
+  subIssues: linkedconn($subissues[0]),
   subIssuesSummary: (.sub_issues_summary // {} | {total: (.total // 0), completed: (.completed // 0), percentCompleted: (.percent_completed // 0)}),
   title: .title,
   updatedAt: .updated_at,
@@ -536,13 +586,26 @@ has_field() { # $1 = csv, $2 = field
 # fetch_checks <sha> <dir> — check-runs と commit statuses を <dir> に書く
 fetch_checks() {
   api_pages "repos/$REPO/commits/$1/check-runs" | jq -c '[.[].check_runs[]]' >"$2/checkruns.json"
-  "$REAL" api -X GET "repos/$REPO/commits/$1/status" -f per_page=100 | jq -c '.statuses // []' >"$2/statuses.json"
+  api_pages "repos/$REPO/commits/$1/status" | jq -c '[.[].statuses // [] | .[]]' >"$2/statuses.json"
+}
+
+# pr_files <PR の REST 応答のファイル> <番号> — 変更ファイルの一覧を全ページ読む。REST の一覧は
+# 3,000 件で打ち切られるので、PR の changed_files と件数が合わなければ一部だけを返さずに止める
+pr_files() {
+  local list want
+  list="$(api_list "repos/$REPO/pulls/$2/files")"
+  want="$(jq -r '.changed_files // empty' "$1")"
+  if [ "$(printf '%s' "$list" | jq 'length')" != "$want" ]; then
+    die "the file list of pull request #$2 is incomplete (REST returned $(printf '%s' "$list" | jq 'length') of ${want:-unknown} files)"
+  fi
+  printf '%s\n' "$list"
 }
 
 # pr_json <PR の REST 応答のファイル> <csv fields> — GraphQL 版と同じ形の JSON を 1 行で出す
 pr_json() {
   local prf="$1" fields="$2" n d f
   n="$(jq -r .number "$prf")"
+  check_num "$n" "pull request number in the API response"
   d="$T/pr-$n"
   mkdir -p "$d"
   for f in comments commits files reviews checkruns statuses; do
@@ -555,7 +618,7 @@ pr_json() {
     api_list "repos/$REPO/pulls/$n/commits" >"$d/commits.json"
   fi
   if has_field "$fields" files; then
-    api_list "repos/$REPO/pulls/$n/files" >"$d/files.json"
+    pr_files "$prf" "$n" >"$d/files.json"
   fi
   if has_field "$fields" reviews || has_field "$fields" latestReviews || has_field "$fields" reviewDecision; then
     api_list "repos/$REPO/pulls/$n/reviews" >"$d/reviews.json"
@@ -573,6 +636,7 @@ pr_json() {
 issue_json() {
   local isf="$1" fields="$2" n d f
   n="$(jq -r .number "$isf")"
+  check_num "$n" "issue number in the API response"
   d="$T/issue-$n"
   mkdir -p "$d"
   for f in comments subissues blockedby blocking; do
@@ -673,8 +737,9 @@ pr_checks() {
   else
     jq -r --arg fields "" "$JQ_DEFS $JQ_ELAPSED"' .[] | [.name, .bucket, elapsed, .link, .description] | join("\t")' "$T/checks.json"
   fi
-  # 実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8
-  if [ "$(jq '[.[] | select(.bucket == "fail")] | length' "$T/checks.json")" -gt 0 ]; then
+  # 実体の gh pr checks と同じ exit code: 失敗があれば 1、無くて保留があれば 8。
+  # キャンセルも成功ではないので失敗として 1 にする（exit code を検証の根拠にする呼び出しが通さないように）
+  if [ "$(jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length' "$T/checks.json")" -gt 0 ]; then
     exit 1
   fi
   if [ "$(jq '[.[] | select(.bucket == "pending")] | length' "$T/checks.json")" -gt 0 ]; then
@@ -687,7 +752,8 @@ pr_list() {
   require_json "pr list"
   resolve_repo
   make_tmp
-  local state="${OPT[state]:-open}" limit="${OPT[limit]:-30}" query=() head f need_detail=0 i n
+  local state="${OPT[state]:-open}" limit="${OPT[limit]:-30}" query=() head f need_detail=0 i n n_i
+  check_num "$limit" "--limit"
   case "$state" in
   open | closed | all) query+=(-f "state=$state") ;;
   merged) query+=(-f state=closed) ;;
@@ -712,7 +778,7 @@ pr_list() {
         and ([.labels[].name] as $have | all($labels[]; . as $l | $have | index($l)))))
       | .[:$limit]' >"$T/list.json"
   # 一覧の応答に無い値を求められたら PR ごとに詳細を読む
-  for f in additions deletions changedFiles mergeable mergeStateStatus maintainerCanModify mergedBy; do
+  for f in additions deletions changedFiles files mergeable mergeStateStatus maintainerCanModify mergedBy; do
     if has_field "${OPT[json]}" "$f"; then
       need_detail=1
     fi
@@ -721,7 +787,9 @@ pr_list() {
   n="$(jq 'length' "$T/list.json")"
   for ((i = 0; i < n; i++)); do
     if [ "$need_detail" = 1 ]; then
-      "$REAL" api -X GET "repos/$REPO/pulls/$(jq -r ".[$i].number" "$T/list.json")" >"$T/item.json"
+      n_i="$(jq -r ".[$i].number" "$T/list.json")"
+      check_num "$n_i" "pull request number in the API response"
+      "$REAL" api -X GET "repos/$REPO/pulls/$n_i" >"$T/item.json"
     else
       jq -c ".[$i]" "$T/list.json" >"$T/item.json"
     fi
@@ -791,7 +859,9 @@ pr_diff() {
   resolve_repo
   resolve_pr "${POS[0]:-}"
   if [ -n "${OPT[name_only]+x}" ]; then
-    api_list "repos/$REPO/pulls/$PR/files" | jq -r '.[].filename'
+    make_tmp
+    "$REAL" api -X GET "repos/$REPO/pulls/$PR" >"$T/pr.json"
+    pr_files "$T/pr.json" "$PR" | jq -r '.[].filename'
   elif [ -n "${OPT[patch]+x}" ]; then
     "$REAL" api -X GET -H "Accept: application/vnd.github.v3.patch" "repos/$REPO/pulls/$PR"
   else
@@ -828,6 +898,7 @@ issue_list() {
   resolve_repo
   make_tmp
   local state="${OPT[state]:-open}" limit="${OPT[limit]:-30}" query=() q i n
+  check_num "$limit" "--limit"
   case "$state" in
   open | closed | all) ;;
   *) die "invalid --state: $state" ;;

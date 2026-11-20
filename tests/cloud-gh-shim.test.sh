@@ -261,6 +261,28 @@ fixture repos_acme_app_pulls_6_reviews <<'EOF'
 ]
 EOF
 echo '[]' | fixture repos_acme_app_pulls_7_reviews
+# PR 8: head は sha8。APPROVED は古い commit に対するもの、check はキャンセルで、commit status は 2 ページ
+pr_fixture 8 sha8 true clean false | fixture repos_acme_app_pulls_8
+fixture repos_acme_app_pulls_8_reviews <<'EOF'
+[
+  {"node_id": "PRR_5", "user": {"login": "dave", "type": "User"}, "state": "APPROVED", "body": "lgtm",
+   "submitted_at": "2026-01-01T02:00:00Z", "commit_id": "old8", "author_association": "MEMBER"}
+]
+EOF
+fixture repos_acme_app_commits_sha8_check-runs <<'EOF'
+{"total_count": 1, "check_runs": [
+  {"name": "build", "status": "completed", "conclusion": "cancelled", "details_url": "https://ci/build",
+   "started_at": "2026-01-01T00:00:00Z", "completed_at": "2026-01-01T00:01:05Z"}
+]}
+EOF
+fixture repos_acme_app_commits_sha8_status <<'EOF'
+{"state": "success", "statuses": [{"context": "ci/a", "state": "success", "created_at": "2026-01-01T00:02:00Z"}]}
+{"state": "failure", "statuses": [{"context": "ci/b", "state": "failure", "created_at": "2026-01-01T00:02:00Z"}]}
+EOF
+# PR 66: API 応答の number がパス成分を含む。PR 67: changed_files より files が少ない（REST の打ち切り）
+pr_fixture '"../../x"' sha6 true clean false | fixture repos_acme_app_pulls_66
+pr_fixture 67 sha6 true clean false | jq '.changed_files = 3001' | fixture repos_acme_app_pulls_67
+echo '[{"filename": "a", "additions": 1, "deletions": 0, "status": "added"}]' | fixture repos_acme_app_pulls_67_files
 fixture repos_acme_app_issues_5_comments <<'EOF'
 [
   {"node_id": "IC_1", "user": {"login": "github-actions[bot]", "type": "Bot"}, "author_association": "NONE",
@@ -379,8 +401,10 @@ for kind in pr issue; do
   fi
 done
 
-cloud pr view 5 -R acme/app --json number,title,state,isDraft,url,body,headRefName,headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,additions,deletions,changedFiles,isCrossRepository,closed,mergedAt,author,labels,assignees,reviewRequests,mergeCommit,potentialMergeCommit
+cloud pr view 5 -R acme/app --json number,title,state,isDraft,url,body,headRefName,headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,additions,deletions,changedFiles,isCrossRepository,closed,mergedAt,author,labels,assignees,reviewRequests,mergeCommit,potentialMergeCommit,headRepository,headRepositoryOwner
 expect_json "pr view: PR 本体の field" '{
+  "headRepository": {"id": "R_1", "name": "app", "nameWithOwner": "acme/app"},
+  "headRepositoryOwner": {"id": "O_1", "name": "", "login": "acme"},
   "number": 5, "title": "Add x", "state": "OPEN", "isDraft": true, "url": "https://github.com/acme/app/pull/5",
   "body": "Body\ntext", "headRefName": "feat", "headRefOid": "abc123", "baseRefName": "main", "baseRefOid": "def456",
   "mergeable": "CONFLICTING", "mergeStateStatus": "DIRTY", "additions": 3, "deletions": 1, "changedFiles": 2,
@@ -410,7 +434,7 @@ expect_json "pr view: statusCheckRollup は check-runs と commit statuses か�
 }'
 expect_log "statusCheckRollup: check-runs を読む" \
   "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/check-runs][-f][per_page=100]"
-expect_log "statusCheckRollup: commit statuses を読む" "[api][-X][GET][repos/acme/app/commits/abc123/status][-f][per_page=100]"
+expect_log "statusCheckRollup: commit statuses を読む" "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/status][-f][per_page=100]"
 
 cloud pr view 5 -R acme/app --json reviewDecision,latestReviews --jq '[.reviewDecision, (.latestReviews | map(.author.login + "=" + .state) | join(","))] | join(" ")'
 expect_out "pr view: reviewer ごとの最新の判定に CHANGES_REQUESTED があれば CHANGES_REQUESTED" "CHANGES_REQUESTED dave=APPROVED,bob=CHANGES_REQUESTED"
@@ -418,6 +442,8 @@ cloud pr view 6 -R acme/app --json reviewDecision
 expect_json "pr view: APPROVED だけなら APPROVED" '{"reviewDecision": "APPROVED"}'
 cloud pr view 7 -R acme/app --json reviewDecision
 expect_json "pr view: review が無く依頼が残っていれば REVIEW_REQUIRED" '{"reviewDecision": "REVIEW_REQUIRED"}'
+cloud pr view 8 -R acme/app --json reviewDecision
+expect_json "pr view: 今の head より古い commit への APPROVED だけなら REVIEW_REQUIRED" '{"reviewDecision": "REVIEW_REQUIRED"}'
 
 cloud pr view 5 -R acme/app --json comments,commits,files
 expect_json "pr view: comments / commits / files" '{
@@ -464,11 +490,13 @@ expect_json "issue view: 主要 field" '{
   "comments": [{"id": "IC_2", "author": {"login": "bob"}, "authorAssociation": "MEMBER", "body": "me too",
     "createdAt": "2026-01-01T00:00:00Z", "includesCreatedEdit": true, "isMinimized": false, "minimizedReason": "",
     "reactionGroups": [], "url": "https://github.com/acme/app/issues/12#issuecomment-2", "viewerDidAuthor": false}],
-  "subIssues": [{"id": "I_13", "number": 13, "title": "Part", "url": "https://github.com/acme/app/issues/13",
-    "state": "OPEN", "repository": {"nameWithOwner": "acme/app"}}],
+  "subIssues": {"nodes": [{"id": "I_13", "number": 13, "title": "Part", "url": "https://github.com/acme/app/issues/13",
+    "state": "OPEN", "repository": {"nameWithOwner": "acme/app"}}], "totalCount": 1},
   "subIssuesSummary": {"total": 2, "completed": 1, "percentCompleted": 50},
   "parent": null, "isPinned": false, "issueType": null
 }'
+cloud issue view 12 -R acme/app --json blockedBy,blocking --jq '[.blockedBy.totalCount, .blocking.totalCount, (.blocking.nodes | length)]'
+expect_out "issue view: blockedBy / blocking は {nodes, totalCount}" '[0,0,0]'
 cloud issue view 12 -R acme/app --json labels --jq '[.labels[].name]'
 expect_out "issue view: --jq" '["bug"]'
 
@@ -479,11 +507,14 @@ expect_out "pr checks: check-runs と commit statuses を 1 行ずつ出す" \
   "$(printf 'build\tpass\t1m5s\thttps://ci/build\t\ndeploy/preview\tpass\t\thttps://preview\tReady\nlint\tfail\t30s\thttps://ci/lint\t')"
 expect_log "pr checks: head sha の check-runs を読む" \
   "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/check-runs][-f][per_page=100]"
-expect_log "pr checks: head sha の commit statuses を読む" "[api][-X][GET][repos/acme/app/commits/abc123/status][-f][per_page=100]"
+expect_log "pr checks: head sha の commit statuses を読む" "[api][-X][GET][--paginate][--slurp][repos/acme/app/commits/abc123/status][-f][per_page=100]"
 cloud pr checks 6 -R acme/app
 expect_rc "pr checks: 失敗が無く保留があれば exit 8" 8
 cloud pr checks 7 -R acme/app
 expect_rc "pr checks: 成功と skip だけなら exit 0" 0
+cloud pr checks 8 -R acme/app
+expect_rc "pr checks: 成功とキャンセルだけでも exit 1" 1
+expect_out "pr checks: 2 ページ目の commit status も読む" "$(printf 'build\tcancel\t1m5s\thttps://ci/build\t\nci/a\tpass\t\t\t\nci/b\tfail\t\t\t')"
 cloud pr checks 5 -R acme/app --json name,state,bucket,link
 if [ "${RC}" -eq 1 ] && [ "$(printf '%s' "${OUT}" | jq -S -c .)" = "$(jq -S -c . <<<'[
   {"name": "build", "state": "SUCCESS", "bucket": "pass", "link": "https://ci/build"},
@@ -585,6 +616,38 @@ expect_only_log "pr list: GET pulls（state / head）" \
   "[api][-X][GET][--paginate][--slurp][repos/acme/app/pulls][-f][per_page=100][-f][state=all][-f][head=acme:feat]"
 cloud pr list -R acme/app --state all --label bug --json number,mergeable
 expect_json "pr list: label で絞り、一覧に無い field は PR ごとに読む" '[{"number": 5, "mergeable": "CONFLICTING"}]'
+
+echo "--- 入力と API 応答の検証 ---"
+# expect_refused <名前> <ログに出てはいけない文字列> — 0 以外で終わり、その呼び出しに届かない
+expect_refused() {
+  if [ "${RC}" -ne 0 ] && [ -n "${ERR}" ] && ! grep -qF -- "$2" "${LOG}"; then
+    pass "$1"
+  else
+    fail "$1" "exit ${RC} / log: $(tr '\n' ' ' <"${LOG}") / stderr: ${ERR}"
+  fi
+}
+cloud pr view 66 -R acme/app --json comments
+expect_refused "API 応答の number が整数でなければ、そこから先の API を呼ばない" "/comments"
+cloud issue list -R acme/app --search x --limit "x[\$(touch ${WORK}/pwned)]" --json number
+expect_refused "issue list: 数でない --limit は API を呼ぶ前に拒否する" "search/issues"
+if [ -e "${WORK}/pwned" ]; then
+  fail "issue list: --limit の値を算術式で評価しない" "${WORK}/pwned が作られた"
+else
+  pass "issue list: --limit の値を算術式で評価しない"
+fi
+cloud pr list -R acme/app --limit 0x10 --json number
+expect_refused "pr list: 数でない --limit を拒否する" "repos/acme/app/pulls"
+cloud pr comment https://evil.example/acme/app/pull/5 --body hi
+expect_refused "PR の URL のホストが接続先と違えば拒否する" "comments"
+cloud pr view 5 -R 'acme/app?x=1' --json number
+expect_refused "-R の repo 名に URL の区切り文字があれば拒否する" "repos/acme"
+cloud pr view 5 -R github.com/acme/app --json number
+expect_only_log "-R HOST/owner/repo（接続先のホスト）は受ける" "[api][-X][GET][repos/acme/app/pulls/5]"
+cloud pr diff 67 -R acme/app --name-only
+expect_refused "pr diff --name-only: 一覧が changed_files に足りなければ止める" "__never__"
+expect_out "pr diff --name-only: 一部だけの一覧を出さない" ""
+cloud pr view 67 -R acme/app --json files
+expect_refused "pr view --json files: 一覧が changed_files に足りなければ止める" "__never__"
 
 echo "--- AC-6: 未対応は exit 2、対象外は素通し ---"
 cloud pr merge 5 -R acme/app --squash
