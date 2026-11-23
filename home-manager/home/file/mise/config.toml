@@ -29,6 +29,9 @@ java = "21"
 
 [settings]
 experimental = true
+# 各 repo の .nvmrc / .node-version で Node の版を決める（既定の mise はこれらを読まず、上の node = "lts" になる）。
+# CI（actions/setup-node の node-version-file）と同じファイルを見るので、ローカルと CI の Node が揃う。
+idiomatic_version_file_enable_tools = ["node"]
 # 供給網攻撃対策の minimum_release_age (default: 24h) から除外し、リリース即日で追随する。
 # いずれも GitHub Releases (aqua) 直取得のためリスク低。npm:* 系は 24h ガードを維持する。
 minimum_release_age_excludes = ["claude-code", "codex", "copilot"]
