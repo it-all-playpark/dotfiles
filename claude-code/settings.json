@@ -18,6 +18,7 @@
   "enableAllProjectMcpServers": false,
   "enabledPlugins": {
     "bg-sessions@playpark": true,
+    "chrome-devtools-mcp@claude-plugins-official": true,
     "dev-flow@playpark": true,
     "host-exec@playpark": true,
     "meeting@playpark": true,
