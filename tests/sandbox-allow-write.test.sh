@@ -256,21 +256,28 @@ fi
 # playwright_browsers_path_is_sandbox_only
 # issue #478: Playwright の版が上がって手元に無い rev のブラウザが要るとき、sandbox 内の playwright install は
 # 既定の置き場 ~/Library/Caches/ms-playwright に書けない。そこは sandbox の外の Playwright が実行するブラウザの
-# 置き場なので開けない。env の PLAYWRIGHT_BROWSERS_PATH で sandbox 専用の場所（/private/tmp/claude/ 配下。
-# uv・XDG・npm のキャッシュとは別）に向ける。
+# 置き場なので開けない。env の PLAYWRIGHT_BROWSERS_PATH で sandbox 専用の場所に向ける。
+# /tmp（/private/tmp）の下には置かない: macOS の com.apple.tmp_cleaner（/usr/libexec/tmp_cleaner、毎日 0 時）が
+# atime・mtime・ctime が 3 日を超えたファイルを消し、起動のたびには読まれない libEGL.dylib・vk_swiftshader_icd.json・
+# INSTALLATION_COMPLETE だけが欠ける。launch() は完了の印を見ないので、欠けたブラウザが GPU の初期化で SIGTRAP する。
 # ---------------------------------------------------------------------------
 echo "- playwright_browsers_path_is_sandbox_only"
 playwright_browsers="$(jq -r '.env.PLAYWRIGHT_BROWSERS_PATH // ""' "${SETTINGS}")"
-playwright_rel="chromium_headless_shell-1254/chrome-headless-shell-mac-arm64/chrome-headless-shell"
-if [[ ${playwright_browsers} == /private/tmp/claude/?* ]] &&
-  [ "${playwright_browsers}" != "${uv_cache_dir}" ] && [ "${playwright_browsers}" != "${xdg_cache_home}" ] &&
-  [ "${playwright_browsers}" != "${npm_cache}" ] &&
-  write_allowed "${playwright_browsers}/${playwright_rel}" &&
-  ! write_allowed "${HOME}/Library/Caches/ms-playwright/${playwright_rel}"; then
-  pass "playwright_browsers_path_is_sandbox_only"
-else
-  fail "playwright_browsers_path_is_sandbox_only" "env.PLAYWRIGHT_BROWSERS_PATH=${playwright_browsers:-<unset>} must be a dedicated dir under /private/tmp/claude/ covered by allowWrite, and ~/Library/Caches/ms-playwright must not be writable"
-fi
+playwright_browsers_abs="${playwright_browsers/#\~\//${HOME}/}"
+playwright_rel="chromium_headless_shell-1255/chrome-headless-shell-mac-arm64/chrome-headless-shell"
+case "${playwright_browsers_abs}" in
+"" | /tmp | /tmp/* | /private/tmp | /private/tmp/* | "${HOME}/Library/Caches/ms-playwright" | "${HOME}/Library/Caches/ms-playwright/"*)
+  fail "playwright_browsers_path_is_sandbox_only" "env.PLAYWRIGHT_BROWSERS_PATH=${playwright_browsers:-<unset>} must be a persistent sandbox-only dir (not under /private/tmp, which tmp_cleaner prunes, or ~/Library/Caches/ms-playwright)"
+  ;;
+*)
+  if write_allowed "${playwright_browsers_abs}/${playwright_rel}" &&
+    ! write_allowed "${HOME}/Library/Caches/ms-playwright/${playwright_rel}"; then
+    pass "playwright_browsers_path_is_sandbox_only"
+  else
+    fail "playwright_browsers_path_is_sandbox_only" "env.PLAYWRIGHT_BROWSERS_PATH=${playwright_browsers} must be covered by allowWrite, and ~/Library/Caches/ms-playwright must not be writable"
+  fi
+  ;;
+esac
 
 # ---------------------------------------------------------------------------
 # gcloud_account_config_dirs_writable
@@ -363,6 +370,7 @@ SANDBOX_ONLY_DIRS=(
   "/private/tmp/claude"
   "~/.local/state/pnpm-sandbox"
   "~/.local/state/codex-sandbox"
+  "~/.local/state/playwright-sandbox"
 )
 # "<allowWrite の項目>|<sandbox の外のプロセスが読むか>|<読んだものを実行しうるか>"
 # shellcheck disable=SC2088 # 意図的: settings.json の表記（~/）のまま比べる

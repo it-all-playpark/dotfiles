@@ -133,6 +133,10 @@ sandbox に塞がれたら:
   sandbox の外の pnpm が実行し、store の中身も sandbox の外の install が使う（verifyStoreIntegrity: false の repo もある）のに、
   sandbox 内から作成・削除できた。pnpm 12 は store（<PNPM_HOME>/store）と pnpm 本体（<PNPM_HOME>/package-manager-store）の
   両方を PNPM_HOME から決める（実測）。値の ~/ は agent-vault-managed-env が 60-home-paths.json で展開する。
+- Playwright のブラウザ: 2026-11-27 env の PLAYWRIGHT_BROWSERS_PATH を /private/tmp/claude/ms-playwright（#478）から
+  ~/.local/state/playwright-sandbox に移した。macOS の com.apple.tmp_cleaner（毎日 0 時）が /tmp の下で atime・mtime・ctime が
+  3 日を超えたファイルを消し、起動のたびには読まれない libEGL.dylib・vk_swiftshader_icd.json・INSTALLATION_COMPLETE だけが欠けた。
+  launch() は完了の印を見ないので、欠けたブラウザが GPU の初期化（SwANGLE）で SIGTRAP し、pre-push の E2E が落ちた（実測）。
 - dev サーバー: 2026-09-25 `network.allowLocalBinding: true`。外向き通信の制限は変わらない。
 - neonctl: 2026-09-29 console.neon.tech / oauth2.neon.tech と ~/.config/neon を許可（API とトークン更新の書き戻し分だけ）。
   track.neon.tech は未許可なので --no-analytics がないと closeAndFlush が拒否された送信を待つ。
